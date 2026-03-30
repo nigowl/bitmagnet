@@ -82,6 +82,30 @@
       "ran_at": "运行于",
       "retry": "重试",
       "total_counts_by_status": "按状态统计总数"
+    },
+    "logs": {
+      "auto_refresh": "自动刷新",
+      "current_file": "当前文件",
+      "disabled": "文件日志轮转未启用。请设置 LOG_FILE_ROTATOR_ENABLED=true 后再查看此页面。",
+      "empty": "暂时没有可显示的日志内容。",
+      "last_updated": "最后更新时间",
+      "level": "级别",
+      "levels": {
+        "debug": "调试",
+        "error": "错误",
+        "info": "信息",
+        "other": "其他",
+        "warn": "警告"
+      },
+      "line": "行号",
+      "line_count": "尾部行数",
+      "load_error": "加载系统日志失败。",
+      "log_path": "日志路径",
+      "message_col": "日志内容",
+      "refresh": "刷新日志",
+      "subtitle": "显示运行中 bitmagnet 服务最近捕获到的后端日志输出。",
+      "total_lines": "日志总行数",
+      "title": "系统日志"
     }
   },
   "facets": {
@@ -217,6 +241,57 @@
     "support_bitmagnet": "支持bitmagnet",
     "translate": "翻译"
   },
+  "media": {
+    "center_title": "影视中心",
+    "center_subtitle": "聚合已分类的电影与剧集资源，提供更丰富的筛选与海报卡片视图。",
+    "content_types": {
+      "all": "全部",
+      "movie": "电影",
+      "tv_show": "剧集"
+    },
+    "discover_title": "发现影视",
+    "featured": "今日推荐",
+    "filters": {
+      "content_type": "类型",
+      "genre": "类型",
+      "language": "语言",
+      "query": "搜索标题、简介或年份",
+      "resolution": "分辨率",
+      "source": "元数据来源",
+      "sort": "排序方式",
+      "year": "年份"
+    },
+    "genres_count": "{{count}} 个类型",
+    "load_error": "加载影视失败：{{message}}",
+    "no_results": "当前筛选条件下没有匹配的影视内容。",
+    "open_details": "查看详情",
+    "poster_alt": "{{title}} 海报",
+    "refresh": "刷新影视",
+    "result_count": "{{count}} 条结果",
+    "sections": {
+      "movies": "电影",
+      "tv": "剧集",
+      "tv_soon": "剧集模块即将上线"
+    },
+    "sources": {
+      "imdb": "IMDB",
+      "tmdb": "TMDB",
+      "tvdb": "The TVDB"
+    },
+    "sort_options": {
+      "latest": "最新发布",
+      "name": "标题 A-Z",
+      "popular": "做种最多",
+      "updated": "最近更新"
+    },
+    "stats": {
+      "available_genres": "可用类型",
+      "live_results": "实时结果",
+      "release_window": "年份范围"
+    },
+    "torrent_size": "资源大小",
+    "unknown_year": "年份未知"
+  },
   "paginator": {
     "first_page": "第一页",
     "items_per_page": "每页项目数",
@@ -232,6 +307,8 @@
     "dashboard": "仪表盘",
     "home": "首页",
     "jobs": "任务",
+    "logs": "日志",
+    "media": "影视",
     "queues": "队列",
     "torrents": "种子",
     "visualize": "可视化"

@@ -81,7 +81,7 @@ func New(params Params) Result {
 						metainfoRequester:            params.MetainfoRequester,
 						banningChecker:               params.BanningChecker,
 						bootstrapNodes:               params.Config.BootstrapNodes,
-						reseedBootstrapNodesInterval: time.Minute * 10,
+						reseedBootstrapNodesInterval: params.Config.ReseedBootstrapNodesInterval,
 						getOldestNodesInterval:       time.Second * 10,
 						oldPeerThreshold:             time.Minute * 15,
 						discoveredNodes:              params.DiscoveredNodes,
@@ -116,6 +116,7 @@ func New(params Params) Result {
 						saveFilesThreshold: params.Config.SaveFilesThreshold,
 						savePieces:         params.Config.SavePieces,
 						rescrapeThreshold:  params.Config.RescrapeThreshold,
+						statusLogInterval:  params.Config.StatusLogInterval,
 						dao:                query,
 						ignoreHashes: &ignoreHashes{
 							bloom: boom.NewStableBloomFilter(10_000_000, 2, 0.001),

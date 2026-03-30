@@ -41,6 +41,7 @@ type crawler struct {
 	persistTorrents              concurrency.BatchingChannel[infoHashWithMetaInfo]
 	persistSources               concurrency.BatchingChannel[infoHashWithScrape]
 	rescrapeThreshold            time.Duration
+	statusLogInterval            time.Duration
 	saveFilesThreshold           uint
 	savePieces                   bool
 	dao                          *dao.Query
@@ -77,6 +78,7 @@ func (c *crawler) start() {
 	go c.runPersistTorrents(ctx)
 	go c.runPersistSources(ctx)
 	go c.getOldNodes(ctx)
+	go c.logStatus(ctx)
 	<-c.stopped
 }
 

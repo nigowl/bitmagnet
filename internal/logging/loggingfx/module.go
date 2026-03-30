@@ -13,7 +13,10 @@ func New() fx.Option {
 	return fx.Module(
 		"logging",
 		configfx.NewConfigModule[logging.Config]("log", logging.NewDefaultConfig()),
-		fx.Provide(logging.New),
+		fx.Provide(
+			logging.New,
+			logging.NewHTTPServerOption,
+		),
 	)
 }
 

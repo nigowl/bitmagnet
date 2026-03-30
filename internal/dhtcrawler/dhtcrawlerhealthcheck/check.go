@@ -27,10 +27,14 @@ func NewCheck(
 			}
 			now := time.Now()
 			if lr.LastSuccess.IsZero() {
+				// Give bootstrap some time before reporting an unhealthy DHT state.
 				if now.Sub(lr.StartTime) < 30*time.Second {
 					return nil
 				}
-				return errors.New("no response within 30 seconds")
+				if lr.LastResponse.IsZero() {
+					return errors.New("no DHT responses within 30 seconds (bootstrap nodes may be unreachable)")
+				}
+				return errors.New("no successful DHT responses within 30 seconds (check DNS/UDP connectivity)")
 			}
 			if now.Sub(lr.LastSuccess) > time.Minute {
 				return errors.New("no successful responses within last minute")

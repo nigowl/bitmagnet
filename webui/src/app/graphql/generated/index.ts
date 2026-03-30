@@ -70,6 +70,20 @@ export type ContentCollection = {
   updatedAt: Scalars['DateTime']['output'];
 };
 
+export type ContentSourceAgg = {
+  __typename?: 'ContentSourceAgg';
+  count: Scalars['Int']['output'];
+  isEstimate: Scalars['Boolean']['output'];
+  label: Scalars['String']['output'];
+  value: Scalars['String']['output'];
+};
+
+export type ContentSourceFacetInput = {
+  aggregate?: InputMaybe<Scalars['Boolean']['input']>;
+  filter?: InputMaybe<Array<Scalars['String']['input']>>;
+  logic?: InputMaybe<FacetLogic>;
+};
+
 export type ContentType =
   | 'audiobook'
   | 'comic'
@@ -507,6 +521,7 @@ export type TorrentContent = {
 
 export type TorrentContentAggregations = {
   __typename?: 'TorrentContentAggregations';
+  contentSource?: Maybe<Array<ContentSourceAgg>>;
   contentType?: Maybe<Array<ContentTypeAgg>>;
   genre?: Maybe<Array<GenreAgg>>;
   language?: Maybe<Array<LanguageAgg>>;
@@ -519,6 +534,7 @@ export type TorrentContentAggregations = {
 };
 
 export type TorrentContentFacetsInput = {
+  contentSource?: InputMaybe<ContentSourceFacetInput>;
   contentType?: InputMaybe<ContentTypeFacetInput>;
   genre?: InputMaybe<GenreFacetInput>;
   language?: InputMaybe<LanguageFacetInput>;

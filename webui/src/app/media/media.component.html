@@ -1,0 +1,309 @@
+<ng-container *transloco="let t">
+  <app-document-title [parts]="[t('media.center_title'), t('routes.media')]" />
+
+  <div class="media-page">
+    <section class="page-header">
+      <div>
+        <h1>{{ t("media.center_title") }}</h1>
+        <p>{{ t("media.center_subtitle") }}</p>
+      </div>
+    </section>
+
+    <mat-card class="filters-card">
+      <div class="filters-header">
+        <div>
+          <h2>{{ t("media.discover_title") }}</h2>
+          <p>{{ t("media.result_count", { count: result.totalCount }) }}</p>
+        </div>
+        <button
+          mat-mini-fab
+          color="primary"
+          type="button"
+          [matTooltip]="t('media.refresh')"
+          (click)="refresh()"
+        >
+          <mat-icon>sync</mat-icon>
+        </button>
+      </div>
+
+      <div class="search-row">
+        <mat-form-field class="search-field" subscriptSizing="dynamic">
+          <mat-label>{{ t("media.filters.query") }}</mat-label>
+          <input matInput [formControl]="searchControl" />
+          @if (searchControl.value) {
+            <button
+              mat-icon-button
+              matSuffix
+              type="button"
+              (click)="searchControl.setValue('')"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          }
+        </mat-form-field>
+      </div>
+
+      <div class="filter-rows">
+        <section class="filter-row">
+          <h3>{{ t("media.filters.content_type") }}</h3>
+          <div class="filter-options">
+            <button
+              type="button"
+              class="filter-option"
+              [class.active]="contentTypeControl.value === 'all'"
+              [attr.aria-pressed]="contentTypeControl.value === 'all'"
+              (click)="setContentTypeFilter('all')"
+            >
+              {{ t("media.content_types.all") }}
+            </button>
+            <button
+              type="button"
+              class="filter-option"
+              [class.active]="contentTypeControl.value === 'movie'"
+              [attr.aria-pressed]="contentTypeControl.value === 'movie'"
+              (click)="setContentTypeFilter('movie')"
+            >
+              {{ t("media.content_types.movie") }}
+            </button>
+            <button
+              type="button"
+              class="filter-option"
+              [class.active]="contentTypeControl.value === 'tv_show'"
+              [attr.aria-pressed]="contentTypeControl.value === 'tv_show'"
+              (click)="setContentTypeFilter('tv_show')"
+            >
+              {{ t("media.content_types.tv_show") }}
+            </button>
+          </div>
+        </section>
+
+        <section class="filter-row">
+          <h3>{{ t("media.filters.source") }}</h3>
+          <div class="filter-options">
+            <button
+              type="button"
+              class="filter-option"
+              [class.active]="sourceControl.value === null"
+              [attr.aria-pressed]="sourceControl.value === null"
+              (click)="setSourceFilter(null)"
+            >
+              {{ t("general.all") }}
+            </button>
+            @for (source of sourceOptions; track source) {
+              <button
+                type="button"
+                class="filter-option"
+                [class.active]="sourceControl.value === source"
+                [attr.aria-pressed]="sourceControl.value === source"
+                (click)="setSourceFilter(source)"
+              >
+                {{ contentSourceLabel(source) }}
+              </button>
+            }
+          </div>
+        </section>
+
+        <section class="filter-row">
+          <h3>{{ t("media.filters.language") }}</h3>
+          <div class="filter-options">
+            <button
+              type="button"
+              class="filter-option"
+              [class.active]="languageControl.value === null"
+              [attr.aria-pressed]="languageControl.value === null"
+              (click)="setLanguageFilter(null)"
+            >
+              {{ t("general.all") }}
+            </button>
+            @for (language of languageOptions; track language.value) {
+              <button
+                type="button"
+                class="filter-option"
+                [class.active]="languageControl.value === language.value"
+                [attr.aria-pressed]="languageControl.value === language.value"
+                (click)="setLanguageFilter(language.value)"
+              >
+                {{ languageLabel(language.value, language.label) }}
+              </button>
+            }
+          </div>
+        </section>
+
+        <section class="filter-row">
+          <h3>{{ t("media.filters.resolution") }}</h3>
+          <div class="filter-options">
+            <button
+              type="button"
+              class="filter-option"
+              [class.active]="resolutionControl.value === null"
+              [attr.aria-pressed]="resolutionControl.value === null"
+              (click)="setResolutionFilter(null)"
+            >
+              {{ t("general.all") }}
+            </button>
+            @for (resolution of resolutionOptions; track resolution.value) {
+              <button
+                type="button"
+                class="filter-option"
+                [class.active]="resolutionControl.value === resolution.value"
+                [attr.aria-pressed]="
+                  resolutionControl.value === resolution.value
+                "
+                (click)="setResolutionFilter(resolution.value)"
+              >
+                {{ resolutionLabel(resolution.value, resolution.label) }}
+              </button>
+            }
+          </div>
+        </section>
+
+        <section class="filter-row">
+          <h3>{{ t("media.filters.genre") }}</h3>
+          <div class="filter-options">
+            <button
+              type="button"
+              class="filter-option"
+              [class.active]="genreControl.value === null"
+              [attr.aria-pressed]="genreControl.value === null"
+              (click)="setGenreFilter(null)"
+            >
+              {{ t("general.all") }}
+            </button>
+            @for (genre of genreOptions; track genre.value) {
+              <button
+                type="button"
+                class="filter-option"
+                [class.active]="genreControl.value === genre.value"
+                [attr.aria-pressed]="genreControl.value === genre.value"
+                (click)="setGenreFilter(genre.value)"
+              >
+                {{ genre.label }}
+              </button>
+            }
+          </div>
+        </section>
+
+        <section class="filter-row">
+          <h3>{{ t("media.filters.year") }}</h3>
+          <div class="filter-options">
+            <button
+              type="button"
+              class="filter-option"
+              [class.active]="yearControl.value === null"
+              [attr.aria-pressed]="yearControl.value === null"
+              (click)="setYearFilter(null)"
+            >
+              {{ t("general.all") }}
+            </button>
+            @for (year of yearOptions; track year.value) {
+              <button
+                type="button"
+                class="filter-option"
+                [class.active]="yearControl.value === year.value"
+                [attr.aria-pressed]="yearControl.value === year.value"
+                (click)="setYearFilter(year.value)"
+              >
+                {{ year.label }}
+              </button>
+            }
+          </div>
+        </section>
+
+        <section class="filter-row">
+          <h3>{{ t("media.filters.sort") }}</h3>
+          <div class="filter-options">
+            @for (option of sortOptions; track option.key) {
+              <button
+                type="button"
+                class="filter-option"
+                [class.active]="sortControl.value === option.key"
+                [attr.aria-pressed]="sortControl.value === option.key"
+                (click)="setSortFilter(option.key)"
+              >
+                {{ t("media.sort_options." + option.key) }}
+              </button>
+            }
+          </div>
+        </section>
+      </div>
+
+      @if (loading) {
+        <mat-progress-bar mode="indeterminate" />
+      }
+    </mat-card>
+
+    @if (result.items.length) {
+      <section class="movies-grid">
+        @for (movie of result.items; track trackByInfoHash($index, movie)) {
+          <mat-card class="movie-card">
+            <a
+              class="movie-card-link"
+              [routerLink]="['/torrents/permalink', movie.infoHash]"
+            >
+              <div class="poster-shell">
+                @if (posterUrl(movie); as poster) {
+                  <img
+                    [ngSrc]="poster"
+                    [alt]="
+                      t('media.poster_alt', { title: displayTitle(movie) })
+                    "
+                    width="185"
+                    height="278"
+                    sizes="(max-width: 720px) 50vw, (max-width: 1200px) 25vw, 185px"
+                  />
+                } @else {
+                  <div class="poster-fallback">
+                    <mat-icon>{{ mediaPlaceholderIcon() }}</mat-icon>
+                  </div>
+                }
+
+                <div class="poster-overlay">
+                  @if (qualityLabel(movie); as quality) {
+                    <span>{{ quality }}</span>
+                  }
+                  <span>{{ movie.seeders ?? 0 }}S</span>
+                </div>
+              </div>
+
+              <mat-card-content>
+                <div class="card-topline">
+                  <span>{{
+                    movie.content?.releaseYear ?? t("media.unknown_year")
+                  }}</span>
+                  @if (primaryGenre(movie); as genre) {
+                    <span>{{ genre }}</span>
+                  }
+                </div>
+                <h3>{{ displayTitle(movie) }}</h3>
+                @if (movie.content?.overview) {
+                  <p>{{ movie.content?.overview }}</p>
+                }
+                <div class="card-footer">
+                  <span>{{ movie.torrent.size | filesize }}</span>
+                  <span>{{ movie.publishedAt | timeAgo }}</span>
+                </div>
+              </mat-card-content>
+            </a>
+          </mat-card>
+        }
+      </section>
+    } @else if (!loading) {
+      <mat-card class="empty-state">
+        <mat-icon>{{
+          selectedContentType === "tv_show" ? "tv_off" : "movie_off"
+        }}</mat-icon>
+        <h3>{{ t("media.no_results") }}</h3>
+      </mat-card>
+    }
+
+    <app-paginator
+      (paging)="handlePageEvent($event)"
+      [page]="page"
+      [pageSize]="pageSize"
+      [pageLength]="result.items.length"
+      [totalLength]="result.totalCount"
+      [totalIsEstimate]="result.totalCountIsEstimate"
+      [hasNextPage]="result.hasNextPage"
+    />
+  </div>
+</ng-container>

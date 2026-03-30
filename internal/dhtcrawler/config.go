@@ -22,6 +22,8 @@ type Config struct {
 	// RescrapeThreshold is the amount of time that must pass before a torrent is rescraped
 	// to count seeders and leechers.
 	RescrapeThreshold time.Duration
+	// StatusLogInterval controls how often crawler pipeline status is written to logs.
+	StatusLogInterval time.Duration
 }
 
 func NewDefaultConfig() Config {
@@ -32,6 +34,7 @@ func NewDefaultConfig() Config {
 		SaveFilesThreshold:           100,
 		SavePieces:                   false,
 		RescrapeThreshold:            time.Hour * 24 * 30,
+		StatusLogInterval:            45 * time.Second,
 	}
 }
 

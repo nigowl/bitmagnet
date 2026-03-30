@@ -31,6 +31,9 @@
       }
     }
     .mdc-icon-button {
+      &.active {
+        background-color: rgba(#fff, 0.18);
+      }
       .mat-icon {
         fill: #fff;
       }

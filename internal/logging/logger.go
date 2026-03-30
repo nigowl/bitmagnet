@@ -16,22 +16,14 @@ type Params struct {
 
 type Result struct {
 	fx.Out
-	Logger  *zap.Logger
-	Sugar   *zap.SugaredLogger
-	AppHook fx.Hook `group:"app_hooks"`
+	Logger    *zap.Logger
+	Sugar     *zap.SugaredLogger
+	LogBuffer *LogBuffer
+	AppHook   fx.Hook `group:"app_hooks"`
 }
 
 func New(params Params) Result {
 	var appHook fx.Hook
-
-	var encoder zapcore.Encoder
-	if params.Config.JSON {
-		encoder = zapcore.NewJSONEncoder(jsonEncoderConfig)
-	} else {
-		encoder = zapcore.NewConsoleEncoder(consoleEncoderConfig)
-	}
-
-	writeSyncer := zapcore.AddSync(os.Stdout)
 
 	opts := []zap.Option{
 		zap.AddStacktrace(zapcore.ErrorLevel),
@@ -41,10 +33,20 @@ func New(params Params) Result {
 		opts = append(opts, zap.Development())
 	}
 
-	core := zapcore.NewCore(
-		encoder,
-		writeSyncer,
-		levelToZapLevel(params.Config.Level),
+	logLevel := levelToZapLevel(params.Config.Level)
+	buffer := NewLogBuffer(defaultBufferLines)
+
+	core := zapcore.NewTee(
+		zapcore.NewCore(
+			newEncoder(params.Config),
+			zapcore.AddSync(os.Stdout),
+			logLevel,
+		),
+		zapcore.NewCore(
+			newEncoder(params.Config),
+			buffer,
+			logLevel,
+		),
 	)
 
 	if params.Config.FileRotator.Enabled {
@@ -67,8 +69,17 @@ func New(params Params) Result {
 	l := zap.New(core, opts...)
 
 	return Result{
-		Logger:  l,
-		Sugar:   l.Sugar(),
-		AppHook: appHook,
+		Logger:    l,
+		Sugar:     l.Sugar(),
+		LogBuffer: buffer,
+		AppHook:   appHook,
 	}
+}
+
+func newEncoder(config Config) zapcore.Encoder {
+	if config.JSON {
+		return zapcore.NewJSONEncoder(jsonEncoderConfig)
+	}
+
+	return zapcore.NewConsoleEncoder(consoleEncoderConfig)
 }

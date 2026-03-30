@@ -31,7 +31,7 @@
     --mat-text-button-horizontal-padding: 12px;
     --mdc-text-button-container-height: 30px;
   }
-  --mdc-text-button-label-text-size: 15px;
+  --mdc-text-button-label-text-size: var(--bitmagnet-font-size-md);
   nav {
     position: absolute;
     left: 340px;
@@ -39,7 +39,7 @@
     height: 56px;
     padding-top: 14px;
     a {
-      margin-right: 10px;
+      margin-right: 6px;
     }
     mat-icon[data-mat-icon-name="magnet"] {
       margin-top: -5px;

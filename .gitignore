@@ -12,6 +12,7 @@ dump.rdb
 
 # Node
 /webui/node_modules
+/webui/dist/
 npm-debug.log
 yarn-error.log
 

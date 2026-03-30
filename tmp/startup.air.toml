@@ -1,0 +1,21 @@
+root = "/Users/chenhongli/dev/srcs/3E4/bitmagnet"
+tmp_dir = "/Users/chenhongli/dev/srcs/3E4/bitmagnet/tmp/air"
+
+[build]
+cmd = "go build -o /Users/chenhongli/dev/srcs/3E4/bitmagnet/tmp/bitmagnet-dev ."
+entrypoint = "/Users/chenhongli/dev/srcs/3E4/bitmagnet/tmp/startup.air.run.sh"
+delay = 800
+exclude_dir = ["config", "data", "tmp", ".git", "webui/dist", "webui/node_modules"]
+exclude_file = []
+exclude_regex = ["_test\\.go"]
+include_ext = ["go", "graphql", "graphqls", "json", "yaml", "yml"]
+kill_delay = "500ms"
+send_interrupt = true
+stop_on_error = true
+
+[log]
+time = true
+
+[screen]
+clear_on_rebuild = false
+keep_scroll = true

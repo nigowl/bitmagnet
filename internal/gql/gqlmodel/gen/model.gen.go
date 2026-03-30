@@ -15,6 +15,19 @@ import (
 	"github.com/bitmagnet-io/bitmagnet/internal/protocol"
 )
 
+type ContentSourceAgg struct {
+	Value      string `json:"value"`
+	Label      string `json:"label"`
+	Count      int    `json:"count"`
+	IsEstimate bool   `json:"isEstimate"`
+}
+
+type ContentSourceFacetInput struct {
+	Aggregate graphql.Omittable[*bool]             `json:"aggregate,omitempty"`
+	Logic     graphql.Omittable[*model.FacetLogic] `json:"logic,omitempty"`
+	Filter    graphql.Omittable[[]string]          `json:"filter,omitempty"`
+}
+
 type ContentTypeAgg struct {
 	Value      *model.ContentType `json:"value,omitempty"`
 	Label      string             `json:"label"`
@@ -138,6 +151,7 @@ type SuggestTagsQueryInput struct {
 
 type TorrentContentAggregations struct {
 	ContentType     []ContentTypeAgg     `json:"contentType,omitempty"`
+	ContentSource   []ContentSourceAgg   `json:"contentSource,omitempty"`
 	TorrentSource   []TorrentSourceAgg   `json:"torrentSource,omitempty"`
 	TorrentTag      []TorrentTagAgg      `json:"torrentTag,omitempty"`
 	TorrentFileType []TorrentFileTypeAgg `json:"torrentFileType,omitempty"`
@@ -150,6 +164,7 @@ type TorrentContentAggregations struct {
 
 type TorrentContentFacetsInput struct {
 	ContentType     graphql.Omittable[*ContentTypeFacetInput]     `json:"contentType,omitempty"`
+	ContentSource   graphql.Omittable[*ContentSourceFacetInput]   `json:"contentSource,omitempty"`
 	TorrentSource   graphql.Omittable[*TorrentSourceFacetInput]   `json:"torrentSource,omitempty"`
 	TorrentTag      graphql.Omittable[*TorrentTagFacetInput]      `json:"torrentTag,omitempty"`
 	TorrentFileType graphql.Omittable[*TorrentFileTypeFacetInput] `json:"torrentFileType,omitempty"`

@@ -1,0 +1,122 @@
+<ng-container *transloco="let t">
+  <app-document-title
+    [parts]="[
+      t('dashboard.logs.title'),
+      t('routes.logs'),
+      t('routes.dashboard'),
+    ]"
+  />
+
+  <section class="logs-page">
+    <section class="page-header">
+      <h1>{{ t("dashboard.logs.title") }}</h1>
+      <p>{{ t("dashboard.logs.subtitle") }}</p>
+    </section>
+
+    <mat-card class="logs-controls">
+      <div class="controls-state">
+        <span class="controls-badge">
+          {{ t("dashboard.logs.line_count") }}: {{ pageSize }}
+        </span>
+        <span class="controls-badge controls-badge-muted">
+          {{ t("dashboard.logs.total_lines") }}:
+          {{ response.totalLines | number }}
+        </span>
+        <mat-checkbox [formControl]="autoRefreshControl">
+          {{ t("dashboard.logs.auto_refresh") }}
+        </mat-checkbox>
+      </div>
+
+      <button
+        mat-mini-fab
+        color="primary"
+        type="button"
+        [matTooltip]="t('dashboard.logs.refresh')"
+        (click)="refresh()"
+      >
+        <mat-icon>sync</mat-icon>
+      </button>
+    </mat-card>
+
+    @if (loading) {
+      <mat-progress-bar mode="indeterminate" />
+    }
+
+    <mat-card class="logs-meta">
+      <dl>
+        @if (response.path) {
+          <div>
+            <dt>{{ t("dashboard.logs.log_path") }}</dt>
+            <dd>{{ response.path }}</dd>
+          </div>
+        }
+        @if (response.currentFile) {
+          <div>
+            <dt>{{ t("dashboard.logs.current_file") }}</dt>
+            <dd>{{ response.currentFile }}</dd>
+          </div>
+        }
+        <div>
+          <dt>{{ t("dashboard.logs.last_updated") }}</dt>
+          <dd>
+            {{
+              response.updatedAt
+                ? (response.updatedAt | date: "yyyy-MM-dd HH:mm:ss")
+                : "-"
+            }}
+          </dd>
+        </div>
+        <div>
+          <dt>{{ t("dashboard.logs.total_lines") }}</dt>
+          <dd>{{ response.totalLines | number }}</dd>
+        </div>
+      </dl>
+    </mat-card>
+
+    <mat-card class="logs-output">
+      @if (!response.enabled) {
+        <p class="logs-message">
+          {{ response.message || t("dashboard.logs.disabled") }}
+        </p>
+      } @else if (renderedLines.length) {
+        <div class="logs-head">
+          <span>{{ t("dashboard.logs.line") }}</span>
+          <span>{{ t("dashboard.logs.level") }}</span>
+          <span>{{ t("dashboard.logs.message_col") }}</span>
+        </div>
+        <div class="logs-body">
+          @for (
+            line of renderedLines;
+            track trackByRenderedLine($index, line)
+          ) {
+            <div class="log-row">
+              <span class="log-line-number">{{ line.lineNumber }}</span>
+              <span
+                class="log-level"
+                [class]="'log-level log-level-' + line.level"
+              >
+                {{ levelLabel(line.level) }}
+              </span>
+              <code class="log-text">{{ line.text }}</code>
+            </div>
+          }
+        </div>
+      } @else {
+        <p class="logs-message">
+          {{ response.message || t("dashboard.logs.empty") }}
+        </p>
+      }
+    </mat-card>
+
+    <app-paginator
+      class="logs-paginator"
+      (paging)="handlePageEvent($event)"
+      [page]="page"
+      [pageSize]="pageSize"
+      [pageSizes]="pageSizeOptions"
+      [pageLength]="response.lines.length"
+      [totalLength]="response.totalLines"
+      [showLastPage]="true"
+    />
+  </section>
+</ng-container>

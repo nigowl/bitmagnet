@@ -79,6 +79,30 @@
       "ran_at": "Ran at",
       "retry": "Retry",
       "total_counts_by_status": "Total counts by status"
+    },
+    "logs": {
+      "auto_refresh": "Auto refresh",
+      "current_file": "Current file",
+      "disabled": "File log rotation is disabled. Enable LOG_FILE_ROTATOR_ENABLED=true to populate this page.",
+      "empty": "No log lines available yet.",
+      "last_updated": "Last updated",
+      "level": "Level",
+      "levels": {
+        "debug": "Debug",
+        "error": "Error",
+        "info": "Info",
+        "other": "Other",
+        "warn": "Warn"
+      },
+      "line": "Line",
+      "line_count": "Tail lines",
+      "load_error": "Failed to load system logs.",
+      "log_path": "Log path",
+      "message_col": "Message",
+      "refresh": "Refresh logs",
+      "subtitle": "Recent backend log output captured from the running bitmagnet service.",
+      "total_lines": "Total lines",
+      "title": "System Logs"
     }
   },
   "facets": {
@@ -214,6 +238,57 @@
     "support_bitmagnet": "Support bitmagnet",
     "translate": "Translate"
   },
+  "media": {
+    "center_title": "Media Center",
+    "center_subtitle": "Browse classified movies and TV shows with richer filters and a cleaner card view.",
+    "content_types": {
+      "all": "All",
+      "movie": "Movie",
+      "tv_show": "TV Series"
+    },
+    "discover_title": "Discover media",
+    "featured": "Featured today",
+    "filters": {
+      "content_type": "Type",
+      "genre": "Genre",
+      "language": "Language",
+      "query": "Search title, overview, or release year",
+      "resolution": "Resolution",
+      "source": "Metadata source",
+      "sort": "Sort by",
+      "year": "Year"
+    },
+    "genres_count": "{{count}} genres",
+    "load_error": "Error loading media: {{message}}",
+    "no_results": "No media matched the current filters.",
+    "open_details": "Open details",
+    "poster_alt": "{{title}} poster",
+    "refresh": "Refresh media",
+    "result_count": "{{count}} results",
+    "sections": {
+      "movies": "Movies",
+      "tv": "TV",
+      "tv_soon": "TV shows are coming next"
+    },
+    "sources": {
+      "imdb": "IMDB",
+      "tmdb": "TMDB",
+      "tvdb": "The TVDB"
+    },
+    "sort_options": {
+      "latest": "Latest release",
+      "name": "Title A-Z",
+      "popular": "Most seeders",
+      "updated": "Recently updated"
+    },
+    "stats": {
+      "available_genres": "Available genres",
+      "live_results": "Live results",
+      "release_window": "Release window"
+    },
+    "torrent_size": "Torrent size",
+    "unknown_year": "Unknown year"
+  },
   "paginator": {
     "first_page": "First page",
     "items_per_page": "Items per page",
@@ -229,6 +304,8 @@
     "dashboard": "Dashboard",
     "home": "Home",
     "jobs": "Jobs",
+    "logs": "Logs",
+    "media": "Media",
     "queues": "Queues",
     "torrents": "Torrents",
     "visualize": "Visualize"

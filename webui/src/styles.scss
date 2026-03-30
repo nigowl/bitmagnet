@@ -74,9 +74,19 @@ html,
 body {
   height: 100%;
 }
+
+html {
+  --bitmagnet-font-size-xs: 11px;
+  --bitmagnet-font-size-sm: 12px;
+  --bitmagnet-font-size-md: 13px;
+  --bitmagnet-font-size-lg: 15px;
+}
+
 body {
   margin: 0;
   font-family: Roboto, "Helvetica Neue", sans-serif;
+  font-size: var(--bitmagnet-font-size-md);
+  line-height: 1.45;
 }
 
 @mixin mat-icon {
@@ -120,6 +130,38 @@ body {
 
 .mat-icon {
   fill: var(--mat-icon-color);
+}
+
+.mat-mdc-form-field {
+  --mat-form-field-container-height: 40px;
+  --mat-form-field-container-text-size: var(--bitmagnet-font-size-md);
+  --mat-form-field-container-text-line-height: 18px;
+  --mat-form-field-container-vertical-padding: 10px;
+  --mat-form-field-filled-with-label-container-padding-top: 16px;
+  --mat-form-field-filled-with-label-container-padding-bottom: 6px;
+  --mat-form-field-subscript-text-size: var(--bitmagnet-font-size-xs);
+  --mat-select-trigger-text-size: var(--bitmagnet-font-size-md);
+  --mat-select-trigger-text-line-height: 18px;
+  --mdc-filled-text-field-label-text-size: var(--bitmagnet-font-size-sm);
+  --mdc-outlined-text-field-label-text-size: var(--bitmagnet-font-size-sm);
+}
+
+.mat-mdc-form-field-infix,
+.mat-mdc-select,
+.mat-mdc-input-element,
+.mdc-list-item__primary-text,
+textarea.mat-mdc-input-element,
+input.mat-mdc-input-element {
+  font-size: var(--bitmagnet-font-size-md);
+}
+
+.mat-mdc-option,
+.mat-mdc-chip,
+.mat-mdc-paginator,
+.mat-mdc-select-panel,
+.mat-mdc-form-field-hint,
+.mat-mdc-form-field-error {
+  font-size: var(--bitmagnet-font-size-sm);
 }
 
 .spacer {

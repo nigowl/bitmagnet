@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/bitmagnet-io/bitmagnet/internal/httpserver"
 	"github.com/bitmagnet-io/bitmagnet/webui"
@@ -50,10 +51,18 @@ func (b *builder) Apply(e *gin.Engine) error {
 		return nil
 	}
 
-	e.StaticFS("/webui", wrappedFs{http.FS(appRoot)})
+	fileServer := http.FileServer(wrappedFs{http.FS(appRoot)})
+	serveWebUI := func(c *gin.Context) {
+		http.StripPrefix("/webui", fileServer).ServeHTTP(c.Writer, c.Request)
+	}
+
 	e.GET("/", func(c *gin.Context) {
 		c.Redirect(301, "/webui")
 	})
+	e.GET("/webui", func(c *gin.Context) {
+		c.Redirect(301, "/webui/")
+	})
+	e.GET("/webui/*filepath", serveWebUI)
 
 	return nil
 }
@@ -63,6 +72,10 @@ type wrappedFs struct {
 }
 
 func (w wrappedFs) Open(name string) (http.File, error) {
+	if strings.HasSuffix(name, "/") && name != "/" {
+		return w.FileSystem.Open("/index.html")
+	}
+
 	f, err := w.FileSystem.Open(name)
 	if err != nil && errors.Is(err, fs.ErrNotExist) {
 		return w.FileSystem.Open("/index.html")

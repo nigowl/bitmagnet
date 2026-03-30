@@ -21,6 +21,16 @@
         </a>
         <a
           mat-button
+          routerLink="media"
+          #linkMedia="routerLinkActive"
+          routerLinkActive
+          [class]="linkMedia.isActive ? 'active' : ''"
+        >
+          <mat-icon>movie</mat-icon>
+          {{ t("routes.media") }}
+        </a>
+        <a
+          mat-button
           routerLink="dashboard"
           #linkDashboard="routerLinkActive"
           routerLinkActive
@@ -36,6 +46,16 @@
           <mat-icon svgIcon="magnet"></mat-icon>
         </a>
       </h1>
+      <button
+        mat-icon-button
+        routerLink="media"
+        #linkMedia="routerLinkActive"
+        routerLinkActive
+        [class]="linkMedia.isActive ? 'active' : ''"
+        [matTooltip]="t('routes.media')"
+      >
+        <mat-icon>movie</mat-icon>
+      </button>
       <button
         mat-icon-button
         routerLink="dashboard"

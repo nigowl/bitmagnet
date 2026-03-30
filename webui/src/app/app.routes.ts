@@ -28,6 +28,11 @@ export const routes: Routes = [
     ],
   },
   {
+    path: "media",
+    loadComponent: () =>
+      import("./media/media.component").then((c) => c.MediaComponent),
+  },
+  {
     path: "dashboard",
     loadComponent: () =>
       import("./dashboard/dashboard.component").then(
@@ -81,6 +86,13 @@ export const routes: Routes = [
         loadComponent: () =>
           import("./dashboard/torrents/torrents-dashboard.component").then(
             (c) => c.TorrentsDashboardComponent,
+          ),
+      },
+      {
+        path: "logs",
+        loadComponent: () =>
+          import("./dashboard/logs/logs-dashboard.component").then(
+            (c) => c.LogsDashboardComponent,
           ),
       },
     ],

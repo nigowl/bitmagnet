@@ -71,6 +71,23 @@ func torrentContentTypeFacet(input gen.ContentTypeFacetInput) q.Facet {
 	)
 }
 
+func contentSourceFacet(input gen.ContentSourceFacetInput) q.Facet {
+	var filter graphql.Omittable[[]*string]
+
+	if f, ok := input.Filter.ValueOK(); ok {
+		filterValues := make([]*string, 0, len(f))
+
+		for _, v := range f {
+			vv := v
+			filterValues = append(filterValues, &vv)
+		}
+
+		filter = graphql.OmittableOf[[]*string](filterValues)
+	}
+
+	return facet(input.Aggregate, input.Logic, filter, search.TorrentContentSourceFacet)
+}
+
 func torrentSourceFacet(input gen.TorrentSourceFacetInput) q.Facet {
 	var filter graphql.Omittable[[]*string]
 
@@ -247,6 +264,17 @@ func contentTypeAggs(items q.AggregationItems) ([]gen.ContentTypeAgg, error) {
 	return aggs(items, model.ParseContentType,
 		func(value *model.ContentType, label string, count uint, isEstimate bool) gen.ContentTypeAgg {
 			return gen.ContentTypeAgg{Value: value, Label: label, Count: int(count), IsEstimate: isEstimate}
+		})
+}
+
+func contentSourceAggs(items q.AggregationItems) ([]gen.ContentSourceAgg, error) {
+	return aggs(items, func(s string) (string, error) { return s, nil },
+		func(value *string, label string, count uint, isEstimate bool) gen.ContentSourceAgg {
+			val := ""
+			if value != nil {
+				val = *value
+			}
+			return gen.ContentSourceAgg{Value: val, Label: label, Count: int(count), IsEstimate: isEstimate}
 		})
 }
 

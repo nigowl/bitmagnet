@@ -40,6 +40,16 @@
               ><mat-icon svgIcon="magnet" />{{ t("routes.torrents") }}</a
             >
           </li>
+          <li>
+            <a
+              mat-button
+              routerLink="logs"
+              routerLinkActive
+              #linkLogs="routerLinkActive"
+              [class]="linkLogs.isActive ? 'active' : ''"
+              ><mat-icon>article</mat-icon>{{ t("routes.logs") }}</a
+            >
+          </li>
         </ul>
       </nav>
     </mat-drawer>

@@ -183,6 +183,10 @@ func torrentContentFacetsOption(input gen.TorrentContentFacetsInput) q.Option {
 		qFacets = append(qFacets, torrentContentTypeFacet(*contentType))
 	}
 
+	if contentSource, ok := input.ContentSource.ValueOK(); ok {
+		qFacets = append(qFacets, contentSourceFacet(*contentSource))
+	}
+
 	if torrentSource, ok := input.TorrentSource.ValueOK(); ok {
 		qFacets = append(qFacets, torrentSourceFacet(*torrentSource))
 	}
@@ -247,6 +251,11 @@ func transformTorrentContentAggregations(aggs q.Aggregations) (gen.TorrentConten
 	)
 
 	result.ContentType, err = contentTypeAggs(aggs[search.TorrentContentTypeFacetKey].Items)
+	if err != nil {
+		return result, err
+	}
+
+	result.ContentSource, err = contentSourceAggs(aggs[search.ContentSourceFacetKey].Items)
 	if err != nil {
 		return result, err
 	}
