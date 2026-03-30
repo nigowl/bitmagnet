@@ -2,7 +2,8 @@
 .env.*
 .direnv
 .idea
-/data
+/backend/data
+/backend/tmp
 /bitmagnet
 /bitmagnet.io/_site
 /export.sql
@@ -11,8 +12,9 @@ dump.rdb
 .sass-cache
 
 # Node
-/webui/node_modules
-/webui/dist/
+/frontend/node_modules
+/frontend/.next
+/frontend/out
 npm-debug.log
 yarn-error.log
 
@@ -34,10 +36,11 @@ yarn-error.log
 .history/*
 
 # Miscellaneous
-/webui/.angular/cache
 .sass-cache/
 testem.log
 
 # System files
 .DS_Store
 Thumbs.db
+
+/frontend/tsconfig.tsbuildinfo

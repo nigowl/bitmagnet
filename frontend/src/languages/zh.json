@@ -1,0 +1,285 @@
+{
+  "app": {
+    "title": "Bitmagnet",
+    "subtitle": "种子发现、影视浏览与服务运维"
+  },
+  "nav": {
+    "home": "首页",
+    "torrents": "种子",
+    "media": "影视",
+    "monitor": "监控",
+    "queue": "队列",
+    "main": "主导航",
+    "ops": "运维功能"
+  },
+  "common": {
+    "english": "英文",
+    "chinese": "中文",
+    "refresh": "刷新",
+    "loading": "加载中",
+    "cancel": "取消",
+    "yes": "是",
+    "no": "否",
+    "desc": "降序",
+    "asc": "升序",
+    "total": "总数",
+    "page": "页"
+  },
+  "contentTypes": {
+    "movie": "电影",
+    "tv_show": "剧集",
+    "music": "音乐",
+    "ebook": "电子书",
+    "comic": "漫画",
+    "audiobook": "有声书",
+    "game": "游戏",
+    "software": "软件",
+    "xxx": "成人"
+  },
+  "cards": {
+    "health": "健康状态",
+    "version": "版本"
+  },
+  "status": {
+    "ok": "健康",
+    "warn": "警告",
+    "error": "错误"
+  },
+  "messages": {
+    "loadFailed": "加载后端数据失败",
+    "queryFailed": "自定义查询执行失败"
+  },
+  "home": {
+    "title": "种子首页",
+    "subtitle": "参考主流种子站首页风格，展示最新与热门资源。",
+    "latestCount": "最新入库",
+    "latest": "最新种子",
+    "hot": "热门",
+    "hottest": "最热种子",
+    "updateTrend": "更新趋势（24小时）",
+    "gotoTorrents": "打开种子检索",
+    "gotoMedia": "浏览影视",
+    "name": "名称",
+    "type": "类型",
+    "size": "大小",
+    "seeders": "做种",
+    "leechers": "下载"
+  },
+  "monitor": {
+    "title": "监控",
+    "subtitle": "融合概览与健康信息的统一监控页。",
+    "workers": "工作进程",
+    "checks": "检查项",
+    "queueMetrics": "队列指标（24小时）",
+    "torrentMetrics": "种子指标（24小时）",
+    "table": {
+      "key": "键",
+      "status": "状态",
+      "timestamp": "时间",
+      "started": "是否启动"
+    },
+    "statusValues": {
+      "up": "正常",
+      "down": "异常",
+      "degraded": "降级",
+      "unknown": "未知"
+    }
+  },
+  "queue": {
+    "title": "队列管理",
+    "subtitle": "查看队列任务并执行管理操作",
+    "filters": "筛选条件",
+    "orderBy": "排序字段",
+    "direction": "排序方向",
+    "pageSize": "每页数量",
+    "queueFilter": "队列",
+    "statusFilter": "状态",
+    "enqueue": "批量重处理入队",
+    "enqueueTitle": "批量重处理入队",
+    "enqueueDone": "已提交重处理任务",
+    "purge": "清理任务",
+    "purgeTitle": "清理队列任务",
+    "purgeHint": "将删除当前筛选条件匹配到的任务。",
+    "purgeDone": "队列任务已清理",
+    "timeline": "队列时间线",
+    "noJobs": "当前筛选下没有队列任务",
+    "order": {
+      "ranAt": "执行时间",
+      "createdAt": "创建时间",
+      "priority": "优先级"
+    },
+    "statusValues": {
+      "pending": "待处理",
+      "retry": "重试",
+      "failed": "失败",
+      "processed": "已完成"
+    },
+    "table": {
+      "id": "ID",
+      "queue": "队列",
+      "status": "状态",
+      "priority": "优先级",
+      "retries": "重试次数",
+      "created": "创建时间",
+      "ran": "执行时间",
+      "error": "错误"
+    },
+    "form": {
+      "purge": "先清理已有任务",
+      "classifierRematch": "启用分类重匹配",
+      "apisDisabled": "禁用外部 API",
+      "localSearchDisabled": "禁用本地搜索",
+      "orphans": "仅孤儿记录",
+      "batchSize": "批量大小",
+      "chunkSize": "分块大小",
+      "contentTypes": "内容类型"
+    }
+  },
+  "torrents": {
+    "title": "种子检索",
+    "subtitle": "左侧筛选 + 右侧列表，操作集中在详情弹窗",
+    "search": "搜索",
+    "contentType": "内容类型",
+    "orderBy": "排序字段",
+    "direction": "排序方向",
+    "pageSize": "每页数量",
+    "tagsInput": "标签输入",
+    "sourceFilter": "来源",
+    "tagFilter": "标签",
+    "setTags": "覆盖标签",
+    "putTags": "追加标签",
+    "deleteTags": "删除标签",
+    "reprocess": "重处理",
+    "delete": "删除",
+    "selected": "已选",
+    "clearFilters": "清空筛选",
+    "details": "详情",
+    "selectFirst": "请先选择至少一个种子",
+    "enterTags": "请先输入标签",
+    "actionDone": "操作已完成",
+    "noResults": "当前筛选下没有匹配种子",
+    "copyHash": "复制哈希",
+    "copied": "已复制到剪贴板",
+    "copyFailed": "剪贴板不可用",
+    "openMagnet": "打开磁力链接",
+    "magnetUnavailable": "磁力链接不可用",
+    "backToList": "返回种子列表",
+    "notFound": "未找到该种子",
+    "typeSpecific": "按类型展示信息",
+    "typeSpecificEmpty": "未识别到该类型的专属元数据",
+    "field": "字段",
+    "value": "值",
+    "fields": {
+      "releaseYear": "发行年份",
+      "genre": "类型",
+      "artist": "艺术家",
+      "album": "专辑",
+      "author": "作者",
+      "publisher": "出版社",
+      "language": "语言",
+      "platform": "平台",
+      "version": "版本",
+      "category": "分类"
+    },
+    "deleteTitle": "删除种子",
+    "deleteHint": "该操作不可撤销，确定继续吗？",
+    "files": "文件列表",
+    "noFiles": "暂无可展示的文件条目",
+    "all": "全部",
+    "table": {
+      "title": "标题",
+      "type": "类型",
+      "size": "大小",
+      "seeders": "做种",
+      "leechers": "下载",
+      "source": "来源",
+      "actions": "操作",
+      "path": "路径"
+    },
+    "order": {
+      "relevance": "相关度",
+      "publishedAt": "发布时间",
+      "updatedAt": "更新时间",
+      "size": "大小",
+      "filesCount": "文件数",
+      "seeders": "做种",
+      "leechers": "下载",
+      "name": "名称",
+      "infoHash": "哈希"
+    },
+    "reprocessOptions": {
+      "classifierRematch": "启用分类重匹配",
+      "apisDisabled": "禁用外部 API",
+      "localSearchDisabled": "禁用本地搜索"
+    }
+  },
+  "media": {
+    "title": "影视",
+    "subtitle": "瀑布流影视墙，点击封面或标题可直达种子详情",
+    "search": "搜索标题、简介或年份",
+    "results": "结果数",
+    "noResults": "当前筛选条件下没有匹配内容",
+    "noPoster": "暂无封面",
+    "clearFilters": "清空筛选",
+    "openTorrent": "打开种子详情",
+    "size": "资源大小",
+    "all": "全部",
+    "contentTypes": {
+      "all": "全部",
+      "movie": "电影",
+      "tvShow": "剧集"
+    },
+    "sort": {
+      "popular": "热门",
+      "latest": "最新发布",
+      "updated": "最近更新",
+      "name": "名称"
+    },
+    "filters": {
+      "source": "元数据来源",
+      "genre": "题材",
+      "language": "语言",
+      "resolution": "分辨率",
+      "year": "年份"
+    },
+    "sources": {
+      "tmdb": "TMDB",
+      "imdb": "IMDb",
+      "tvdb": "TVDB"
+    },
+    "genres": {
+      "action": "动作",
+      "adventure": "冒险",
+      "animation": "动画",
+      "comedy": "喜剧",
+      "crime": "犯罪",
+      "documentary": "纪录",
+      "drama": "剧情",
+      "family": "家庭",
+      "fantasy": "奇幻",
+      "history": "历史",
+      "horror": "恐怖",
+      "music": "音乐",
+      "mystery": "悬疑",
+      "romance": "爱情",
+      "science_fiction": "科幻",
+      "sci_fi": "科幻",
+      "thriller": "惊悚",
+      "war": "战争",
+      "western": "西部"
+    },
+    "languages": {
+      "english": "英语",
+      "chinese": "中文",
+      "japanese": "日语",
+      "korean": "韩语",
+      "french": "法语",
+      "german": "德语",
+      "spanish": "西班牙语",
+      "italian": "意大利语",
+      "russian": "俄语",
+      "portuguese": "葡萄牙语",
+      "hindi": "印地语"
+    }
+  }
+}

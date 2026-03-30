@@ -27,6 +27,7 @@ jobs:
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.1.6
+          working-directory: backend
           args: --timeout=10m
 
   test:
@@ -77,11 +78,10 @@ jobs:
           nix develop --ignore-environment --command task install-webui
           nix develop --ignore-environment --keep HOME --keep POSTGRES_PASSWORD . --command task migrate
           nix develop --ignore-environment --keep HOME --keep POSTGRES_PASSWORD . --command task gen
-          nix develop --ignore-environment --keep HOME . --command go fmt ./...
+          nix develop --ignore-environment --keep HOME . --command bash -lc "cd backend && go fmt ./..."
           nix develop --ignore-environment . --command task i18n-extract
           nix develop --ignore-environment . --command task build-webui
         env:
           POSTGRES_PASSWORD: postgres
       - name: Check nothing changed
-        # excluding the 3rdpartylicenses file in a horrible hack:
-        run: git diff --exit-code -- . ':(exclude)webui/dist/bitmagnet/3rdpartylicenses.txt'
+        run: git diff --exit-code -- .

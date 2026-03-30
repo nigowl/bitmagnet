@@ -6,9 +6,9 @@ services:
     container_name: bitmagnet
     image: ghcr.io/bitmagnet-io/bitmagnet:latest
     volumes:
-      - ./config:/root/.config/bitmagnet
+      - ./backend/config:/root/.config/bitmagnet
       # Mount data folder (currently only used for logs when file rotation is enabled):
-      - ./data/bitmagnet:/root/.local/share/bitmagnet
+      - ./backend/data/bitmagnet:/root/.local/share/bitmagnet
     restart: unless-stopped
     environment:
       # Enable logging to rotating files for ingest to Loki:
@@ -62,7 +62,7 @@ services:
     image: postgres:16-alpine
     container_name: bitmagnet-postgres
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      - ./backend/data/postgres:/var/lib/postgresql/data
     networks:
       bitmagnet:
         ipv4_address: 192.168.55.11
@@ -91,11 +91,11 @@ services:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
     volumes:
-      - ./data/grafana:/var/lib/grafana
+      - ./backend/data/grafana:/var/lib/grafana
       # Provisioned data sources and dashboards:
-      - ./observability/grafana.datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
-      - ./observability/grafana.dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
-      - ./observability/grafana-dashboards:/etc/dashboards
+      - ./backend/observability/grafana.datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - ./backend/observability/grafana.dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
+      - ./backend/observability/grafana-dashboards:/etc/dashboards
     ports:
       - "3000:3000"
     networks:
@@ -106,9 +106,9 @@ services:
     container_name: bitmagnet-grafana-agent
     image: grafana/agent:latest
     volumes:
-      - ./data/bitmagnet/logs:/var/log/bitmagnet
+      - ./backend/data/bitmagnet/logs:/var/log/bitmagnet
       # Mount the logs and metrics scraping configurations:
-      - ./observability/grafana-agent.config.river:/etc/agent-config/config.river
+      - ./backend/observability/grafana-agent.config.river:/etc/agent-config/config.river
     command:
       - run
       - /etc/agent-config/config.river
@@ -143,8 +143,8 @@ services:
       - "bitmagnet:192.168.55.10"
     restart: unless-stopped
     volumes:
-      - ./data/prometheus:/prometheus
-      - ./observability/prometheus.config.yaml:/etc/prometheus/prometheus.yml
+      - ./backend/data/prometheus:/prometheus
+      - ./backend/observability/prometheus.config.yaml:/etc/prometheus/prometheus.yml
     networks:
       - bitmagnet
 
@@ -155,8 +155,8 @@ services:
     ports:
       - "3100:3100"
     volumes:
-      - ./data/loki:/loki
-      - ./observability/loki.config.yaml:/etc/loki/local-config.yaml
+      - ./backend/data/loki:/loki
+      - ./backend/observability/loki.config.yaml:/etc/loki/local-config.yaml
     command: -config.file=/etc/loki/local-config.yaml
     networks:
       - bitmagnet
@@ -173,8 +173,8 @@ services:
     command:
       - "server"
     volumes:
-      - ./observability/pyroscope.config.yaml:/etc/pyroscope/server.yaml
-      - ./data/pyroscope:/var/lib/pyroscope
+      - ./backend/observability/pyroscope.config.yaml:/etc/pyroscope/server.yaml
+      - ./backend/data/pyroscope:/var/lib/pyroscope
     networks:
       - bitmagnet
 

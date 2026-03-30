@@ -1,0 +1,285 @@
+{
+  "app": {
+    "title": "Bitmagnet",
+    "subtitle": "Torrent discovery, media browsing and service operations"
+  },
+  "nav": {
+    "home": "Home",
+    "torrents": "Torrents",
+    "media": "Media",
+    "monitor": "Monitor",
+    "queue": "Queue",
+    "main": "Main Navigation",
+    "ops": "Operations"
+  },
+  "common": {
+    "english": "English",
+    "chinese": "Chinese",
+    "refresh": "Refresh",
+    "loading": "Loading",
+    "cancel": "Cancel",
+    "yes": "Yes",
+    "no": "No",
+    "desc": "DESC",
+    "asc": "ASC",
+    "total": "Total",
+    "page": "page"
+  },
+  "contentTypes": {
+    "movie": "Movie",
+    "tv_show": "TV Show",
+    "music": "Music",
+    "ebook": "E-Book",
+    "comic": "Comic",
+    "audiobook": "Audiobook",
+    "game": "Game",
+    "software": "Software",
+    "xxx": "XXX"
+  },
+  "cards": {
+    "health": "Health",
+    "version": "Version"
+  },
+  "status": {
+    "ok": "Healthy",
+    "warn": "Warning",
+    "error": "Error"
+  },
+  "messages": {
+    "loadFailed": "Failed to load backend data",
+    "queryFailed": "Custom query failed"
+  },
+  "home": {
+    "title": "Torrent Home",
+    "subtitle": "Track fresh and popular torrents like a modern index homepage.",
+    "latestCount": "Latest Indexed",
+    "latest": "Latest Torrents",
+    "hot": "Hot",
+    "hottest": "Hottest Torrents",
+    "updateTrend": "Update Trend (24h)",
+    "gotoTorrents": "Open Torrent Search",
+    "gotoMedia": "Browse Media",
+    "name": "Name",
+    "type": "Type",
+    "size": "Size",
+    "seeders": "Seeders",
+    "leechers": "Leechers"
+  },
+  "monitor": {
+    "title": "Monitor",
+    "subtitle": "Unified operations view for metrics, health checks and workers.",
+    "workers": "Workers",
+    "checks": "Checks",
+    "queueMetrics": "Queue Metrics (24h)",
+    "torrentMetrics": "Torrent Metrics (24h)",
+    "table": {
+      "key": "Key",
+      "status": "Status",
+      "timestamp": "Timestamp",
+      "started": "Started"
+    },
+    "statusValues": {
+      "up": "Up",
+      "down": "Down",
+      "degraded": "Degraded",
+      "unknown": "Unknown"
+    }
+  },
+  "queue": {
+    "title": "Queue",
+    "subtitle": "Inspect jobs and run queue administration actions",
+    "filters": "Filters",
+    "orderBy": "Order By",
+    "direction": "Direction",
+    "pageSize": "Page Size",
+    "queueFilter": "Queue",
+    "statusFilter": "Status",
+    "enqueue": "Enqueue Reprocess Batch",
+    "enqueueTitle": "Enqueue Reprocess Batch",
+    "enqueueDone": "Reprocess batch enqueued",
+    "purge": "Purge Jobs",
+    "purgeTitle": "Purge Queue Jobs",
+    "purgeHint": "Delete jobs that match current queue/status filters.",
+    "purgeDone": "Queue jobs purged",
+    "timeline": "Queue Timeline",
+    "noJobs": "No queue jobs matched current filters",
+    "order": {
+      "ranAt": "Ran At",
+      "createdAt": "Created At",
+      "priority": "Priority"
+    },
+    "statusValues": {
+      "pending": "Pending",
+      "retry": "Retry",
+      "failed": "Failed",
+      "processed": "Processed"
+    },
+    "table": {
+      "id": "ID",
+      "queue": "Queue",
+      "status": "Status",
+      "priority": "Priority",
+      "retries": "Retries",
+      "created": "Created",
+      "ran": "Ran",
+      "error": "Error"
+    },
+    "form": {
+      "purge": "Purge existing jobs",
+      "classifierRematch": "Enable classifier rematch",
+      "apisDisabled": "Disable external APIs",
+      "localSearchDisabled": "Disable local search",
+      "orphans": "Only orphan items",
+      "batchSize": "Batch Size",
+      "chunkSize": "Chunk Size",
+      "contentTypes": "Content Types"
+    }
+  },
+  "torrents": {
+    "title": "Torrents",
+    "subtitle": "Left-side filters with list-first browsing and detail modal operations",
+    "search": "Search",
+    "contentType": "Content Type",
+    "orderBy": "Order By",
+    "direction": "Direction",
+    "pageSize": "Page Size",
+    "tagsInput": "Tag Input",
+    "sourceFilter": "Source",
+    "tagFilter": "Tags",
+    "setTags": "Set Tags",
+    "putTags": "Add Tags",
+    "deleteTags": "Delete Tags",
+    "reprocess": "Reprocess",
+    "delete": "Delete",
+    "selected": "Selected",
+    "clearFilters": "Clear Filters",
+    "details": "Details",
+    "selectFirst": "Please select at least one torrent",
+    "enterTags": "Please input tags first",
+    "actionDone": "Operation completed",
+    "noResults": "No torrent matched current filters",
+    "copyHash": "Copy Info Hash",
+    "copied": "Copied to clipboard",
+    "copyFailed": "Clipboard is unavailable",
+    "openMagnet": "Open Magnet Link",
+    "magnetUnavailable": "Magnet link is unavailable",
+    "backToList": "Back to Torrents",
+    "notFound": "Torrent not found",
+    "typeSpecific": "Type-Specific Details",
+    "typeSpecificEmpty": "No type-specific metadata found",
+    "field": "Field",
+    "value": "Value",
+    "fields": {
+      "releaseYear": "Release Year",
+      "genre": "Genre",
+      "artist": "Artist",
+      "album": "Album",
+      "author": "Author",
+      "publisher": "Publisher",
+      "language": "Language",
+      "platform": "Platform",
+      "version": "Version",
+      "category": "Category"
+    },
+    "deleteTitle": "Delete torrents",
+    "deleteHint": "This operation cannot be undone. Continue?",
+    "files": "Files",
+    "noFiles": "No file entries available",
+    "all": "All",
+    "table": {
+      "title": "Title",
+      "type": "Type",
+      "size": "Size",
+      "seeders": "Seeders",
+      "leechers": "Leechers",
+      "source": "Source",
+      "actions": "Actions",
+      "path": "Path"
+    },
+    "order": {
+      "relevance": "Relevance",
+      "publishedAt": "Published",
+      "updatedAt": "Updated",
+      "size": "Size",
+      "filesCount": "Files",
+      "seeders": "Seeders",
+      "leechers": "Leechers",
+      "name": "Name",
+      "infoHash": "Info Hash"
+    },
+    "reprocessOptions": {
+      "classifierRematch": "Enable classifier rematch",
+      "apisDisabled": "Disable external APIs",
+      "localSearchDisabled": "Disable local search"
+    }
+  },
+  "media": {
+    "title": "Media",
+    "subtitle": "Masonry media wall with direct links to torrent detail pages",
+    "search": "Search title, overview or year",
+    "results": "Results",
+    "noResults": "No media matched current filters",
+    "noPoster": "No Poster",
+    "clearFilters": "Clear Filters",
+    "openTorrent": "Open Torrent Detail",
+    "size": "Torrent Size",
+    "all": "All",
+    "contentTypes": {
+      "all": "All",
+      "movie": "Movie",
+      "tvShow": "TV Show"
+    },
+    "sort": {
+      "popular": "Popular",
+      "latest": "Latest",
+      "updated": "Updated",
+      "name": "Name"
+    },
+    "filters": {
+      "source": "Metadata Source",
+      "genre": "Genre",
+      "language": "Language",
+      "resolution": "Resolution",
+      "year": "Year"
+    },
+    "sources": {
+      "tmdb": "TMDB",
+      "imdb": "IMDb",
+      "tvdb": "TVDB"
+    },
+    "genres": {
+      "action": "Action",
+      "adventure": "Adventure",
+      "animation": "Animation",
+      "comedy": "Comedy",
+      "crime": "Crime",
+      "documentary": "Documentary",
+      "drama": "Drama",
+      "family": "Family",
+      "fantasy": "Fantasy",
+      "history": "History",
+      "horror": "Horror",
+      "music": "Music",
+      "mystery": "Mystery",
+      "romance": "Romance",
+      "science_fiction": "Science Fiction",
+      "sci_fi": "Sci-Fi",
+      "thriller": "Thriller",
+      "war": "War",
+      "western": "Western"
+    },
+    "languages": {
+      "english": "English",
+      "chinese": "Chinese",
+      "japanese": "Japanese",
+      "korean": "Korean",
+      "french": "French",
+      "german": "German",
+      "spanish": "Spanish",
+      "italian": "Italian",
+      "russian": "Russian",
+      "portuguese": "Portuguese",
+      "hindi": "Hindi"
+    }
+  }
+}
