@@ -54,6 +54,10 @@ func (corsOption) Key() string {
 	return "cors"
 }
 
+func (corsOption) Order() int {
+	return -90
+}
+
 func (c corsOption) Apply(g *gin.Engine) error {
 	g.Use(c.handlerFunc)
 	return nil

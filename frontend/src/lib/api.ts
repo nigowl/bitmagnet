@@ -50,7 +50,7 @@ export async function graphqlRequest<T>(query: string, variables?: Record<string
   return response.data.data;
 }
 
-export async function apiRequest<T>(path: string, options?: { method?: "GET" | "POST" | "DELETE"; data?: unknown }) {
+export async function apiRequest<T>(path: string, options?: { method?: "GET" | "POST" | "PUT" | "DELETE"; data?: unknown }) {
   const token = getAuthToken();
   try {
     const response = await axios.request<T>({

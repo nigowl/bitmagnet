@@ -38,8 +38,6 @@ type ListItem struct {
 	StatusText          *string          `json:"statusText,omitempty"`
 	HomepageURL         *string          `json:"homepageUrl,omitempty"`
 	ReleaseYear         *int             `json:"releaseYear,omitempty"`
-	OriginalTitle       *string          `json:"originalTitle,omitempty"`
-	Overview            *string          `json:"overview,omitempty"`
 	PosterPath          *string          `json:"posterPath,omitempty"`
 	BackdropPath        *string          `json:"backdropPath,omitempty"`
 	VoteAverage         *float32         `json:"voteAverage,omitempty"`
@@ -88,6 +86,11 @@ type DetailResult struct {
 	Torrents []DetailTorrent `json:"torrents"`
 }
 
+type DetailOptions struct {
+	ForceRefresh bool
+	PluginKeys   []string
+}
+
 type DetailItem struct {
 	ID                  string             `json:"id"`
 	ContentType         string             `json:"contentType"`
@@ -103,11 +106,9 @@ type DetailItem struct {
 	Tagline             *string            `json:"tagline,omitempty"`
 	StatusText          *string            `json:"statusText,omitempty"`
 	HomepageURL         *string            `json:"homepageUrl,omitempty"`
-	OriginalTitle       *string            `json:"originalTitle,omitempty"`
 	OriginalLanguage    *string            `json:"originalLanguage,omitempty"`
 	ReleaseDate         *string            `json:"releaseDate,omitempty"`
 	ReleaseYear         *int               `json:"releaseYear,omitempty"`
-	Overview            *string            `json:"overview,omitempty"`
 	Runtime             *uint16            `json:"runtime,omitempty"`
 	Popularity          *float32           `json:"popularity,omitempty"`
 	VoteAverage         *float32           `json:"voteAverage,omitempty"`
@@ -188,4 +189,40 @@ type DetailTorrent struct {
 
 type CoverResult struct {
 	FilePath string `json:"filePath"`
+}
+
+type BackfillLocalizedInput struct {
+	Limit    int                        `json:"limit"`
+	Progress func(BackfillProgressInfo) `json:"-"`
+}
+
+type BackfillLocalizedResult struct {
+	Requested  int   `json:"requested"`
+	Processed  int   `json:"processed"`
+	Updated    int   `json:"updated"`
+	Remaining  int   `json:"remaining"`
+	DurationMs int64 `json:"durationMs"`
+}
+
+type BackfillCoverCacheInput struct {
+	Limit    int                        `json:"limit"`
+	Progress func(BackfillProgressInfo) `json:"-"`
+}
+
+type BackfillCoverCacheResult struct {
+	Requested  int   `json:"requested"`
+	Processed  int   `json:"processed"`
+	Updated    int   `json:"updated"`
+	Remaining  int   `json:"remaining"`
+	Failed     int   `json:"failed"`
+	DurationMs int64 `json:"durationMs"`
+}
+
+type BackfillProgressInfo struct {
+	Requested int    `json:"requested"`
+	Processed int    `json:"processed"`
+	Updated   int    `json:"updated"`
+	Remaining int    `json:"remaining"`
+	CurrentID string `json:"currentId,omitempty"`
+	Message   string `json:"message,omitempty"`
 }

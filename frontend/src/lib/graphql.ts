@@ -75,6 +75,8 @@ query TorrentContentSearch($input: TorrentContentSearchQueryInput!) {
         id
         infoHash
         contentType
+        contentSource
+        contentId
         title
         seeders
         leechers

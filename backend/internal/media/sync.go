@@ -40,8 +40,8 @@ func SyncEntries(ctx context.Context, db *gorm.DB, refs []model.ContentRef) erro
 			release_date,
 			release_year,
 			original_language,
-			original_title,
-			overview,
+			name_original,
+			overview_original,
 			runtime,
 			popularity,
 			vote_count,
@@ -69,8 +69,8 @@ func SyncEntries(ctx context.Context, db *gorm.DB, refs []model.ContentRef) erro
 			c.release_date,
 			c.release_year,
 			c.original_language,
-			c.original_title,
-			c.overview,
+			coalesce(nullif(c.original_title, ''), c.title),
+			nullif(c.overview, ''),
 			c.runtime,
 			c.popularity,
 			c.vote_count,
@@ -197,8 +197,8 @@ func SyncEntries(ctx context.Context, db *gorm.DB, refs []model.ContentRef) erro
 			release_date = EXCLUDED.release_date,
 			release_year = EXCLUDED.release_year,
 			original_language = EXCLUDED.original_language,
-			original_title = EXCLUDED.original_title,
-			overview = EXCLUDED.overview,
+			name_original = EXCLUDED.name_original,
+			overview_original = EXCLUDED.overview_original,
 			runtime = EXCLUDED.runtime,
 			popularity = EXCLUDED.popularity,
 			vote_count = EXCLUDED.vote_count,
@@ -258,7 +258,6 @@ func SyncEntries(ctx context.Context, db *gorm.DB, refs []model.ContentRef) erro
 		mappingWhereClause,
 	)
 	insertArgs := append([]any{}, mappingArgs...)
-	insertArgs = append([]any{}, mappingArgs...)
 	insertArgs = append(insertArgs, model.ContentTypeMovie, model.ContentTypeTvShow)
 	if err := db.WithContext(ctx).Exec(insertMappingsSQL, insertArgs...).Error; err != nil {
 		return err

@@ -3,6 +3,10 @@
     "title": "bitmagnet（比特磁铁）",
     "subtitle": "更现代的种子发现、影视浏览与下载运维平台"
   },
+  "footer": {
+    "copyright": "© 2026 bitmagnet（比特磁铁）保留所有权利",
+    "tagline": "面向现代化种子检索与影视运维工作流"
+  },
   "nav": {
     "home": "首页",
     "torrents": "种子",
@@ -10,7 +14,11 @@
     "anime": "动画",
     "monitor": "监控",
     "queue": "队列",
+    "settings": "设置",
+    "maintenance": "维护",
     "account": "账户",
+    "myFavorites": "我的收藏",
+    "changePassword": "密码修改",
     "login": "登录",
     "register": "注册",
     "logout": "退出登录",
@@ -99,6 +107,44 @@
     "admin": "管理员",
     "user": "普通用户"
   },
+  "favorites": {
+    "title": "我的收藏",
+    "subtitle": "按电影、剧集、动画分类管理收藏内容。",
+    "empty": "当前分类暂无收藏",
+    "tabs": {
+      "movie": "电影",
+      "series": "剧集",
+      "anime": "动漫"
+    }
+  },
+  "maintenance": {
+    "title": "维护",
+    "subtitle": "执行系统维护任务，并实时查看处理进度与结果。",
+    "taskType": "任务类型",
+    "limit": "处理数量",
+    "start": "开始执行",
+    "started": "维护任务已启动",
+    "currentTask": "当前任务",
+    "taskId": "任务 ID",
+    "taskOptions": {
+      "fixLocalized": "修正影视双语显示",
+      "fixCoverCache": "修正封面缓存"
+    },
+    "status": {
+      "pending": "排队中",
+      "running": "执行中",
+      "success": "已完成",
+      "failed": "失败"
+    },
+    "metrics": {
+      "requested": "总数",
+      "processed": "已处理",
+      "updated": "已修复",
+      "failed": "失败",
+      "remaining": "剩余",
+      "duration": "耗时"
+    }
+  },
   "home": {
     "title": "bitmagnet（比特磁铁）",
     "subtitle": "每日推荐、高分精选与热门片单，快速找到想看的内容。",
@@ -137,6 +183,48 @@
       "degraded": "降级",
       "unknown": "未知"
     }
+  },
+  "settings": {
+    "title": "系统设置",
+    "subtitle": "在生产环境中无需重新部署即可调整运行参数。",
+    "tabLogs": "日志",
+    "tabSitePlugins": "影视外站插件",
+    "logTitle": "日志",
+    "logLevel": "日志等级",
+    "logCategoryLabel": "日志分类",
+    "logFileLabel": "日志文件",
+    "logFilePlaceholder": "选择日志文件",
+    "logLinesPerPage": "每页行数",
+    "logPath": "日志目录",
+    "logsEmpty": "暂无日志内容",
+    "logCategory": {
+      "main": "主要（Web 接口等）",
+      "dht": "DHT 爬虫相关",
+      "site_plugins": "影视外站插件相关"
+    },
+    "sitePluginTitle": "插件启用与参数",
+    "testButton": "测试插件",
+    "testQuery": "测试查询",
+    "testQueryPlaceholder": "输入影视名称用于测试",
+    "testContentType": "内容类型",
+    "testYear": "年份",
+    "testIMDbID": "IMDb ID",
+    "testTitle": "测试标题",
+    "testTitlePlaceholder": "例如：Avatar: Fire and Ash",
+    "pluginTmdbEnabled": "启用 TMDB 插件",
+    "backfillLimit": "回填数量",
+    "backfillButton": "批量回填双语元数据",
+    "backfillDone": "回填完成：处理 {processed} 条，更新 {updated} 条，剩余 {remaining} 条",
+    "pluginImdbEnabled": "启用 IMDb 插件",
+    "doubanTitle": "豆瓣匹配",
+    "doubanEnabled": "启用豆瓣插件",
+    "doubanMinScore": "最低匹配分数",
+    "doubanCookie": "豆瓣 Cookie",
+    "doubanUserAgent": "User-Agent",
+    "doubanAcceptLanguage": "Accept-Language",
+    "doubanReferer": "Referer",
+    "save": "保存设置",
+    "saved": "设置已保存"
   },
   "queue": {
     "title": "队列管理",
@@ -272,6 +360,14 @@
   "media": {
     "title": "影视",
     "subtitle": "电影、剧集、动画一站式浏览，支持多维筛选与画质定位。",
+    "category": {
+      "movieTitle": "电影",
+      "movieSubtitle": "电影资源聚合浏览，支持按画质、年份、题材和奖项快速筛选。",
+      "seriesTitle": "剧集",
+      "seriesSubtitle": "剧集资源一站式浏览，聚合主流平台热门内容并支持多维筛选。",
+      "animeTitle": "动画",
+      "animeSubtitle": "动画与番剧资源精选，快速定位高画质与高热度条目。"
+    },
     "search": "搜索标题、简介或年份",
     "results": "结果数",
     "noResults": "当前筛选条件下没有匹配内容",
@@ -325,7 +421,7 @@
     },
     "sources": {
       "tmdb": "TMDB",
-      "imdb": "IMDb",
+      "imdb": "IMDB",
       "tvdb": "TVDB",
       "douban": "豆瓣"
     },
@@ -336,7 +432,11 @@
     },
     "detail": {
       "backToList": "返回影视列表",
+      "backToMovieList": "返回电影列表",
+      "backToSeriesList": "返回剧集列表",
+      "backToAnimeList": "返回动漫列表",
       "notFound": "未找到该影视条目",
+      "noFavoriteTarget": "暂无可收藏的资源",
       "highlights": "重点信息",
       "metadata": "影视元数据",
       "titleLanguage": "标题语言",

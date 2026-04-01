@@ -7,7 +7,7 @@ import { notifications } from "@mantine/notifications";
 import { Clapperboard, ListOrdered, RefreshCw, Users } from "lucide-react";
 import { useI18n } from "@/languages/provider";
 import { fetchMediaList, type MediaListItem } from "@/lib/media-api";
-import { extractMediaFacts, getDisplayTitle, getPosterUrl, pickBestQualityTag } from "@/lib/media";
+import { buildMediaDetailHref, extractMediaFacts, getDisplayTitle, getPosterUrl, pickBestQualityTag } from "@/lib/media";
 
 function pickDailyRecommendations(items: MediaListItem[], count: number): MediaListItem[] {
   if (items.length <= count) return items;
@@ -67,7 +67,7 @@ function HomeSection({ title, items, loading, emptyText, t, titleLanguage }: {
 
             return (
               <div key={item.id} className="home-media-item">
-                <Link href={`/media/${item.id}`} className="unstyled-link">
+                <Link href={buildMediaDetailHref(item)} className="unstyled-link">
                   <article className="media-wall-card home-media-card">
                     <div className="media-wall-poster-shell">
                       {poster ? (
@@ -185,7 +185,7 @@ export function HomePage() {
             </Group>
           </Stack>
           <Group>
-            <Button renderRoot={(props) => <Link href="/media" {...props} />} leftSection={<Clapperboard size={14} />}>
+            <Button renderRoot={(props) => <Link href="/media/movie" {...props} />} leftSection={<Clapperboard size={14} />}>
               {t("home.gotoMedia")}
             </Button>
             <Button renderRoot={(props) => <Link href="/torrents" {...props} />} variant="default" leftSection={<ListOrdered size={14} />}>

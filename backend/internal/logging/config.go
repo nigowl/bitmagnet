@@ -1,11 +1,10 @@
 package logging
 
 import (
-	"path"
+	"fmt"
 	"strings"
 	"time"
 
-	"github.com/adrg/xdg"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -33,12 +32,12 @@ func NewDefaultConfig() Config {
 		Development: false,
 		JSON:        false,
 		FileRotator: FileRotatorConfig{
-			Enabled:    false,
+			Enabled:    true,
 			Level:      "debug",
-			Path:       path.Join(xdg.DataHome, "bitmagnet", "logs"),
+			Path:       "logs",
 			BaseName:   "bitmagnet",
 			MaxAge:     time.Minute * 60,
-			MaxSize:    1_000_000 * 100,
+			MaxSize:    8 * 1024 * 1024,
 			BufferSize: 1_000,
 			MaxBackups: 5,
 		},
@@ -94,24 +93,52 @@ var consoleEncoderConfig = zapcore.EncoderConfig{
 // levelToZapLevel converts the given string to the appropriate zap level
 // value.
 func levelToZapLevel(s string) zapcore.Level {
+	level, err := parseZapLevel(s)
+	if err != nil {
+		return zapcore.WarnLevel
+	}
+	return level
+}
+
+func parseZapLevel(s string) (zapcore.Level, error) {
 	switch strings.ToUpper(strings.TrimSpace(s)) {
 	case levelDebug:
-		return zapcore.DebugLevel
+		return zapcore.DebugLevel, nil
 	case levelInfo:
-		return zapcore.InfoLevel
+		return zapcore.InfoLevel, nil
 	case levelWarning:
-		return zapcore.WarnLevel
+		return zapcore.WarnLevel, nil
 	case levelError:
-		return zapcore.ErrorLevel
+		return zapcore.ErrorLevel, nil
 	case levelCritical:
-		return zapcore.DPanicLevel
+		return zapcore.DPanicLevel, nil
 	case levelAlert:
-		return zapcore.PanicLevel
+		return zapcore.PanicLevel, nil
 	case levelEmergency:
-		return zapcore.FatalLevel
+		return zapcore.FatalLevel, nil
 	}
+	return zapcore.WarnLevel, fmt.Errorf("unsupported log level: %q", s)
+}
 
-	return zapcore.WarnLevel
+func NormalizeLevel(s string) (string, error) {
+	switch strings.ToUpper(strings.TrimSpace(s)) {
+	case levelDebug:
+		return levelDebug, nil
+	case levelInfo:
+		return levelInfo, nil
+	case levelWarning:
+		return levelWarning, nil
+	case levelError:
+		return levelError, nil
+	case levelCritical:
+		return levelCritical, nil
+	case levelAlert:
+		return levelAlert, nil
+	case levelEmergency:
+		return levelEmergency, nil
+	default:
+		return "", fmt.Errorf("unsupported log level: %q", s)
+	}
 }
 
 // levelEncoder transforms a zap level to the associated stackdriver level.

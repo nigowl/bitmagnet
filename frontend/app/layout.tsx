@@ -9,8 +9,10 @@ import { ApplicationShell } from "@/components/app-shell";
 
 const sans = Manrope({ subsets: ["latin"], variable: "--font-sans" });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
+const defaultSiteURL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3334";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(defaultSiteURL),
   title: "bitmagnet（比特磁铁）",
   description: "Modern torrent discovery, media browsing, and operations experience powered by bitmagnet."
 };

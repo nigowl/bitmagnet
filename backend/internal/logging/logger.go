@@ -16,10 +16,11 @@ type Params struct {
 
 type Result struct {
 	fx.Out
-	Logger    *zap.Logger
-	Sugar     *zap.SugaredLogger
-	LogBuffer *LogBuffer
-	AppHook   fx.Hook `group:"app_hooks"`
+	Logger          *zap.Logger
+	Sugar           *zap.SugaredLogger
+	LogBuffer       *LogBuffer
+	LevelController LevelController
+	AppHook         fx.Hook `group:"app_hooks"`
 }
 
 func New(params Params) Result {
@@ -33,35 +34,60 @@ func New(params Params) Result {
 		opts = append(opts, zap.Development())
 	}
 
-	logLevel := levelToZapLevel(params.Config.Level)
+	levelController, atomicLevel, levelErr := NewLevelController(params.Config.Level)
+	if levelErr != nil {
+		levelController, atomicLevel, _ = NewLevelController(NewDefaultConfig().Level)
+	}
 	buffer := NewLogBuffer(defaultBufferLines)
 
 	core := zapcore.NewTee(
 		zapcore.NewCore(
 			newEncoder(params.Config),
 			zapcore.AddSync(os.Stdout),
-			logLevel,
+			atomicLevel,
 		),
 		zapcore.NewCore(
 			newEncoder(params.Config),
 			buffer,
-			logLevel,
+			atomicLevel,
 		),
 	)
 
 	if params.Config.FileRotator.Enabled {
-		fWriteSyncer := newFileRotator(params.Config.FileRotator)
-		core = zapcore.NewTee(
-			core,
-			zapcore.NewCore(
-				zapcore.NewJSONEncoder(jsonEncoderConfig),
-				fWriteSyncer,
-				levelToZapLevel(params.Config.FileRotator.Level),
-			),
-		)
+		fileLevel := levelToZapLevel(params.Config.FileRotator.Level)
+		rotators := make([]*fileRotator, 0, len(logCategories(params.Config.FileRotator)))
+
+		for _, category := range logCategories(params.Config.FileRotator) {
+			cfg := params.Config.FileRotator
+			cfg.BaseName = category.BaseName
+
+			rotator := newFileRotator(cfg)
+			rotators = append(rotators, rotator)
+
+			categoryKey := category.Key
+			fileCore := newFilteredCore(
+				zapcore.NewCore(
+					zapcore.NewJSONEncoder(jsonEncoderConfig),
+					rotator,
+					fileLevel,
+				),
+				func(entry zapcore.Entry) bool {
+					return loggerCategory(entry.LoggerName) == categoryKey
+				},
+			)
+
+			core = zapcore.NewTee(core, fileCore)
+		}
+
 		appHook = fx.Hook{
 			OnStop: func(context.Context) error {
-				return fWriteSyncer.Close()
+				var firstErr error
+				for _, rotator := range rotators {
+					if err := rotator.Close(); err != nil && firstErr == nil {
+						firstErr = err
+					}
+				}
+				return firstErr
 			},
 		}
 	}
@@ -69,10 +95,11 @@ func New(params Params) Result {
 	l := zap.New(core, opts...)
 
 	return Result{
-		Logger:    l,
-		Sugar:     l.Sugar(),
-		LogBuffer: buffer,
-		AppHook:   appHook,
+		Logger:          l,
+		Sugar:           l.Sugar(),
+		LogBuffer:       buffer,
+		LevelController: levelController,
+		AppHook:         appHook,
 	}
 }
 

@@ -181,11 +181,19 @@ func (r *fileRotator) pruneBackups(now time.Time) error {
 		backupFiles = append(backupFiles, name)
 	}
 
-	if len(backupFiles) <= r.maxBackups {
+	allowedBackups := r.maxBackups
+	if allowedBackups < 0 {
+		allowedBackups = 0
+	}
+	if allowedBackups > 0 {
+		allowedBackups--
+	}
+
+	if len(backupFiles) <= allowedBackups {
 		return nil
 	}
 
-	for _, name := range backupFiles[:len(backupFiles)-r.maxBackups] {
+	for _, name := range backupFiles[:len(backupFiles)-allowedBackups] {
 		// make a best effort to remove the file
 		_ = os.Remove(path.Join(r.path, name))
 	}

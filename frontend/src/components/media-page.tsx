@@ -22,22 +22,15 @@ import { notifications } from "@mantine/notifications";
 import { ChevronDown, ChevronUp, FilterX, ListOrdered, RefreshCw, Search, Users } from "lucide-react";
 import { useI18n } from "@/languages/provider";
 import { fetchMediaList, type MediaListItem } from "@/lib/media-api";
-import { extractMediaFacts, getDisplayTitle, getPosterUrl, pickBestQualityTag } from "@/lib/media";
+import { buildMediaDetailHref, extractMediaFacts, getDisplayTitle, getPosterUrl, pickBestQualityTag } from "@/lib/media";
 
-type TabValue = "all" | "movie" | "series" | "anime";
-type FilterRowKey = "category" | "quality" | "year" | "genre" | "language" | "country" | "network" | "studio" | "awards" | "sort";
+type MediaCategory = "movie" | "series" | "anime";
+type FilterRowKey = "quality" | "year" | "genre" | "language" | "country" | "network" | "studio" | "awards" | "sort";
 
 type FilterOption = {
   value: string;
   label: string;
 };
-
-function normalizeCategory(value: string | null): TabValue {
-  if (value === "movie" || value === "series" || value === "anime") {
-    return value;
-  }
-  return "all";
-}
 
 function normalizeSimpleValue(value: string | null, fallback: string): string {
   const trimmed = value?.trim();
@@ -163,7 +156,7 @@ function FilterRow({
   );
 }
 
-export function MediaPage() {
+export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
   const { t, locale } = useI18n();
   const titleLanguage = locale === "en" ? "en" : "zh";
   const router = useRouter();
@@ -172,7 +165,6 @@ export function MediaPage() {
   const [loading, setLoading] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [expandedRows, setExpandedRows] = useState<Record<FilterRowKey, boolean>>({
-    category: false,
     quality: false,
     year: false,
     genre: false,
@@ -190,7 +182,6 @@ export function MediaPage() {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const pageSize = 30;
 
-  const category = normalizeCategory(searchParams.get("category"));
   const quality = normalizeSimpleValue(searchParams.get("quality"), "all");
   const year = normalizeSimpleValue(searchParams.get("year"), "all");
   const genre = normalizeSimpleValue(searchParams.get("genre"), "all");
@@ -199,7 +190,7 @@ export function MediaPage() {
   const network = normalizeSimpleValue(searchParams.get("network"), "all");
   const studio = normalizeSimpleValue(searchParams.get("studio"), "all");
   const awards = normalizeSimpleValue(searchParams.get("awards"), "all");
-  const sort = normalizeSimpleValue(searchParams.get("sort"), "latest");
+  const sort = normalizeSimpleValue(searchParams.get("sort"), "popular");
   const page = Math.max(1, Number(searchParams.get("page") || "1") || 1);
   const searchValue = searchParams.get("search") || "";
 
@@ -237,7 +228,7 @@ export function MediaPage() {
     setLoading(true);
     try {
       const data = await fetchMediaList({
-        category,
+        category: fixedCategory,
         search: searchValue || undefined,
         quality,
         year,
@@ -259,7 +250,7 @@ export function MediaPage() {
     } finally {
       setLoading(false);
     }
-  }, [awards, category, country, genre, language, network, page, quality, searchValue, sort, studio, year]);
+  }, [awards, country, fixedCategory, genre, language, network, page, quality, searchValue, sort, studio, year]);
 
   useEffect(() => {
     void load();
@@ -286,16 +277,6 @@ export function MediaPage() {
       { value: "older", label: t("media.year.older") }
     ];
   }, [t]);
-
-  const categoryOptions = useMemo<FilterOption[]>(
-    () => [
-      { value: "all", label: t("media.all") },
-      { value: "movie", label: t("contentTypes.movie") },
-      { value: "series", label: t("contentTypes.tv_show") },
-      { value: "anime", label: t("nav.anime") }
-    ],
-    [t]
-  );
 
   const qualityOptions = useMemo<FilterOption[]>(
     () => [
@@ -341,8 +322,8 @@ export function MediaPage() {
 
   const sortOptions = useMemo<FilterOption[]>(
     () => [
-      { value: "latest", label: t("media.sort.latest") },
       { value: "popular", label: t("media.sort.popular") },
+      { value: "latest", label: t("media.sort.latest") },
       { value: "download", label: t("media.sort.download") },
       { value: "rating", label: t("media.sort.rating") },
       { value: "updated", label: t("media.sort.updated") }
@@ -447,14 +428,25 @@ export function MediaPage() {
     setExpandedRows((current) => ({ ...current, [key]: !current[key] }));
   };
 
+  const pageTitle = fixedCategory === "movie"
+    ? t("media.category.movieTitle")
+    : fixedCategory === "series"
+      ? t("media.category.seriesTitle")
+      : t("media.category.animeTitle");
+  const pageSubtitle = fixedCategory === "movie"
+    ? t("media.category.movieSubtitle")
+    : fixedCategory === "series"
+      ? t("media.category.seriesSubtitle")
+      : t("media.category.animeSubtitle");
+
   return (
     <div className="media-cinema-shell">
       <Card className="glass-card media-hero-panel" withBorder>
         <Stack gap="lg">
           <Group justify="space-between" align="flex-start" wrap="wrap">
             <div>
-              <Title order={1}>{t("media.title")}</Title>
-              <Text c="dimmed" mt={6}>{t("media.subtitle")}</Text>
+              <Title order={1}>{pageTitle}</Title>
+              <Text c="dimmed" mt={6}>{pageSubtitle}</Text>
             </div>
             <Group gap="xs">
               <Badge variant="light" color="orange">{t("media.results")}: {totalCount}</Badge>
@@ -491,15 +483,6 @@ export function MediaPage() {
 
             {showAdvancedFilters ? (
               <>
-                <FilterRow
-                  label={t("media.filters.category")}
-                  currentValue={category}
-                  options={categoryOptions}
-                  expanded={expandedRows.category}
-                  onToggleExpand={() => setExpanded("category")}
-                  onSelect={(value) => updateQuery({ category: value, page: null })}
-                />
-
                 <FilterRow
                   label={t("media.filters.quality")}
                   currentValue={quality}
@@ -629,7 +612,7 @@ export function MediaPage() {
 
               return (
                 <div key={item.id} className="media-wall-item">
-                  <Link href={`/media/${item.id}`} className="unstyled-link">
+                  <Link href={buildMediaDetailHref(item)} className="unstyled-link">
                     <article className="media-wall-card">
                       <div className="media-wall-poster-shell">
                         {poster ? (

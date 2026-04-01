@@ -3,6 +3,10 @@
     "title": "bitmagnet",
     "subtitle": "A modern hub for torrent discovery, media browsing, and ops"
   },
+  "footer": {
+    "copyright": "© 2026 bitmagnet. All rights reserved.",
+    "tagline": "Built for modern torrent and media operations workflows."
+  },
   "nav": {
     "home": "Home",
     "torrents": "Torrents",
@@ -10,7 +14,11 @@
     "anime": "Anime",
     "monitor": "Monitor",
     "queue": "Queue",
+    "settings": "Settings",
+    "maintenance": "Maintenance",
     "account": "Account",
+    "myFavorites": "My Favorites",
+    "changePassword": "Change Password",
     "login": "Login",
     "register": "Register",
     "logout": "Logout",
@@ -99,6 +107,44 @@
     "admin": "Administrator",
     "user": "User"
   },
+  "favorites": {
+    "title": "My Favorites",
+    "subtitle": "Manage favorites by movies, series, and anime.",
+    "empty": "No favorites in this category",
+    "tabs": {
+      "movie": "Movies",
+      "series": "Series",
+      "anime": "Anime"
+    }
+  },
+  "maintenance": {
+    "title": "Maintenance",
+    "subtitle": "Run maintenance tasks and watch progress in real time.",
+    "taskType": "Task Type",
+    "limit": "Processing Limit",
+    "start": "Start Task",
+    "started": "Maintenance task started",
+    "currentTask": "Current Task",
+    "taskId": "Task ID",
+    "taskOptions": {
+      "fixLocalized": "Repair localized bilingual metadata",
+      "fixCoverCache": "Repair cover cache"
+    },
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "success": "Success",
+      "failed": "Failed"
+    },
+    "metrics": {
+      "requested": "Requested",
+      "processed": "Processed",
+      "updated": "Updated",
+      "failed": "Failed",
+      "remaining": "Remaining",
+      "duration": "Duration"
+    }
+  },
   "home": {
     "title": "bitmagnet",
     "subtitle": "Daily picks, top-rated selections, and trending titles in one place.",
@@ -137,6 +183,48 @@
       "degraded": "Degraded",
       "unknown": "Unknown"
     }
+  },
+  "settings": {
+    "title": "System Settings",
+    "subtitle": "Adjust runtime behavior in production without redeploying.",
+    "tabLogs": "Logs",
+    "tabSitePlugins": "Media Site Plugins",
+    "logTitle": "Logging",
+    "logLevel": "Log Level",
+    "logCategoryLabel": "Log Category",
+    "logFileLabel": "Log File",
+    "logFilePlaceholder": "Choose a log file",
+    "logLinesPerPage": "Lines Per Page",
+    "logPath": "Log Path",
+    "logsEmpty": "No log content yet",
+    "logCategory": {
+      "main": "Main (Web/API)",
+      "dht": "DHT Crawler",
+      "site_plugins": "Media Site Plugins"
+    },
+    "sitePluginTitle": "Plugin Enablement & Parameters",
+    "testButton": "Run Test",
+    "testQuery": "Test Query",
+    "testQueryPlaceholder": "Input a title for test",
+    "testContentType": "Content Type",
+    "testYear": "Year",
+    "testIMDbID": "IMDb ID",
+    "testTitle": "Test Title",
+    "testTitlePlaceholder": "Example: Avatar: Fire and Ash",
+    "pluginTmdbEnabled": "Enable TMDB Plugin",
+    "backfillLimit": "Backfill Limit",
+    "backfillButton": "Backfill Bilingual Metadata",
+    "backfillDone": "Backfill complete: processed {processed}, updated {updated}, remaining {remaining}",
+    "pluginImdbEnabled": "Enable IMDb Plugin",
+    "doubanTitle": "Douban Matching",
+    "doubanEnabled": "Enable Douban Plugin",
+    "doubanMinScore": "Minimum Match Score",
+    "doubanCookie": "Douban Cookie",
+    "doubanUserAgent": "User-Agent",
+    "doubanAcceptLanguage": "Accept-Language",
+    "doubanReferer": "Referer",
+    "save": "Save Settings",
+    "saved": "Settings saved"
   },
   "queue": {
     "title": "Queue",
@@ -272,6 +360,14 @@
   "media": {
     "title": "Media",
     "subtitle": "Browse movies, series, and anime with rich filters and quality insights.",
+    "category": {
+      "movieTitle": "Movies",
+      "movieSubtitle": "Explore movie resources with quick filters for quality, year, genre, and awards.",
+      "seriesTitle": "Series",
+      "seriesSubtitle": "Browse series from major platforms with practical multi-dimensional filters.",
+      "animeTitle": "Anime",
+      "animeSubtitle": "Discover anime entries with better quality tags and popularity signals."
+    },
     "search": "Search title, overview or year",
     "results": "Results",
     "noResults": "No media matched current filters",
@@ -336,7 +432,11 @@
     },
     "detail": {
       "backToList": "Back to Media",
+      "backToMovieList": "Back to Movies",
+      "backToSeriesList": "Back to Series",
+      "backToAnimeList": "Back to Anime",
       "notFound": "Media item not found",
+      "noFavoriteTarget": "No favorite target resource",
       "highlights": "Highlights",
       "metadata": "Media Metadata",
       "titleLanguage": "Title Language",

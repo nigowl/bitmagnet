@@ -3,6 +3,7 @@
 .direnv
 .idea
 /backend/data
+/backend/logs
 /backend/tmp
 /bitmagnet
 /bitmagnet.io/_site

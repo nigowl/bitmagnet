@@ -1,4 +1,4 @@
-package media
+package mediaapi
 
 import (
 	"errors"
@@ -6,13 +6,14 @@ import (
 	"strconv"
 
 	"github.com/bitmagnet-io/bitmagnet/internal/httpserver"
+	"github.com/bitmagnet-io/bitmagnet/internal/media"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 )
 
 type HTTPParams struct {
 	fx.In
-	Service Service
+	Service media.Service
 }
 
 type HTTPResult struct {
@@ -25,7 +26,7 @@ func NewHTTPServer(p HTTPParams) HTTPResult {
 }
 
 type builder struct {
-	service Service
+	service media.Service
 }
 
 func (b *builder) Key() string {
@@ -43,7 +44,7 @@ func (b *builder) list(c *gin.Context) {
 	limit := parseInt(c.Query("limit"), 24)
 	page := parseInt(c.Query("page"), 1)
 
-	result, err := b.service.List(c.Request.Context(), ListInput{
+	result, err := b.service.List(c.Request.Context(), media.ListInput{
 		Category: c.Query("category"),
 		Search:   c.Query("search"),
 		Quality:  c.Query("quality"),
@@ -67,9 +68,12 @@ func (b *builder) list(c *gin.Context) {
 }
 
 func (b *builder) detail(c *gin.Context) {
-	result, err := b.service.Detail(c.Request.Context(), c.Param("id"))
+	refresh := parseBool(c.Query("refresh"), false)
+	result, err := b.service.Detail(c.Request.Context(), c.Param("id"), media.DetailOptions{
+		ForceRefresh: refresh,
+	})
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
+		if errors.Is(err, media.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
@@ -84,7 +88,7 @@ func (b *builder) cover(c *gin.Context) {
 	result, err := b.service.Cover(c.Request.Context(), c.Param("id"), c.Param("kind"), c.Param("size"))
 	if err != nil {
 		switch {
-		case errors.Is(err, ErrNotFound), errors.Is(err, ErrCoverNotFound):
+		case errors.Is(err, media.ErrNotFound), errors.Is(err, media.ErrCoverNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "cover not found"})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -105,4 +109,15 @@ func parseInt(raw string, fallback int) int {
 		return fallback
 	}
 	return value
+}
+
+func parseBool(raw string, fallback bool) bool {
+	switch raw {
+	case "1", "true", "TRUE", "True", "yes", "YES", "on", "ON":
+		return true
+	case "0", "false", "FALSE", "False", "no", "NO", "off", "OFF":
+		return false
+	default:
+		return fallback
+	}
 }

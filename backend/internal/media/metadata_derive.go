@@ -78,8 +78,8 @@ func enrichStructuredMetadata(ctx context.Context, db *gorm.DB, mediaIDs []strin
 func deriveStructuredMetadata(entry model.MediaEntry) model.MediaEntry {
 	result := entry
 
-	if entry.OriginalTitle.Valid && strings.TrimSpace(entry.OriginalTitle.String) != "" {
-		result.NameOriginal = model.NewNullString(strings.TrimSpace(entry.OriginalTitle.String))
+	if entry.NameOriginal.Valid && strings.TrimSpace(entry.NameOriginal.String) != "" {
+		result.NameOriginal = model.NewNullString(strings.TrimSpace(entry.NameOriginal.String))
 	} else if title := strings.TrimSpace(entry.Title); title != "" {
 		result.NameOriginal = model.NewNullString(title)
 	} else {
@@ -87,51 +87,57 @@ func deriveStructuredMetadata(entry model.MediaEntry) model.MediaEntry {
 	}
 
 	nameEnCandidates := []string{
+		entry.NameEn.String,
 		findFirstAttributeValue(entry.Attributes, "", "title_en", "english_title", "en_title"),
 		findFirstAttributeValue(entry.Attributes, model.SourceDouban, "sub_title", "english_title"),
 	}
 	if isLikelyEnglish(entry.Title) {
 		nameEnCandidates = append(nameEnCandidates, entry.Title)
 	}
-	if entry.OriginalTitle.Valid && isLikelyEnglish(entry.OriginalTitle.String) {
-		nameEnCandidates = append(nameEnCandidates, entry.OriginalTitle.String)
+	if entry.NameOriginal.Valid && isLikelyEnglish(entry.NameOriginal.String) {
+		nameEnCandidates = append(nameEnCandidates, entry.NameOriginal.String)
 	}
 	result.NameEn = pickFirstNonEmpty(nameEnCandidates...)
 
 	nameZhCandidates := []string{
+		entry.NameZh.String,
 		findFirstAttributeValue(entry.Attributes, "", "title_zh", "chinese_title", "zh_title"),
 		findFirstAttributeValue(entry.Attributes, model.SourceDouban, "title", "name"),
 	}
 	if containsHan(entry.Title) {
 		nameZhCandidates = append(nameZhCandidates, entry.Title)
 	}
-	if entry.OriginalTitle.Valid && containsHan(entry.OriginalTitle.String) {
-		nameZhCandidates = append(nameZhCandidates, entry.OriginalTitle.String)
+	if entry.NameOriginal.Valid && containsHan(entry.NameOriginal.String) {
+		nameZhCandidates = append(nameZhCandidates, entry.NameOriginal.String)
 	}
 	result.NameZh = pickFirstNonEmpty(nameZhCandidates...)
+	result.NameOriginal, result.NameEn, result.NameZh = rebalanceLocalizedText(result.NameOriginal, result.NameEn, result.NameZh)
 
 	overviewOriginalCandidates := []string{
-		entry.Overview.String,
+		entry.OverviewOriginal.String,
 		findFirstAttributeValue(entry.Attributes, "", "overview", "summary", "description", "intro"),
 	}
 	result.OverviewOriginal = pickFirstNonEmpty(overviewOriginalCandidates...)
 
 	overviewEnCandidates := []string{
+		entry.OverviewEn.String,
 		findFirstAttributeValue(entry.Attributes, "", "overview_en", "summary_en", "description_en", "english_overview", "english_summary"),
 	}
-	if isLikelyEnglish(entry.Overview.String) {
-		overviewEnCandidates = append(overviewEnCandidates, entry.Overview.String)
+	if isLikelyEnglish(entry.OverviewOriginal.String) {
+		overviewEnCandidates = append(overviewEnCandidates, entry.OverviewOriginal.String)
 	}
 	result.OverviewEn = pickFirstNonEmpty(overviewEnCandidates...)
 
 	overviewZhCandidates := []string{
+		entry.OverviewZh.String,
 		findFirstAttributeValue(entry.Attributes, "", "overview_zh", "summary_zh", "description_zh", "chinese_overview", "chinese_summary", "intro"),
 		findFirstAttributeValue(entry.Attributes, model.SourceDouban, "summary", "intro", "description"),
 	}
-	if containsHan(entry.Overview.String) {
-		overviewZhCandidates = append(overviewZhCandidates, entry.Overview.String)
+	if containsHan(entry.OverviewOriginal.String) {
+		overviewZhCandidates = append(overviewZhCandidates, entry.OverviewOriginal.String)
 	}
 	result.OverviewZh = pickFirstNonEmpty(overviewZhCandidates...)
+	result.OverviewOriginal, result.OverviewEn, result.OverviewZh = rebalanceLocalizedText(result.OverviewOriginal, result.OverviewEn, result.OverviewZh)
 
 	result.Tagline = pickFirstNonEmpty(
 		findFirstAttributeValue(entry.Attributes, "", "tagline"),
@@ -383,7 +389,6 @@ func collectTitleAliases(entry model.MediaEntry) []string {
 	values := make([]string, 0)
 	for _, value := range []string{
 		entry.Title,
-		entry.OriginalTitle.String,
 		entry.NameOriginal.String,
 		entry.NameEn.String,
 		entry.NameZh.String,
@@ -546,12 +551,83 @@ func isLikelyEnglish(value string) bool {
 	return true
 }
 
+func isLikelyChinese(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	if containsKana(value) || containsHangul(value) {
+		return false
+	}
+	return containsHan(value)
+}
+
+func containsKana(value string) bool {
+	for _, r := range value {
+		if unicode.In(r, unicode.Hiragana, unicode.Katakana) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsHangul(value string) bool {
+	for _, r := range value {
+		if unicode.Is(unicode.Hangul, r) {
+			return true
+		}
+	}
+	return false
+}
+
+func rebalanceLocalizedText(original model.NullString, en model.NullString, zh model.NullString) (model.NullString, model.NullString, model.NullString) {
+	originalValue := cleanText(original.String)
+	enValue := cleanText(en.String)
+	zhValue := cleanText(zh.String)
+
+	if isLikelyChinese(enValue) && isLikelyEnglish(zhValue) {
+		enValue, zhValue = zhValue, enValue
+	}
+
+	if !isLikelyChinese(zhValue) && isLikelyChinese(enValue) {
+		zhValue, enValue = enValue, ""
+	}
+
+	if !isLikelyEnglish(enValue) && isLikelyEnglish(zhValue) {
+		enValue, zhValue = zhValue, ""
+	}
+
+	if !isLikelyChinese(zhValue) && isLikelyChinese(originalValue) {
+		zhValue = originalValue
+	}
+	if !isLikelyEnglish(enValue) && isLikelyEnglish(originalValue) {
+		enValue = originalValue
+	}
+
+	if !isLikelyEnglish(enValue) && (containsKana(enValue) || containsHangul(enValue)) {
+		enValue = ""
+	}
+	if !isLikelyChinese(zhValue) && isLikelyEnglish(zhValue) {
+		zhValue = ""
+	}
+
+	return nullStringFrom(originalValue), nullStringFrom(enValue), nullStringFrom(zhValue)
+}
+
 func cleanText(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return ""
 	}
 	return multiSpaceRegex.ReplaceAllString(value, " ")
+}
+
+func nullStringFrom(value string) model.NullString {
+	value = cleanText(value)
+	if value == "" {
+		return model.NullString{}
+	}
+	return model.NewNullString(value)
 }
 
 func pushUniqueFold(target *[]string, value string) {

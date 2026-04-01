@@ -252,8 +252,13 @@ export async function fetchMediaList(params: {
   };
 }
 
-export async function fetchMediaDetail(id: string) {
-  const response = await apiRequest<MediaDetailResponse>(`/api/media/${encodeURIComponent(id)}`);
+export async function fetchMediaDetail(id: string, options?: { refresh?: boolean }) {
+  const query = new URLSearchParams();
+  if (options?.refresh) {
+    query.set("refresh", "1");
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  const response = await apiRequest<MediaDetailResponse>(`/api/media/${encodeURIComponent(id)}${suffix}`);
 
   return {
     ...response,

@@ -3,7 +3,6 @@ package auth
 import (
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/bitmagnet-io/bitmagnet/internal/httpserver"
 	"github.com/gin-gonic/gin"
@@ -32,6 +31,11 @@ func (b *builder) Key() string {
 	return "auth"
 }
 
+func (*builder) Order() int {
+	// Must run before route options so viewer context is available everywhere.
+	return -100
+}
+
 func (b *builder) Apply(e *gin.Engine) error {
 	e.Use(b.authMiddleware())
 
@@ -50,7 +54,7 @@ func (b *builder) Apply(e *gin.Engine) error {
 
 func (b *builder) authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token := bearerToken(c.GetHeader("Authorization"))
+		token := BearerToken(c.GetHeader("Authorization"))
 		if token != "" {
 			if viewer, err := b.service.AuthenticateToken(c.Request.Context(), token); err == nil {
 				c.Request = c.Request.WithContext(WithViewer(c.Request.Context(), viewer))
@@ -176,17 +180,6 @@ func (b *builder) removeFavorite(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
-}
-
-func bearerToken(authorizationHeader string) string {
-	header := strings.TrimSpace(authorizationHeader)
-	if header == "" {
-		return ""
-	}
-	if !strings.HasPrefix(strings.ToLower(header), "bearer ") {
-		return ""
-	}
-	return strings.TrimSpace(header[7:])
 }
 
 func writeServiceError(c *gin.Context, err error) {

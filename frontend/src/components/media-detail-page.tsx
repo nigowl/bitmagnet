@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActionIcon,
   Badge,
   Button,
   Card,
@@ -16,7 +17,8 @@ import {
   Title
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { ArrowLeft, ExternalLink, RefreshCw } from "lucide-react";
+import { ArrowLeft, ExternalLink, Heart, RefreshCw } from "lucide-react";
+import { useAuth } from "@/auth/provider";
 import { useI18n } from "@/languages/provider";
 import { fetchMediaDetail, type MediaDetailResponse, type MediaDetailTorrent } from "@/lib/media-api";
 import { buildMediaExternalLinks, extractMediaFacts, formatQualityTag, getBackdropUrl, getPosterUrl, pickRecommendedTorrent } from "@/lib/media";
@@ -87,6 +89,12 @@ function sameText(left: string, right: string): boolean {
   return left.trim().toLowerCase() === right.trim().toLowerCase();
 }
 
+function fallbackCategoryHref(mediaType?: string): string {
+  if (mediaType === "anime") return "/media/anime";
+  if (mediaType === "series") return "/media/series";
+  return "/media/movie";
+}
+
 function TorrentRow({ item, t }: { item: MediaDetailTorrent; t: (key: string) => string }) {
   const torrentTitle = item.title || item.torrent.name;
   const filesCount = item.filesCount ?? item.torrent.filesCount;
@@ -95,7 +103,7 @@ function TorrentRow({ item, t }: { item: MediaDetailTorrent; t: (key: string) =>
     <Table.Tr>
       <Table.Td>
         <Link href={`/torrents/${item.infoHash}`} className="unstyled-link">
-          <Text lineClamp={1} title={torrentTitle}>{torrentTitle}</Text>
+          <Text size="sm" lineClamp={1} title={torrentTitle}>{torrentTitle}</Text>
         </Link>
       </Table.Td>
       <Table.Td>{rowValue(item.seeders)}</Table.Td>
@@ -103,7 +111,6 @@ function TorrentRow({ item, t }: { item: MediaDetailTorrent; t: (key: string) =>
       <Table.Td>{formatBytes(item.size)}</Table.Td>
       <Table.Td>{rowValue(filesCount)}</Table.Td>
       <Table.Td>{displayResolution(item.videoResolution)}</Table.Td>
-      <Table.Td>{item.torrent.sources.map((source) => source.name).join(" / ") || "-"}</Table.Td>
       <Table.Td>
         <Group gap={6} wrap="nowrap">
           <Button
@@ -130,16 +137,17 @@ function TorrentRow({ item, t }: { item: MediaDetailTorrent; t: (key: string) =>
   );
 }
 
-export function MediaDetailPage({ mediaId }: { mediaId: string }) {
+export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; mediaType?: string }) {
   const { t, locale } = useI18n();
+  const { user, hasFavorite, toggleFavorite } = useAuth();
   const [loading, setLoading] = useState(true);
   const [payload, setPayload] = useState<MediaDetailResponse | null>(null);
   const titleLanguage = locale === "en" ? "en" : "zh";
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (forceRefresh = false) => {
     setLoading(true);
     try {
-      const data = await fetchMediaDetail(mediaId);
+      const data = await fetchMediaDetail(mediaId, { refresh: forceRefresh });
       setPayload(data);
     } catch (error) {
       notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
@@ -150,7 +158,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
   }, [mediaId]);
 
   useEffect(() => {
-    void load();
+    void load(false);
   }, [load]);
 
   const poster = useMemo(() => (payload?.item ? getPosterUrl(payload.item, "lg") : null), [payload?.item]);
@@ -171,7 +179,12 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
       <Card className="glass-card" withBorder>
         <Stack>
           <Text c="dimmed">{t("media.detail.notFound")}</Text>
-          <Button renderRoot={(props) => <Link href="/media" {...props} />} leftSection={<ArrowLeft size={14} />} variant="light" w="fit-content">
+          <Button
+            renderRoot={(props) => <Link href={fallbackCategoryHref(mediaType)} {...props} />}
+            leftSection={<ArrowLeft size={14} />}
+            variant="light"
+            w="fit-content"
+          >
             {t("media.detail.backToList")}
           </Button>
         </Stack>
@@ -180,6 +193,11 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
   }
 
   const { item, torrents } = payload;
+  const backToCategoryHref = item.isAnime
+    ? "/media/anime"
+    : item.contentType === "movie"
+      ? "/media/movie"
+      : "/media/series";
   const originalDisplayTitle = firstNonEmpty(item.nameOriginal, item.originalTitle, item.title) || item.title;
   const selectedLanguageTitle = titleLanguage === "zh"
     ? firstNonEmpty(item.nameZh, item.nameEn)
@@ -217,6 +235,8 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
     "--media-external-cols": String(Math.max(1, quickExternalLinks.length))
   } as CSSProperties;
   const recommendedTorrent = pickRecommendedTorrent(torrents);
+  const favoriteTarget = recommendedTorrent || torrents[0] || null;
+  const isFavorited = favoriteTarget ? hasFavorite(favoriteTarget.infoHash) : false;
   const coverBackdrop = poster ?? backdrop;
   const releaseInfo = uniqueValues([
     item.releaseYear ? String(item.releaseYear) : null,
@@ -256,6 +276,34 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
     { label: t("media.torrentCount"), value: metadataValue(item.torrentCount) }
   ].filter((row): row is { label: string; value: string } => Boolean(row.value));
 
+  const backToListLabel = item.isAnime
+    ? t("media.detail.backToAnimeList")
+    : item.contentType === "movie"
+      ? t("media.detail.backToMovieList")
+      : t("media.detail.backToSeriesList");
+
+  const toggleFavoriteFromDetail = async () => {
+    if (!favoriteTarget) {
+      notifications.show({ color: "yellow", message: t("media.detail.noFavoriteTarget") });
+      return;
+    }
+    if (!user) {
+      notifications.show({ color: "yellow", message: t("auth.needLogin") });
+      return;
+    }
+
+    const removing = hasFavorite(favoriteTarget.infoHash);
+    try {
+      await toggleFavorite(favoriteTarget.infoHash);
+      notifications.show({
+        color: "green",
+        message: removing ? t("profile.favoriteRemoved") : t("profile.favoriteAdded")
+      });
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
   return (
     <div className="media-detail-page-wrap">
       {coverBackdrop ? <div className="media-global-backdrop" style={{ backgroundImage: `url(${coverBackdrop})` }} /> : null}
@@ -263,12 +311,24 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
 
       <Stack gap="md" className="media-detail-page-content">
         <Group justify="space-between" wrap="wrap">
-          <Button renderRoot={(props) => <Link href="/media" {...props} />} leftSection={<ArrowLeft size={14} />} variant="light">
-            {t("media.detail.backToList")}
+          <Button renderRoot={(props) => <Link href={backToCategoryHref} {...props} />} leftSection={<ArrowLeft size={14} />} variant="light">
+            {backToListLabel}
           </Button>
-          <Button variant="default" leftSection={<RefreshCw size={14} />} onClick={() => void load()}>
-            {t("common.refresh")}
-          </Button>
+          <Group gap="xs">
+            <ActionIcon
+              size={36}
+              variant={isFavorited ? "light" : "default"}
+              color={isFavorited ? "red" : undefined}
+              onClick={() => void toggleFavoriteFromDetail()}
+              aria-label={isFavorited ? t("profile.removeFavorite") : t("profile.addFavorite")}
+              disabled={!favoriteTarget}
+            >
+              <Heart size={16} fill={isFavorited ? "currentColor" : "none"} />
+            </ActionIcon>
+            <Button variant="default" leftSection={<RefreshCw size={14} />} onClick={() => void load(true)}>
+              {t("common.refresh")}
+            </Button>
+          </Group>
         </Group>
 
         <Card className="glass-card media-detail-hero" withBorder>
@@ -512,7 +572,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
             <Text c="dimmed">{t("media.noResults")}</Text>
           ) : (
             <ScrollArea>
-              <Table striped withTableBorder highlightOnHover miw={1060}>
+              <Table className="media-torrent-snapshot-table" striped withTableBorder highlightOnHover miw={920}>
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>{t("torrents.table.title")}</Table.Th>
@@ -521,7 +581,6 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
                     <Table.Th>{t("torrents.table.size")}</Table.Th>
                     <Table.Th>{t("torrents.table.filesCount")}</Table.Th>
                     <Table.Th>{t("media.detail.resolution")}</Table.Th>
-                    <Table.Th>{t("torrents.table.source")}</Table.Th>
                     <Table.Th>{t("torrents.table.actions")}</Table.Th>
                   </Table.Tr>
                 </Table.Thead>

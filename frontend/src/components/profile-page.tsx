@@ -21,15 +21,28 @@ import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { graphqlRequest } from "@/lib/api";
 import { TORRENT_CONTENT_SEARCH_QUERY } from "@/lib/graphql";
+import { buildMediaDetailHref, buildMediaEntryIdFromContentRef, isAnimeItem, type MediaLikeItem } from "@/lib/media";
 import { useI18n } from "@/languages/provider";
 
 type FavoriteItem = {
   infoHash: string;
   title: string;
   contentType?: string | null;
+  contentSource?: string | null;
+  contentId?: string | null;
   torrent: {
     size: number;
   };
+  content?: {
+    id?: string | null;
+    type?: string | null;
+    source?: string | null;
+    title?: string | null;
+    collections?: Array<{
+      type: string;
+      name: string;
+    }> | null;
+  } | null;
 };
 
 type FavoriteSearchResponse = {
@@ -49,6 +62,33 @@ function formatBytes(size: number): string {
     index += 1;
   }
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[index]}`;
+}
+
+function resolveFavoriteTypeLabel(item: FavoriteItem, t: (key: string) => string): string {
+  if (isAnimeItem(item as MediaLikeItem)) {
+    return t("nav.anime");
+  }
+  return item.contentType ? t(`contentTypes.${item.contentType}`) : "-";
+}
+
+function getFavoriteMediaHref(item: FavoriteItem): string | null {
+  const resolvedType = item.content?.type ?? item.contentType;
+  const resolvedSource = item.content?.source ?? item.contentSource;
+  const resolvedContentId = item.content?.id ?? item.contentId;
+  const mediaId = buildMediaEntryIdFromContentRef(resolvedType, resolvedSource, resolvedContentId);
+  if (!mediaId) return null;
+
+  return buildMediaDetailHref({
+    id: mediaId,
+    contentType: resolvedType ?? null,
+    title: item.content?.title ?? item.title,
+    content: item.content
+      ? {
+          title: item.content.title ?? null,
+          collections: item.content.collections ?? null
+        }
+      : null
+  });
 }
 
 export function ProfilePage() {
@@ -208,11 +248,11 @@ export function ProfilePage() {
                   {favoriteItems.map((item) => (
                     <Table.Tr key={item.infoHash}>
                       <Table.Td>
-                        <Link href={`/torrents/${item.infoHash}`} className="unstyled-link">
-                          <Text lineClamp={1}>{item.title}</Text>
+                        <Link href={getFavoriteMediaHref(item) || `/torrents/${item.infoHash}`} className="unstyled-link">
+                          <Text lineClamp={1}>{item.content?.title?.trim() || item.title}</Text>
                         </Link>
                       </Table.Td>
-                      <Table.Td>{item.contentType ? t(`contentTypes.${item.contentType}`) : "-"}</Table.Td>
+                      <Table.Td>{resolveFavoriteTypeLabel(item, t)}</Table.Td>
                       <Table.Td>{formatBytes(item.torrent.size)}</Table.Td>
                       <Table.Td>
                         <Button

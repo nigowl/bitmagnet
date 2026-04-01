@@ -110,6 +110,11 @@ func resolveOptions(param []string, options []Option) ([]Option, error) {
 	}
 
 	sort.Slice(enabledOptions, func(i, j int) bool {
+		leftOrder := optionOrder(enabledOptions[i])
+		rightOrder := optionOrder(enabledOptions[j])
+		if leftOrder != rightOrder {
+			return leftOrder < rightOrder
+		}
 		return enabledOptions[i].Key() < enabledOptions[j].Key()
 	})
 
@@ -119,4 +124,16 @@ func resolveOptions(param []string, options []Option) ([]Option, error) {
 type Option interface {
 	Key() string
 	Apply(engine *gin.Engine) error
+}
+
+type orderedOption interface {
+	Order() int
+}
+
+func optionOrder(o Option) int {
+	ordered, ok := o.(orderedOption)
+	if !ok {
+		return 0
+	}
+	return ordered.Order()
 }

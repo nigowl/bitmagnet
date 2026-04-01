@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { type ReactNode, useState } from "react";
 import {
   ActionIcon,
   AppShell,
@@ -11,7 +11,9 @@ import {
   Button,
   Drawer,
   Group,
+  Modal,
   Menu,
+  PasswordInput,
   SegmentedControl,
   Stack,
   Text,
@@ -19,34 +21,41 @@ import {
   useMantineColorScheme
 } from "@mantine/core";
 import { useDisclosure, useMounted } from "@mantine/hooks";
+import { notifications } from "@mantine/notifications";
 import {
   CircleUserRound,
   Clapperboard,
   Gauge,
+  Heart,
   HeartPulse,
+  KeyRound,
   ListOrdered,
   LogIn,
   LogOut,
   MoonStar,
   Radar,
+  Settings,
   SunMedium,
   Tv,
-  UserPlus
+  UserPlus,
+  Wrench
 } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { useI18n } from "@/languages/provider";
+import { SiteFooter } from "@/components/site-footer";
 
 type NavItem = {
   href: string;
   label: string;
   icon: (props: { size?: number }) => ReactNode;
-  category?: "movie" | "series" | "anime";
 };
 
 const adminItems = [
   { href: "/monitor", labelKey: "nav.monitor", icon: HeartPulse },
-  { href: "/queue", labelKey: "nav.queue", icon: Radar }
+  { href: "/queue", labelKey: "nav.queue", icon: Radar },
+  { href: "/settings", labelKey: "nav.settings", icon: Settings },
+  { href: "/maintenance", labelKey: "nav.maintenance", icon: Wrench }
 ] as const;
 
 function isRouteActive(pathname: string, href: string): boolean {
@@ -54,17 +63,13 @@ function isRouteActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function isNavItemActive(pathname: string, category: string | null, item: NavItem): boolean {
-  if (item.category) {
-    return pathname === "/media" && category === item.category;
-  }
-
+function isNavItemActive(pathname: string, item: NavItem): boolean {
   return isRouteActive(pathname, item.href);
 }
 
 function buildMediaHref(category?: string): string {
-  if (!category) return "/media";
-  return `/media?category=${encodeURIComponent(category)}`;
+  if (!category) return "/media/movie";
+  return `/media/${encodeURIComponent(category)}`;
 }
 
 function HeaderLink({ item, active, onClick }: { item: NavItem; active: boolean; onClick?: () => void }) {
@@ -81,26 +86,50 @@ function HeaderLink({ item, active, onClick }: { item: NavItem; active: boolean;
 export function ApplicationShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [opened, { toggle, close }] = useDisclosure(false);
+  const [passwordModalOpened, { open: openPasswordModal, close: closePasswordModal }] = useDisclosure(false);
   const { t, locale, setLocale } = useI18n();
   const { setColorScheme } = useMantineColorScheme();
   const computedColorScheme = useComputedColorScheme("light", { getInitialValueInEffect: true });
   const themeReady = useMounted();
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, logout, changePassword } = useAuth();
   const { openLogin, openRegister } = useAuthDialog();
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
 
-  const currentCategory = searchParams.get("category");
   const leftItems: NavItem[] = [
     { href: "/", label: t("nav.home"), icon: Gauge },
-    { href: buildMediaHref("movie"), label: t("contentTypes.movie"), icon: Clapperboard, category: "movie" },
-    { href: buildMediaHref("series"), label: t("contentTypes.tv_show"), icon: Tv, category: "series" },
-    { href: buildMediaHref("anime"), label: t("nav.anime"), icon: Clapperboard, category: "anime" },
+    { href: buildMediaHref("movie"), label: t("contentTypes.movie"), icon: Clapperboard },
+    { href: buildMediaHref("series"), label: t("contentTypes.tv_show"), icon: Tv },
+    { href: buildMediaHref("anime"), label: t("nav.anime"), icon: Clapperboard },
     { href: "/torrents", label: t("nav.torrents"), icon: ListOrdered }
   ];
 
   const toggleTheme = () => {
     setColorScheme(computedColorScheme === "dark" ? "light" : "dark");
+  };
+
+  const submitPasswordChange = async () => {
+    if (newPassword !== confirmPassword) {
+      notifications.show({ color: "yellow", message: t("auth.passwordMismatch") });
+      return;
+    }
+
+    setSavingPassword(true);
+    try {
+      await changePassword(oldPassword, newPassword);
+      notifications.show({ color: "green", message: t("profile.passwordChanged") });
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      closePasswordModal();
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setSavingPassword(false);
+    }
   };
   const resolvedColorScheme = themeReady ? computedColorScheme : "light";
   const renderThemeIcon = (variant: "sm" | "md") => (
@@ -133,7 +162,7 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
                   <HeaderLink
                     key={item.href}
                     item={item}
-                    active={isNavItemActive(pathname, currentCategory, item)}
+                    active={isNavItemActive(pathname, item)}
                   />
                 ))}
               </Group>
@@ -180,8 +209,14 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
                   {user ? (
                     <>
                       <Menu.Label>{t("nav.account")}</Menu.Label>
-                      <Menu.Item leftSection={<CircleUserRound size={14} />} component={Link} href="/profile">
-                        {t("nav.userCenter")}
+                      <Menu.Item leftSection={<Heart size={14} />} component={Link} href="/favorites">
+                        {t("nav.myFavorites")}
+                      </Menu.Item>
+                      <Menu.Item
+                        leftSection={<KeyRound size={14} />}
+                        onClick={openPasswordModal}
+                      >
+                        {t("nav.changePassword")}
                       </Menu.Item>
                       {isAdmin ? <Menu.Divider /> : null}
                       {isAdmin
@@ -252,7 +287,7 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
             <HeaderLink
               key={item.href}
               item={item}
-              active={isNavItemActive(pathname, currentCategory, item)}
+              active={isNavItemActive(pathname, item)}
               onClick={close}
             />
           ))}
@@ -263,13 +298,24 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
           {user ? (
             <>
               <Button
-                renderRoot={(props) => <Link href="/profile" {...props} />}
+                renderRoot={(props) => <Link href="/favorites" {...props} />}
                 justify="flex-start"
-                variant={isRouteActive(pathname, "/profile") ? "light" : "subtle"}
-                leftSection={<CircleUserRound size={15} />}
+                variant={isRouteActive(pathname, "/favorites") ? "light" : "subtle"}
+                leftSection={<Heart size={15} />}
                 onClick={close}
               >
-                {t("nav.userCenter")}
+                {t("nav.myFavorites")}
+              </Button>
+              <Button
+                justify="flex-start"
+                variant="subtle"
+                leftSection={<KeyRound size={15} />}
+                onClick={() => {
+                  close();
+                  openPasswordModal();
+                }}
+              >
+                {t("nav.changePassword")}
               </Button>
               {isAdmin
                 ? adminItems.map((item) => {
@@ -334,7 +380,32 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
         <div className="page-shell page-shell-fluid">
           {children}
         </div>
+        <SiteFooter />
       </AppShell.Main>
+
+      <Modal opened={passwordModalOpened} onClose={closePasswordModal} title={t("profile.changePassword")} centered>
+        <Stack>
+          <PasswordInput
+            label={t("profile.oldPassword")}
+            value={oldPassword}
+            onChange={(event) => setOldPassword(event.currentTarget.value)}
+          />
+          <PasswordInput
+            label={t("profile.newPassword")}
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.currentTarget.value)}
+          />
+          <PasswordInput
+            label={t("profile.confirmPassword")}
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.currentTarget.value)}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={closePasswordModal}>{t("common.cancel")}</Button>
+            <Button loading={savingPassword} onClick={() => void submitPasswordChange()}>{t("profile.savePassword")}</Button>
+          </Group>
+        </Stack>
+      </Modal>
     </AppShell>
   );
 }

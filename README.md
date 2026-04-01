@@ -24,10 +24,10 @@
 
 ### Docker Compose
 
-`docker-compose.yml` 仅保留最小服务集：
-- `postgres`（数据库）
-- `bitmagnet`（后端 API）
-- `frontend`（Next.js 前端）
+可用编排文件：
+- `docker-compose.with-db.yml`：`postgres + bitmagnet + frontend`
+- `docker-compose.no-db.yml`：`bitmagnet + frontend`（外部数据库）
+- `docker-compose.yml`：当前本地默认编排
 
 启动全部服务：
 
@@ -38,6 +38,28 @@ docker compose up -d
 默认访问地址：
 - 后端 API: `http://localhost:3333`
 - 前端（compose）: `http://localhost:3334`
+
+### 一键部署（从 GitHub 下载）
+
+提供脚本：`scripts/deploy-from-github.sh`
+
+支持两种模式：
+- `with-db`：内置 PostgreSQL（使用 `docker-compose.with-db.yml`）
+- `no-db`：外部 PostgreSQL（使用 `docker-compose.no-db.yml`）
+
+示例：
+
+```bash
+# 有数据库（默认）
+./scripts/deploy-from-github.sh --repo bitmagnet-io/bitmagnet --ref main --mode with-db
+
+# 无数据库（外部 PostgreSQL）
+./scripts/deploy-from-github.sh --repo bitmagnet-io/bitmagnet --ref main --mode no-db
+```
+
+常用参数：
+- `--target-dir <目录>`：下载并解压到指定目录（默认 `./deployments`）
+- `--skip-build`：跳过镜像构建，直接 `docker compose up -d`
 
 ## 前端环境变量
 
@@ -68,4 +90,4 @@ backend/data/cache/{mediaid}/
 
 - `backend/`：Go 服务与迁移
 - `frontend/`：Next.js 前端
-- `docker-compose.yml`：最小化容器编排（postgres + bitmagnet + frontend）
+- `docker-compose*.yml`：容器编排文件（有库/无库/本地默认）

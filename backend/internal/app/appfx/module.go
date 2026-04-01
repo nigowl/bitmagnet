@@ -1,6 +1,7 @@
 package appfx
 
 import (
+	"github.com/bitmagnet-io/bitmagnet/internal/adminsettings/adminsettingsfx"
 	"github.com/bitmagnet-io/bitmagnet/internal/app/cli"
 	"github.com/bitmagnet-io/bitmagnet/internal/app/cli/args"
 	"github.com/bitmagnet-io/bitmagnet/internal/app/cli/hooks"
@@ -40,6 +41,7 @@ import (
 func New() fx.Option {
 	return fx.Module(
 		"app",
+		adminsettingsfx.New(),
 		authfx.New(),
 		blockingfx.New(),
 		classifierfx.New(),
