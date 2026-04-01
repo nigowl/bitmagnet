@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/lazy"
-	"github.com/bitmagnet-io/bitmagnet/internal/model"
-	"github.com/bitmagnet-io/bitmagnet/internal/processor"
-	"github.com/bitmagnet-io/bitmagnet/internal/queue/handler"
+	"github.com/nigowl/bitmagnet/internal/lazy"
+	"github.com/nigowl/bitmagnet/internal/model"
+	"github.com/nigowl/bitmagnet/internal/processor"
+	"github.com/nigowl/bitmagnet/internal/queue/handler"
 	"go.uber.org/fx"
 )
 

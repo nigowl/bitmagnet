@@ -1,8 +1,8 @@
 package authfx
 
 import (
-	"github.com/bitmagnet-io/bitmagnet/internal/auth"
-	"github.com/bitmagnet-io/bitmagnet/internal/config/configfx"
+	"github.com/nigowl/bitmagnet/internal/auth"
+	"github.com/nigowl/bitmagnet/internal/config/configfx"
 	"go.uber.org/fx"
 )
 

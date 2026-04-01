@@ -8,11 +8,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/gql"
-	"github.com/bitmagnet-io/bitmagnet/internal/gql/gqlmodel"
-	"github.com/bitmagnet-io/bitmagnet/internal/model"
-	"github.com/bitmagnet-io/bitmagnet/internal/processor"
-	"github.com/bitmagnet-io/bitmagnet/internal/queue/manager"
+	"github.com/nigowl/bitmagnet/internal/gql"
+	"github.com/nigowl/bitmagnet/internal/gql/gqlmodel"
+	"github.com/nigowl/bitmagnet/internal/model"
+	"github.com/nigowl/bitmagnet/internal/processor"
+	"github.com/nigowl/bitmagnet/internal/queue/manager"
 )
 
 // RanAt is the resolver for the ranAt field.

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/lexer"
-	"github.com/bitmagnet-io/bitmagnet/internal/model"
+	"github.com/nigowl/bitmagnet/internal/lexer"
+	"github.com/nigowl/bitmagnet/internal/model"
 )
 
 type dateLexer struct {

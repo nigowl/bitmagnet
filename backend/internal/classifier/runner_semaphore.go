@@ -3,8 +3,8 @@ package classifier
 import (
 	"context"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/classifier/classification"
-	"github.com/bitmagnet-io/bitmagnet/internal/model"
+	"github.com/nigowl/bitmagnet/internal/classifier/classification"
+	"github.com/nigowl/bitmagnet/internal/model"
 )
 
 type runnerSemaphore struct {

@@ -6,7 +6,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/model"
+	"github.com/nigowl/bitmagnet/internal/model"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

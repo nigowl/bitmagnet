@@ -7,9 +7,9 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/database/dao"
-	"github.com/bitmagnet-io/bitmagnet/internal/maps"
-	"github.com/bitmagnet-io/bitmagnet/internal/model"
+	"github.com/nigowl/bitmagnet/internal/database/dao"
+	"github.com/nigowl/bitmagnet/internal/maps"
+	"github.com/nigowl/bitmagnet/internal/model"
 )
 
 type FacetConfig interface {

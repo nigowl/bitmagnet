@@ -1,9 +1,9 @@
 package metainfofx
 
 import (
-	"github.com/bitmagnet-io/bitmagnet/internal/config/configfx"
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol/metainfo/banning"
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol/metainfo/metainforequester"
+	"github.com/nigowl/bitmagnet/internal/config/configfx"
+	"github.com/nigowl/bitmagnet/internal/protocol/metainfo/banning"
+	"github.com/nigowl/bitmagnet/internal/protocol/metainfo/metainforequester"
 	"go.uber.org/fx"
 )
 

@@ -1,7 +1,7 @@
 package model
 
 import (
-	"github.com/bitmagnet-io/bitmagnet/internal/database/fts"
+	"github.com/nigowl/bitmagnet/internal/database/fts"
 )
 
 type ContentRef struct {

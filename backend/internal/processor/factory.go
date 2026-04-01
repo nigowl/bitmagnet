@@ -1,11 +1,11 @@
 package processor
 
 import (
-	"github.com/bitmagnet-io/bitmagnet/internal/blocking"
-	"github.com/bitmagnet-io/bitmagnet/internal/classifier"
-	"github.com/bitmagnet-io/bitmagnet/internal/database/dao"
-	"github.com/bitmagnet-io/bitmagnet/internal/database/search"
-	"github.com/bitmagnet-io/bitmagnet/internal/lazy"
+	"github.com/nigowl/bitmagnet/internal/blocking"
+	"github.com/nigowl/bitmagnet/internal/classifier"
+	"github.com/nigowl/bitmagnet/internal/database/dao"
+	"github.com/nigowl/bitmagnet/internal/database/search"
+	"github.com/nigowl/bitmagnet/internal/lazy"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )

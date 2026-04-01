@@ -6,10 +6,10 @@ import (
 	"sort"
 
 	"github.com/99designs/gqlgen/graphql"
-	q "github.com/bitmagnet-io/bitmagnet/internal/database/query"
-	"github.com/bitmagnet-io/bitmagnet/internal/database/search"
-	"github.com/bitmagnet-io/bitmagnet/internal/gql/gqlmodel/gen"
-	"github.com/bitmagnet-io/bitmagnet/internal/model"
+	q "github.com/nigowl/bitmagnet/internal/database/query"
+	"github.com/nigowl/bitmagnet/internal/database/search"
+	"github.com/nigowl/bitmagnet/internal/gql/gqlmodel/gen"
+	"github.com/nigowl/bitmagnet/internal/model"
 	"github.com/facette/natsort"
 )
 

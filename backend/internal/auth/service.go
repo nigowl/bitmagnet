@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/lazy"
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol"
+	"github.com/nigowl/bitmagnet/internal/lazy"
+	"github.com/nigowl/bitmagnet/internal/protocol"
 	"go.uber.org/fx"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"

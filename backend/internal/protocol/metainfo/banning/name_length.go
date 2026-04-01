@@ -3,7 +3,7 @@ package banning
 import (
 	"errors"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol/metainfo"
+	"github.com/nigowl/bitmagnet/internal/protocol/metainfo"
 )
 
 type nameLengthChecker struct {

@@ -3,10 +3,10 @@ package batch
 import (
 	"time"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/classifier"
-	"github.com/bitmagnet-io/bitmagnet/internal/model"
-	"github.com/bitmagnet-io/bitmagnet/internal/processor"
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol"
+	"github.com/nigowl/bitmagnet/internal/classifier"
+	"github.com/nigowl/bitmagnet/internal/model"
+	"github.com/nigowl/bitmagnet/internal/processor"
+	"github.com/nigowl/bitmagnet/internal/protocol"
 )
 
 const MessageName = "process_torrent_batch"

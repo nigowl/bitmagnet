@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol/dht/ktable"
+	"github.com/nigowl/bitmagnet/internal/protocol/dht/ktable"
 )
 
 func (c *crawler) getNodesForSampleInfoHashes(ctx context.Context) {

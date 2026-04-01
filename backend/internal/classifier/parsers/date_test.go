@@ -3,7 +3,7 @@ package parsers
 import (
 	"testing"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/model"
+	"github.com/nigowl/bitmagnet/internal/model"
 	"github.com/stretchr/testify/assert"
 )
 

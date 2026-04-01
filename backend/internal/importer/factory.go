@@ -3,8 +3,8 @@ package importer
 import (
 	"time"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/database/dao"
-	"github.com/bitmagnet-io/bitmagnet/internal/lazy"
+	"github.com/nigowl/bitmagnet/internal/database/dao"
+	"github.com/nigowl/bitmagnet/internal/lazy"
 	"go.uber.org/fx"
 )
 

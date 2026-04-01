@@ -3,7 +3,7 @@ package model
 import (
 	"time"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol"
+	"github.com/nigowl/bitmagnet/internal/protocol"
 )
 
 var TableNameMediaEntryTorrent = "media_entry_torrents"

@@ -4,11 +4,11 @@ import (
 	"context"
 	"database/sql/driver"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/database/dao"
-	mediasvc "github.com/bitmagnet-io/bitmagnet/internal/media"
-	"github.com/bitmagnet-io/bitmagnet/internal/model"
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol"
-	"github.com/bitmagnet-io/bitmagnet/internal/slice"
+	"github.com/nigowl/bitmagnet/internal/database/dao"
+	mediasvc "github.com/nigowl/bitmagnet/internal/media"
+	"github.com/nigowl/bitmagnet/internal/model"
+	"github.com/nigowl/bitmagnet/internal/protocol"
+	"github.com/nigowl/bitmagnet/internal/slice"
 	"gorm.io/gorm/clause"
 )
 

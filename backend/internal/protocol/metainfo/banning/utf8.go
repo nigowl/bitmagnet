@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol/metainfo"
+	"github.com/nigowl/bitmagnet/internal/protocol/metainfo"
 )
 
 type utf8Checker struct{}

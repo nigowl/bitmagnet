@@ -1,8 +1,8 @@
 package health
 
 import (
-	"github.com/bitmagnet-io/bitmagnet/internal/httpserver"
-	"github.com/bitmagnet-io/bitmagnet/internal/lazy"
+	"github.com/nigowl/bitmagnet/internal/httpserver"
+	"github.com/nigowl/bitmagnet/internal/lazy"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 )

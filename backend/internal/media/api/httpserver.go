@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/httpserver"
-	"github.com/bitmagnet-io/bitmagnet/internal/media"
+	"github.com/nigowl/bitmagnet/internal/httpserver"
+	"github.com/nigowl/bitmagnet/internal/media"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 )

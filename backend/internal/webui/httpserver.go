@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/httpserver"
+	"github.com/nigowl/bitmagnet/internal/httpserver"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 	"go.uber.org/zap"

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/classifier/classification"
-	classifier_mocks "github.com/bitmagnet-io/bitmagnet/internal/classifier/mocks"
-	"github.com/bitmagnet-io/bitmagnet/internal/model"
-	"github.com/bitmagnet-io/bitmagnet/internal/tmdb"
-	tmdb_mocks "github.com/bitmagnet-io/bitmagnet/internal/tmdb/mocks"
+	"github.com/nigowl/bitmagnet/internal/classifier/classification"
+	classifier_mocks "github.com/nigowl/bitmagnet/internal/classifier/mocks"
+	"github.com/nigowl/bitmagnet/internal/model"
+	"github.com/nigowl/bitmagnet/internal/tmdb"
+	tmdb_mocks "github.com/nigowl/bitmagnet/internal/tmdb/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

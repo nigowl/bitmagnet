@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/media"
+	"github.com/nigowl/bitmagnet/internal/media"
 	"go.uber.org/zap"
 )
 

@@ -3,7 +3,7 @@ package fts_test
 import (
 	"testing"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/database/fts"
+	"github.com/nigowl/bitmagnet/internal/database/fts"
 	"github.com/stretchr/testify/assert"
 )
 

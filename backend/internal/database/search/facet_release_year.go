@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/database/query"
-	"github.com/bitmagnet-io/bitmagnet/internal/maps"
-	"github.com/bitmagnet-io/bitmagnet/internal/model"
+	"github.com/nigowl/bitmagnet/internal/database/query"
+	"github.com/nigowl/bitmagnet/internal/maps"
+	"github.com/nigowl/bitmagnet/internal/model"
 	"gorm.io/gen/field"
 )
 

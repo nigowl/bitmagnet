@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/netip"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol"
+	"github.com/nigowl/bitmagnet/internal/protocol"
 	"github.com/bits-and-blooms/bloom/v3"
 )
 

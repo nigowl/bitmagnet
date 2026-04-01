@@ -3,7 +3,7 @@ package resolvers
 import (
 	"context"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/auth"
+	"github.com/nigowl/bitmagnet/internal/auth"
 )
 
 func requireAdmin(ctx context.Context) error {

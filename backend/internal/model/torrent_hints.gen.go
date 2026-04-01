@@ -7,7 +7,7 @@ package model
 import (
 	"time"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol"
+	"github.com/nigowl/bitmagnet/internal/protocol"
 )
 
 var TableNameTorrentHint = "torrent_hints"

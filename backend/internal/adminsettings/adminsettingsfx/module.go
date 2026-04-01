@@ -3,7 +3,7 @@ package adminsettingsfx
 import (
 	"context"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/adminsettings"
+	"github.com/nigowl/bitmagnet/internal/adminsettings"
 	"go.uber.org/fx"
 )
 

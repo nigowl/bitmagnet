@@ -24,12 +24,12 @@ export GOARCH=$TARGETARCH; \
 [[ "$GOARCH" == "arm" ]] && [[ "$TARGETVARIANT" == "v6" ]] && export GOARM=6; \
 [[ "$GOARCH" == "arm" ]] && [[ "$TARGETVARIANT" == "v7" ]] && export GOARM=7; \
 echo $GOARCH $GOOS $GOARM$GOAMD64; \
-go build -ldflags "-s -w -X github.com/bitmagnet-io/bitmagnet/internal/version.GitTag=${VERSION}" -o /build/bitmagnet main.go
+go build -ldflags "-s -w -X github.com/nigowl/bitmagnet/internal/version.GitTag=${VERSION}" -o /build/bitmagnet main.go
 
 # build runner
 FROM alpine:latest AS runner
 
-LABEL org.opencontainers.image.source = "https://github.com/bitmagnet-io/bitmagnet"
+LABEL org.opencontainers.image.source = "https://github.com/nigowl/bitmagnet"
 LABEL org.opencontainers.image.licenses = "MIT"
 LABEL org.opencontainers.image.base.name = "alpine:latest"
 

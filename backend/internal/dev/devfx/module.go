@@ -1,16 +1,16 @@
 package devfx
 
 import (
-	"github.com/bitmagnet-io/bitmagnet/internal/app/cli"
-	"github.com/bitmagnet-io/bitmagnet/internal/app/cli/args"
-	"github.com/bitmagnet-io/bitmagnet/internal/config/configfx"
-	"github.com/bitmagnet-io/bitmagnet/internal/database"
-	"github.com/bitmagnet-io/bitmagnet/internal/database/migrations"
-	"github.com/bitmagnet-io/bitmagnet/internal/database/postgres"
-	"github.com/bitmagnet-io/bitmagnet/internal/dev/app/cmd/gormcmd"
-	"github.com/bitmagnet-io/bitmagnet/internal/dev/app/cmd/migratecmd"
-	"github.com/bitmagnet-io/bitmagnet/internal/logging/loggingfx"
-	"github.com/bitmagnet-io/bitmagnet/internal/validation/validationfx"
+	"github.com/nigowl/bitmagnet/internal/app/cli"
+	"github.com/nigowl/bitmagnet/internal/app/cli/args"
+	"github.com/nigowl/bitmagnet/internal/config/configfx"
+	"github.com/nigowl/bitmagnet/internal/database"
+	"github.com/nigowl/bitmagnet/internal/database/migrations"
+	"github.com/nigowl/bitmagnet/internal/database/postgres"
+	"github.com/nigowl/bitmagnet/internal/dev/app/cmd/gormcmd"
+	"github.com/nigowl/bitmagnet/internal/dev/app/cmd/migratecmd"
+	"github.com/nigowl/bitmagnet/internal/logging/loggingfx"
+	"github.com/nigowl/bitmagnet/internal/validation/validationfx"
 	"go.uber.org/fx"
 )
 

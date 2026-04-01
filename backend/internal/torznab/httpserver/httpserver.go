@@ -1,9 +1,9 @@
 package httpserver
 
 import (
-	"github.com/bitmagnet-io/bitmagnet/internal/httpserver"
-	"github.com/bitmagnet-io/bitmagnet/internal/lazy"
-	"github.com/bitmagnet-io/bitmagnet/internal/torznab"
+	"github.com/nigowl/bitmagnet/internal/httpserver"
+	"github.com/nigowl/bitmagnet/internal/lazy"
+	"github.com/nigowl/bitmagnet/internal/torznab"
 	"github.com/gin-gonic/gin"
 )
 

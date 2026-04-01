@@ -51,10 +51,10 @@ docker compose up -d
 
 ```bash
 # 有数据库（默认）
-./scripts/deploy-from-github.sh --repo bitmagnet-io/bitmagnet --ref main --mode with-db
+./scripts/deploy-from-github.sh --repo nigowl/bitmagnet --ref main --mode with-db
 
 # 无数据库（外部 PostgreSQL）
-./scripts/deploy-from-github.sh --repo bitmagnet-io/bitmagnet --ref main --mode no-db
+./scripts/deploy-from-github.sh --repo nigowl/bitmagnet --ref main --mode no-db
 ```
 
 常用参数：

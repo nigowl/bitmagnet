@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol/metainfo"
+	"github.com/nigowl/bitmagnet/internal/protocol/metainfo"
 	"github.com/stretchr/testify/assert"
 )
 

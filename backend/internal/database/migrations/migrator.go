@@ -4,8 +4,8 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/lazy"
-	migrationssql "github.com/bitmagnet-io/bitmagnet/migrations"
+	"github.com/nigowl/bitmagnet/internal/lazy"
+	migrationssql "github.com/nigowl/bitmagnet/migrations"
 	goose "github.com/pressly/goose/v3"
 	"go.uber.org/fx"
 	"go.uber.org/zap"

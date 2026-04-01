@@ -1,6 +1,6 @@
 package auth
 
-import "github.com/bitmagnet-io/bitmagnet/internal/model"
+import "github.com/nigowl/bitmagnet/internal/model"
 
 func tableNameUser() string {
 	return model.TableNameUser

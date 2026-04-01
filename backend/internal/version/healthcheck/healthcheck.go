@@ -1,8 +1,8 @@
 package healthcheck
 
 import (
-	"github.com/bitmagnet-io/bitmagnet/internal/health"
-	"github.com/bitmagnet-io/bitmagnet/internal/version"
+	"github.com/nigowl/bitmagnet/internal/health"
+	"github.com/nigowl/bitmagnet/internal/version"
 	"go.uber.org/fx"
 )
 

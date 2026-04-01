@@ -4,8 +4,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/keywords"
-	"github.com/bitmagnet-io/bitmagnet/internal/regex"
+	"github.com/nigowl/bitmagnet/internal/keywords"
+	"github.com/nigowl/bitmagnet/internal/regex"
 	"github.com/hedhyw/rex/pkg/rex"
 )
 

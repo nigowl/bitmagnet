@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/netip"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/concurrency"
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol"
+	"github.com/nigowl/bitmagnet/internal/concurrency"
+	"github.com/nigowl/bitmagnet/internal/protocol"
 )
 
 type requestLimiter struct {

@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/version"
+	"github.com/nigowl/bitmagnet/internal/version"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/fx"
 	"go.uber.org/zap"

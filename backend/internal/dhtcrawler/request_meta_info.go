@@ -6,8 +6,8 @@ import (
 	"net/netip"
 	"sync"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol"
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol/metainfo/metainforequester"
+	"github.com/nigowl/bitmagnet/internal/protocol"
+	"github.com/nigowl/bitmagnet/internal/protocol/metainfo/metainforequester"
 )
 
 func (c *crawler) runRequestMetaInfo(ctx context.Context) {

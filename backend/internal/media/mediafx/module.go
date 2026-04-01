@@ -1,10 +1,10 @@
 package mediafx
 
 import (
-	"github.com/bitmagnet-io/bitmagnet/internal/config/configfx"
-	"github.com/bitmagnet-io/bitmagnet/internal/media"
-	mediaapi "github.com/bitmagnet-io/bitmagnet/internal/media/api"
-	"github.com/bitmagnet-io/bitmagnet/internal/media/siteplugins/sitepluginsfx"
+	"github.com/nigowl/bitmagnet/internal/config/configfx"
+	"github.com/nigowl/bitmagnet/internal/media"
+	mediaapi "github.com/nigowl/bitmagnet/internal/media/api"
+	"github.com/nigowl/bitmagnet/internal/media/siteplugins/sitepluginsfx"
 	"go.uber.org/fx"
 )
 

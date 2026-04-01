@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/bitmagnet-io/bitmagnet/internal/app"
+	"github.com/nigowl/bitmagnet/internal/app"
 	_ "github.com/joho/godotenv/autoload"
 )
 

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/model"
+	"github.com/nigowl/bitmagnet/internal/model"
 )
 
 func TestMatcherScore_MixedTitleWithYearInName(t *testing.T) {

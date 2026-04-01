@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol/dht/ktable"
+	"github.com/nigowl/bitmagnet/internal/protocol/dht/ktable"
 )
 
 var bootstrapDNSResolvers = []string{

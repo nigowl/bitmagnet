@@ -3,14 +3,14 @@
 package ktable_mocks
 
 import (
-	ktable "github.com/bitmagnet-io/bitmagnet/internal/protocol/dht/ktable"
-	btree "github.com/bitmagnet-io/bitmagnet/internal/protocol/dht/ktable/btree"
+	ktable "github.com/nigowl/bitmagnet/internal/protocol/dht/ktable"
+	btree "github.com/nigowl/bitmagnet/internal/protocol/dht/ktable/btree"
 
 	mock "github.com/stretchr/testify/mock"
 
 	netip "net/netip"
 
-	protocol "github.com/bitmagnet-io/bitmagnet/internal/protocol"
+	protocol "github.com/nigowl/bitmagnet/internal/protocol"
 
 	time "time"
 )

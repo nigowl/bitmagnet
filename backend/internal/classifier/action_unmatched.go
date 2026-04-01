@@ -1,6 +1,6 @@
 package classifier
 
-import "github.com/bitmagnet-io/bitmagnet/internal/classifier/classification"
+import "github.com/nigowl/bitmagnet/internal/classifier/classification"
 
 const unmatchedName = "unmatched"
 

@@ -17,7 +17,7 @@ ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-RUN npm run build && npm prune --omit=dev
+RUN mkdir -p public && npm run build && npm prune --omit=dev
 
 FROM node:20-alpine AS runner
 

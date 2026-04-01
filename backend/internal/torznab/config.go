@@ -3,7 +3,7 @@ package torznab
 import (
 	"strings"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/slice"
+	"github.com/nigowl/bitmagnet/internal/slice"
 )
 
 type Config struct {

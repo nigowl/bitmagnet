@@ -8,7 +8,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol"
+	"github.com/nigowl/bitmagnet/internal/protocol"
 )
 
 var TableNameTorrentsTorrentSource = "torrents_torrent_sources"

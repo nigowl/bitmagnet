@@ -3,7 +3,7 @@ package manager
 import (
 	"context"
 
-	"github.com/bitmagnet-io/bitmagnet/internal/model"
+	"github.com/nigowl/bitmagnet/internal/model"
 )
 
 func (m manager) PurgeJobs(ctx context.Context, req PurgeJobsRequest) error {

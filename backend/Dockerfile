@@ -14,7 +14,7 @@ COPY . .
 
 ARG BITMAGNET_GIT_TAG=local
 RUN go build -o /tmp/bitmagnet \
-    -ldflags "-s -w -X github.com/bitmagnet-io/bitmagnet/internal/version.GitTag=${BITMAGNET_GIT_TAG}"
+    -ldflags "-s -w -X github.com/nigowl/bitmagnet/internal/version.GitTag=${BITMAGNET_GIT_TAG}"
 
 FROM alpine:3.20
 

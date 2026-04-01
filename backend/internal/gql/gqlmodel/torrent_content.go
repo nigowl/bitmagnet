@@ -5,12 +5,12 @@ import (
 	"time"
 
 	"github.com/99designs/gqlgen/graphql"
-	q "github.com/bitmagnet-io/bitmagnet/internal/database/query"
-	"github.com/bitmagnet-io/bitmagnet/internal/database/search"
-	"github.com/bitmagnet-io/bitmagnet/internal/gql/gqlmodel/gen"
-	"github.com/bitmagnet-io/bitmagnet/internal/maps"
-	"github.com/bitmagnet-io/bitmagnet/internal/model"
-	"github.com/bitmagnet-io/bitmagnet/internal/protocol"
+	q "github.com/nigowl/bitmagnet/internal/database/query"
+	"github.com/nigowl/bitmagnet/internal/database/search"
+	"github.com/nigowl/bitmagnet/internal/gql/gqlmodel/gen"
+	"github.com/nigowl/bitmagnet/internal/maps"
+	"github.com/nigowl/bitmagnet/internal/model"
+	"github.com/nigowl/bitmagnet/internal/protocol"
 )
 
 type TorrentContentQuery struct {

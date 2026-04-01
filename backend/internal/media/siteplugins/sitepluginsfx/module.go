@@ -1,13 +1,13 @@
 package sitepluginsfx
 
 import (
-	"github.com/bitmagnet-io/bitmagnet/internal/lazy"
-	"github.com/bitmagnet-io/bitmagnet/internal/media"
-	"github.com/bitmagnet-io/bitmagnet/internal/media/siteplugins"
-	"github.com/bitmagnet-io/bitmagnet/internal/media/siteplugins/douban"
-	"github.com/bitmagnet-io/bitmagnet/internal/media/siteplugins/imdb"
-	tmdbplugin "github.com/bitmagnet-io/bitmagnet/internal/media/siteplugins/tmdb"
-	tmdbapi "github.com/bitmagnet-io/bitmagnet/internal/tmdb"
+	"github.com/nigowl/bitmagnet/internal/lazy"
+	"github.com/nigowl/bitmagnet/internal/media"
+	"github.com/nigowl/bitmagnet/internal/media/siteplugins"
+	"github.com/nigowl/bitmagnet/internal/media/siteplugins/douban"
+	"github.com/nigowl/bitmagnet/internal/media/siteplugins/imdb"
+	tmdbplugin "github.com/nigowl/bitmagnet/internal/media/siteplugins/tmdb"
+	tmdbapi "github.com/nigowl/bitmagnet/internal/tmdb"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
