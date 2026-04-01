@@ -14,6 +14,7 @@ import (
 	"github.com/nigowl/bitmagnet/internal/media"
 	"github.com/nigowl/bitmagnet/internal/model"
 	"github.com/nigowl/bitmagnet/internal/runtimeconfig"
+	"github.com/nigowl/bitmagnet/internal/subtitles"
 	"github.com/nigowl/bitmagnet/internal/tmdb"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -53,6 +54,10 @@ type Service interface {
 	Update(ctx context.Context, input UpdateInput) (Settings, error)
 	SyncRuntime(ctx context.Context) error
 	TestPlugin(ctx context.Context, pluginKey string, input PluginTestInput) (PluginTestResult, error)
+	ListSubtitleTemplates(ctx context.Context) ([]subtitles.Template, error)
+	CreateSubtitleTemplate(ctx context.Context, input subtitles.Input) (subtitles.Template, error)
+	UpdateSubtitleTemplate(ctx context.Context, id string, input subtitles.Input) (subtitles.Template, error)
+	DeleteSubtitleTemplate(ctx context.Context, id string) error
 	BackfillLocalizedMetadata(ctx context.Context, limit int) (media.BackfillLocalizedResult, error)
 	StartMaintenanceTask(ctx context.Context, input MaintenanceTaskInput) (MaintenanceTask, error)
 	GetMaintenanceStats(ctx context.Context, taskType string) (MaintenanceStats, error)
@@ -290,6 +295,38 @@ func (s *service) BackfillLocalizedMetadata(ctx context.Context, limit int) (med
 	}
 
 	return s.mediaService.BackfillLocalizedMetadata(ctx, media.BackfillLocalizedInput{Limit: limit})
+}
+
+func (s *service) ListSubtitleTemplates(ctx context.Context) ([]subtitles.Template, error) {
+	db, err := s.db.Get()
+	if err != nil {
+		return nil, err
+	}
+	return subtitles.Load(ctx, db)
+}
+
+func (s *service) CreateSubtitleTemplate(ctx context.Context, input subtitles.Input) (subtitles.Template, error) {
+	db, err := s.db.Get()
+	if err != nil {
+		return subtitles.Template{}, err
+	}
+	return subtitles.Create(ctx, db, input)
+}
+
+func (s *service) UpdateSubtitleTemplate(ctx context.Context, id string, input subtitles.Input) (subtitles.Template, error) {
+	db, err := s.db.Get()
+	if err != nil {
+		return subtitles.Template{}, err
+	}
+	return subtitles.Update(ctx, db, id, input)
+}
+
+func (s *service) DeleteSubtitleTemplate(ctx context.Context, id string) error {
+	db, err := s.db.Get()
+	if err != nil {
+		return err
+	}
+	return subtitles.Delete(ctx, db, id)
 }
 
 func (s *service) merge(values map[string]string) Settings {

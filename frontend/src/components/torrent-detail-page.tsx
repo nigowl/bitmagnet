@@ -263,13 +263,6 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
               </Badge>
             ))}
           </Group>
-          <Group gap={6}>
-            {(item.torrent.sources || []).map((source) => (
-              <Badge key={source.key} size="xs" color="blue" variant="light">
-                {source.name}
-              </Badge>
-            ))}
-          </Group>
           {!!item.torrent.magnetUri && (
             <Button
               leftSection={<ExternalLink size={14} />}
@@ -282,14 +275,11 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
           )}
         </Stack>
       </Card>
-
-      <Card className="glass-card" withBorder>
-        <Text fw={600} mb="sm">
-          {t("torrents.typeSpecific")}
-        </Text>
-        {(typeSpecificRows || []).length === 0 ? (
-          <Text c="dimmed">{t("torrents.typeSpecificEmpty")}</Text>
-        ) : (
+      {(typeSpecificRows || []).length === 0 ? null : (
+        <Card className="glass-card" withBorder>
+          <Text fw={600} mb="sm">
+            {t("torrents.typeSpecific")}
+          </Text>
           <Table striped withTableBorder>
             <Table.Thead>
               <Table.Tr>
@@ -306,8 +296,8 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
               ))}
             </Table.Tbody>
           </Table>
-        )}
-      </Card>
+        </Card>
+      )}
 
       <Card className="glass-card" withBorder>
         <Text fw={600} mb="sm">

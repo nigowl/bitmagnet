@@ -14,6 +14,8 @@ const (
 	KeyMediaDoubanUserAgent      = "system.media.douban.user_agent"
 	KeyMediaDoubanAcceptLanguage = "system.media.douban.accept_language"
 	KeyMediaDoubanReferer        = "system.media.douban.referer"
+
+	KeyMediaSubtitleTemplates = "system.media.subtitle.templates"
 )
 
 func AdminEditableKeys() []string {

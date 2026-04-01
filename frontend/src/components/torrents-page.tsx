@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Accordion,
@@ -118,17 +119,37 @@ function formatBytes(size: number): string {
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[index]}`;
 }
 
-export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
+function parseListParam(raw: string | null): string[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseBooleanParam(raw: string | null, fallback: boolean): boolean {
+  if (!raw) return fallback;
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on") return true;
+  if (normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off") return false;
+  return fallback;
+}
+
+function parsePositiveIntParam(raw: string | null, fallback: number): number {
+  const parsed = Number(raw || "");
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.trunc(parsed);
+}
+
+export function TorrentsPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const searchParamsString = searchParams.toString();
+  const queryString = searchParams.get("q") || "";
   const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState(initialQuery);
+  const [search, setSearch] = useState(queryString);
   const [debouncedSearch] = useDebouncedValue(search, 250);
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
-  const [contentTypeFilters, setContentTypeFilters] = useState<string[]>([]);
-  const [sourceFilters, setSourceFilters] = useState<string[]>([]);
-  const [tagFilters, setTagFilters] = useState<string[]>([]);
-  const [orderBy, setOrderBy] = useState<(typeof torrentOrderFields)[number]>("updated_at");
-  const [descending, setDescending] = useState(true);
   const [result, setResult] = useState<SearchResult | null>(null);
 
   const [detailOpen, setDetailOpen] = useState(false);
@@ -138,6 +159,119 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
   const [loadingDetailFiles, setLoadingDetailFiles] = useState(false);
 
   const { t } = useI18n();
+
+  const queryState = useMemo(() => {
+    const parsedParams = new URLSearchParams(searchParamsString);
+    const nextPage = Math.max(1, parsePositiveIntParam(parsedParams.get("page"), 1));
+    const limitRaw = parsePositiveIntParam(parsedParams.get("limit"), 20);
+    const allowedLimits = new Set([10, 20, 40, 60, 100]);
+    const nextLimit = allowedLimits.has(limitRaw) ? limitRaw : 20;
+    const nextTypes = parseListParam(parsedParams.get("types")).filter((item): item is (typeof contentTypes)[number] =>
+      (contentTypes as readonly string[]).includes(item)
+    );
+    const nextSources = parseListParam(parsedParams.get("sources"));
+    const nextTags = parseListParam(parsedParams.get("tags"));
+    const nextOrder = ((torrentOrderFields as readonly string[]).includes(parsedParams.get("order") || "")
+      ? parsedParams.get("order")
+      : "updated_at") as (typeof torrentOrderFields)[number];
+    const nextDescending = parseBooleanParam(parsedParams.get("desc"), true);
+
+    return {
+      page: nextPage,
+      limit: nextLimit,
+      contentTypeFilters: nextTypes,
+      sourceFilters: nextSources,
+      tagFilters: nextTags,
+      orderBy: nextOrder,
+      descending: nextDescending
+    };
+  }, [searchParamsString]);
+
+  const {
+    page,
+    limit,
+    contentTypeFilters,
+    sourceFilters,
+    tagFilters,
+    orderBy,
+    descending
+  } = queryState;
+
+  const updateQuery = useCallback(
+    (updates: {
+      q?: string | null;
+      page?: number | null;
+      limit?: number | null;
+      types?: string[] | null;
+      sources?: string[] | null;
+      tags?: string[] | null;
+      order?: (typeof torrentOrderFields)[number];
+      desc?: boolean;
+    }) => {
+      const params = new URLSearchParams(searchParams.toString());
+
+      const setMaybeString = (key: string, value: string | null | undefined) => {
+        if (!value || !value.trim()) {
+          params.delete(key);
+          return;
+        }
+        params.set(key, value.trim());
+      };
+
+      const setMaybeArray = (key: string, value: string[] | null | undefined) => {
+        if (!value || value.length === 0) {
+          params.delete(key);
+          return;
+        }
+        params.set(key, value.join(","));
+      };
+
+      const nextQ = updates.q !== undefined ? updates.q : queryString;
+      const nextPage = updates.page !== undefined ? updates.page : page;
+      const nextLimit = updates.limit !== undefined ? updates.limit : limit;
+      const nextTypes = updates.types !== undefined ? updates.types : contentTypeFilters;
+      const nextSources = updates.sources !== undefined ? updates.sources : sourceFilters;
+      const nextTags = updates.tags !== undefined ? updates.tags : tagFilters;
+      const nextOrder = updates.order !== undefined ? updates.order : orderBy;
+      const nextDesc = updates.desc !== undefined ? updates.desc : descending;
+
+      setMaybeString("q", nextQ);
+      if (!nextPage || nextPage <= 1) {
+        params.delete("page");
+      } else {
+        params.set("page", String(nextPage));
+      }
+      if (!nextLimit || nextLimit === 20) {
+        params.delete("limit");
+      } else {
+        params.set("limit", String(nextLimit));
+      }
+      setMaybeArray("types", nextTypes);
+      setMaybeArray("sources", nextSources);
+      setMaybeArray("tags", nextTags);
+      params.set("order", nextOrder);
+      params.set("desc", nextDesc ? "1" : "0");
+
+      const nextQuery = params.toString();
+      const currentQuery = searchParams.toString();
+      if (nextQuery === currentQuery) {
+        return;
+      }
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+    },
+    [contentTypeFilters, descending, limit, orderBy, page, pathname, queryString, router, searchParams, sourceFilters, tagFilters]
+  );
+
+  useEffect(() => {
+    setSearch(queryString);
+  }, [queryString]);
+
+  useEffect(() => {
+    if (debouncedSearch.trim() === queryString.trim()) {
+      return;
+    }
+    updateQuery({ q: debouncedSearch.trim() || null, page: null });
+  }, [debouncedSearch, queryString, updateQuery]);
 
   const renderContentType = useCallback(
     (type?: string | null) => {
@@ -242,19 +376,18 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    setSearch(initialQuery);
-    setPage(1);
-  }, [initialQuery]);
-
   const clearFilters = () => {
     setSearch("");
-    setContentTypeFilters([]);
-    setSourceFilters([]);
-    setTagFilters([]);
-    setOrderBy("updated_at");
-    setDescending(true);
-    setPage(1);
+    updateQuery({
+      q: null,
+      page: null,
+      limit: 20,
+      types: null,
+      sources: null,
+      tags: null,
+      order: "updated_at",
+      desc: true
+    });
   };
 
   const copyHash = async (hash: string) => {
@@ -392,7 +525,6 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
                     value={search}
                     onChange={(event) => {
                       setSearch(event.currentTarget.value);
-                      setPage(1);
                     }}
                   />
                 </Stack>
@@ -405,8 +537,7 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
                 <Checkbox.Group
                   value={contentTypeFilters}
                   onChange={(value) => {
-                    setContentTypeFilters(value);
-                    setPage(1);
+                    updateQuery({ types: value, page: null });
                   }}
                 >
                   <Stack gap={8}>
@@ -469,8 +600,7 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
                     <Checkbox.Group
                       value={tagFilters}
                       onChange={(value) => {
-                        setTagFilters(value);
-                        setPage(1);
+                        updateQuery({ tags: value, page: null });
                       }}
                     >
                       <Stack gap={8}>
@@ -507,8 +637,7 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
                       variant={orderBy === field ? "light" : "subtle"}
                       color={orderBy === field ? "cyan" : "gray"}
                       onClick={() => {
-                        setOrderBy(field);
-                        setPage(1);
+                        updateQuery({ order: field, page: null });
                       }}
                     >
                       {orderLabels[field]}
@@ -521,8 +650,7 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
                     variant={descending ? "light" : "subtle"}
                     color={descending ? "cyan" : "gray"}
                     onClick={() => {
-                      setDescending(true);
-                      setPage(1);
+                      updateQuery({ desc: true, page: null });
                     }}
                   >
                     {t("common.desc")}
@@ -532,8 +660,7 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
                     variant={!descending ? "light" : "subtle"}
                     color={!descending ? "cyan" : "gray"}
                     onClick={() => {
-                      setDescending(false);
-                      setPage(1);
+                      updateQuery({ desc: false, page: null });
                     }}
                   >
                     {t("common.asc")}
@@ -628,12 +755,12 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
                 ]}
                 value={String(limit)}
                 onChange={(value) => {
-                  setLimit(Number(value) || 20);
-                  setPage(1);
+                  const nextLimit = Number(value) || 20;
+                  updateQuery({ limit: nextLimit, page: null });
                 }}
               />
             </Group>
-            <Pagination total={totalPages} value={page} onChange={setPage} />
+            <Pagination total={totalPages} value={page} onChange={(value) => updateQuery({ page: value })} />
           </Group>
         </Stack>
       </Group>

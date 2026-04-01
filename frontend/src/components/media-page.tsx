@@ -180,6 +180,8 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
   const [totalCount, setTotalCount] = useState(0);
   const [totalTorrentCount, setTotalTorrentCount] = useState(0);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const advancedFiltersRef = useRef<HTMLDivElement | null>(null);
+  const [advancedFiltersHeight, setAdvancedFiltersHeight] = useState(0);
   const pageSize = 30;
 
   const quality = normalizeSimpleValue(searchParams.get("quality"), "all");
@@ -203,7 +205,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
       const params = new URLSearchParams(searchParams.toString());
 
       Object.entries(updates).forEach(([key, value]) => {
-        if (!value || value === "all" || (key === "sort" && value === "latest")) {
+        if (!value || value === "all" || (key === "sort" && value === "popular")) {
           params.delete(key);
         } else {
           params.set(key, value);
@@ -419,6 +421,28 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
     [t]
   );
 
+  useEffect(() => {
+    const element = advancedFiltersRef.current;
+    if (!element) {
+      return;
+    }
+
+    const syncHeight = () => {
+      const nextHeight = element.scrollHeight;
+      setAdvancedFiltersHeight((current) => (current === nextHeight ? current : nextHeight));
+    };
+
+    syncHeight();
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => syncHeight());
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [awardsOptions, countryOptions, genreOptions, languageOptions, networkOptions, qualityOptions, showAdvancedFilters, sortOptions, studioOptions, yearOptions]);
+
   const clearFilters = () => {
     setSearchInput("");
     router.replace(pathname, { scroll: false });
@@ -471,18 +495,24 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
                   {t("common.refresh")}
                 </Button>
                 <ActionIcon
+                  className="media-advanced-toggle"
+                  data-expanded={showAdvancedFilters ? "true" : "false"}
                   variant="default"
                   size={36}
                   onClick={() => setShowAdvancedFilters((value) => !value)}
                   aria-label={showAdvancedFilters ? t("media.collapseFilters") : t("media.expandFilters")}
                 >
-                  {showAdvancedFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  <ChevronDown size={16} />
                 </ActionIcon>
               </Group>
             </div>
 
-            {showAdvancedFilters ? (
-              <>
+            <div
+              className={showAdvancedFilters ? "media-advanced-filters media-advanced-filters-open" : "media-advanced-filters"}
+              style={{ maxHeight: showAdvancedFilters ? advancedFiltersHeight : 0 }}
+              aria-hidden={!showAdvancedFilters}
+            >
+              <div ref={advancedFiltersRef} className="media-advanced-filters-inner">
                 <FilterRow
                   label={t("media.filters.quality")}
                   currentValue={quality}
@@ -563,8 +593,8 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
                   onToggleExpand={() => setExpanded("sort")}
                   onSelect={(value) => updateQuery({ sort: value, page: null })}
                 />
-              </>
-            ) : null}
+              </div>
+            </div>
           </Card>
         </Stack>
       </Card>

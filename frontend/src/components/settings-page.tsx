@@ -2,17 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActionIcon,
   Accordion,
+  Badge,
   Button,
   Card,
   Group,
   Loader,
+  Modal,
   NumberInput,
   Pagination,
   ScrollArea,
   Select,
   Stack,
   Switch,
+  Table,
   Tabs,
   Text,
   TextInput,
@@ -20,7 +24,7 @@ import {
   Title
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { LogIn, RefreshCcw, Save } from "lucide-react";
+import { LogIn, Pencil, Plus, RefreshCcw, Save, Trash2 } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { apiRequest } from "@/lib/api";
@@ -70,6 +74,21 @@ type PluginTestResult = {
 
 type PluginTestResponse = {
   result: PluginTestResult;
+};
+
+type SubtitleTemplate = {
+  id: string;
+  name: string;
+  urlTemplate: string;
+  enabled: boolean;
+};
+
+type SubtitleTemplatesResponse = {
+  templates: SubtitleTemplate[];
+};
+
+type SubtitleTemplateResponse = {
+  template: SubtitleTemplate;
 };
 
 const LOG_LEVEL_OPTIONS = [
@@ -122,6 +141,18 @@ export function SettingsPage() {
     imdb: { imdbId: "" },
     douban: { title: "", contentType: "movie", year: "" }
   });
+  const [subtitleTemplates, setSubtitleTemplates] = useState<SubtitleTemplate[]>([]);
+  const [subtitleTemplatesLoading, setSubtitleTemplatesLoading] = useState(false);
+  const [subtitleTemplateDeleting, setSubtitleTemplateDeleting] = useState<Record<string, boolean>>({});
+  const [subtitleModalOpened, setSubtitleModalOpened] = useState(false);
+  const [subtitleModalSaving, setSubtitleModalSaving] = useState(false);
+  const [subtitleModalMode, setSubtitleModalMode] = useState<"create" | "edit">("create");
+  const [subtitleEditingId, setSubtitleEditingId] = useState<string | null>(null);
+  const [subtitleForm, setSubtitleForm] = useState({
+    name: "",
+    urlTemplate: "https://subhd.tv/search/{title}",
+    enabled: true
+  });
   const tabsRef = useTabsUnderline();
 
   const loadSettings = useCallback(async () => {
@@ -141,6 +172,24 @@ export function SettingsPage() {
     if (!isAdmin) return;
     void loadSettings();
   }, [isAdmin, loadSettings]);
+
+  const loadSubtitleTemplates = useCallback(async () => {
+    if (!isAdmin) return;
+    setSubtitleTemplatesLoading(true);
+    try {
+      const data = await apiRequest<SubtitleTemplatesResponse>("/api/admin/settings/subtitle-templates");
+      setSubtitleTemplates(Array.isArray(data.templates) ? data.templates : []);
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setSubtitleTemplatesLoading(false);
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void loadSubtitleTemplates();
+  }, [isAdmin, loadSubtitleTemplates]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -244,6 +293,78 @@ export function SettingsPage() {
       notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
     } finally {
       setPluginTesting((current) => ({ ...current, [plugin]: false }));
+    }
+  };
+
+  const deleteSubtitleTemplate = async (id: string) => {
+    setSubtitleTemplateDeleting((current) => ({ ...current, [id]: true }));
+    try {
+      await apiRequest(`/api/admin/settings/subtitle-templates/${encodeURIComponent(id)}`, { method: "DELETE" });
+      setSubtitleTemplates((current) => current.filter((item) => item.id !== id));
+      notifications.show({ color: "green", message: t("settings.subtitleTemplateDeleted") });
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setSubtitleTemplateDeleting((current) => ({ ...current, [id]: false }));
+    }
+  };
+
+  const openCreateSubtitleModal = () => {
+    setSubtitleModalMode("create");
+    setSubtitleEditingId(null);
+    setSubtitleForm({
+      name: "",
+      urlTemplate: "https://subhd.tv/search/{title}",
+      enabled: true
+    });
+    setSubtitleModalOpened(true);
+  };
+
+  const openEditSubtitleModal = (template: SubtitleTemplate) => {
+    setSubtitleModalMode("edit");
+    setSubtitleEditingId(template.id);
+    setSubtitleForm({
+      name: template.name,
+      urlTemplate: template.urlTemplate,
+      enabled: template.enabled
+    });
+    setSubtitleModalOpened(true);
+  };
+
+  const submitSubtitleModal = async () => {
+    setSubtitleModalSaving(true);
+    try {
+      const payload = {
+        name: subtitleForm.name,
+        urlTemplate: subtitleForm.urlTemplate,
+        enabled: subtitleForm.enabled
+      };
+
+      if (subtitleModalMode === "create") {
+        const data = await apiRequest<SubtitleTemplateResponse>("/api/admin/settings/subtitle-templates", {
+          method: "POST",
+          data: payload
+        });
+        setSubtitleTemplates((current) => [...current, data.template]);
+        notifications.show({ color: "green", message: t("settings.subtitleTemplateCreated") });
+      } else {
+        const templateId = subtitleEditingId || "";
+        if (!templateId) {
+          throw new Error(t("settings.subtitleTemplateEditTargetMissing"));
+        }
+        const data = await apiRequest<SubtitleTemplateResponse>(`/api/admin/settings/subtitle-templates/${encodeURIComponent(templateId)}`, {
+          method: "PUT",
+          data: payload
+        });
+        setSubtitleTemplates((current) => current.map((item) => (item.id === templateId ? data.template : item)));
+        notifications.show({ color: "green", message: t("settings.subtitleTemplateSaved") });
+      }
+
+      setSubtitleModalOpened(false);
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setSubtitleModalSaving(false);
     }
   };
 
@@ -597,12 +718,92 @@ export function SettingsPage() {
                   </Accordion.Panel>
                 </Accordion.Item>
               </Accordion>
+
+              <Stack gap="sm">
+                <Group justify="space-between" align="flex-end">
+                  <div>
+                    <Title order={5}>{t("settings.subtitleTemplateTitle")}</Title>
+                    <Text c="dimmed" size="sm">{t("settings.subtitleTemplateHint")}</Text>
+                  </div>
+                  <Button leftSection={<Plus size={14} />} onClick={openCreateSubtitleModal}>
+                    {t("settings.subtitleTemplateAdd")}
+                  </Button>
+                </Group>
+
+                {subtitleTemplatesLoading ? (
+                  <Group justify="center" py="md">
+                    <Loader size="sm" />
+                  </Group>
+                ) : subtitleTemplates.length === 0 ? (
+                  <Text size="sm" c="dimmed">{t("settings.subtitleTemplateEmpty")}</Text>
+                ) : (
+                  <Card withBorder radius="lg" className="settings-subtitle-template-item">
+                    <ScrollArea type="auto" scrollbarSize={8}>
+                      <Table striped withTableBorder highlightOnHover miw={760}>
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th>{t("settings.subtitleTemplateName")}</Table.Th>
+                            <Table.Th>{t("settings.subtitleTemplateURL")}</Table.Th>
+                            <Table.Th>{t("settings.subtitleTemplateEnabled")}</Table.Th>
+                            <Table.Th>{t("settings.subtitleTemplateActions")}</Table.Th>
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {subtitleTemplates.map((template) => (
+                            <Table.Tr key={template.id}>
+                              <Table.Td>{template.name || "-"}</Table.Td>
+                              <Table.Td>
+                                <Text size="sm" lineClamp={1} title={template.urlTemplate}>
+                                  {template.urlTemplate}
+                                </Text>
+                              </Table.Td>
+                              <Table.Td>
+                                <Badge color={template.enabled ? "green" : "gray"} variant="light">
+                                  {template.enabled ? t("settings.subtitleTemplateEnabledYes") : t("settings.subtitleTemplateEnabledNo")}
+                                </Badge>
+                              </Table.Td>
+                              <Table.Td>
+                                <Group gap={6}>
+                                  <ActionIcon
+                                    variant="default"
+                                    size={30}
+                                    onClick={() => openEditSubtitleModal(template)}
+                                    aria-label={t("settings.subtitleTemplateEdit")}
+                                  >
+                                    <Pencil size={14} />
+                                  </ActionIcon>
+                                  <ActionIcon
+                                    color="red"
+                                    variant="light"
+                                    size={30}
+                                    loading={Boolean(subtitleTemplateDeleting[template.id])}
+                                    onClick={() => void deleteSubtitleTemplate(template.id)}
+                                    aria-label={t("settings.subtitleTemplateDelete")}
+                                  >
+                                    <Trash2 size={14} />
+                                  </ActionIcon>
+                                </Group>
+                              </Table.Td>
+                            </Table.Tr>
+                          ))}
+                        </Table.Tbody>
+                      </Table>
+                    </ScrollArea>
+                  </Card>
+                )}
+              </Stack>
             </Stack>
           </Tabs.Panel>
         </Tabs>
 
         <Group justify="flex-end" mt="md">
-          <Button variant="default" onClick={() => void loadSettings()}>
+          <Button
+            variant="default"
+            onClick={() => {
+              void loadSettings();
+              void loadSubtitleTemplates();
+            }}
+          >
             {t("common.refresh")}
           </Button>
           <Button leftSection={<Save size={14} />} loading={saving} onClick={() => void saveSettings()}>
@@ -610,6 +811,54 @@ export function SettingsPage() {
           </Button>
         </Group>
       </Card>
+
+      <Modal
+        opened={subtitleModalOpened}
+        onClose={() => {
+          if (!subtitleModalSaving) {
+            setSubtitleModalOpened(false);
+          }
+        }}
+        title={subtitleModalMode === "create" ? t("settings.subtitleTemplateCreate") : t("settings.subtitleTemplateEdit")}
+        centered
+      >
+        <Stack gap="sm">
+          <TextInput
+            label={t("settings.subtitleTemplateName")}
+            placeholder={t("settings.subtitleTemplateNamePlaceholder")}
+            value={subtitleForm.name}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setSubtitleForm((current) => ({ ...current, name: value }));
+            }}
+          />
+          <TextInput
+            label={t("settings.subtitleTemplateURL")}
+            placeholder="https://subhd.tv/search/{title}"
+            value={subtitleForm.urlTemplate}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setSubtitleForm((current) => ({ ...current, urlTemplate: value }));
+            }}
+          />
+          <Switch
+            label={t("settings.subtitleTemplateEnabled")}
+            checked={subtitleForm.enabled}
+            onChange={(event) => {
+              const checked = event.currentTarget.checked;
+              setSubtitleForm((current) => ({ ...current, enabled: checked }));
+            }}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setSubtitleModalOpened(false)} disabled={subtitleModalSaving}>
+              {t("common.cancel")}
+            </Button>
+            <Button loading={subtitleModalSaving} onClick={() => void submitSubtitleModal()}>
+              {subtitleModalMode === "create" ? t("settings.subtitleTemplateAdd") : t("settings.subtitleTemplateSave")}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   );
 }

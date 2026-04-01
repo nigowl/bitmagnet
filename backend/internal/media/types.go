@@ -82,8 +82,9 @@ type ListAttribute struct {
 }
 
 type DetailResult struct {
-	Item     DetailItem      `json:"item"`
-	Torrents []DetailTorrent `json:"torrents"`
+	Item              DetailItem               `json:"item"`
+	Torrents          []DetailTorrent          `json:"torrents"`
+	SubtitleTemplates []DetailSubtitleTemplate `json:"subtitleTemplates"`
 }
 
 type DetailOptions struct {
@@ -161,6 +162,12 @@ type DetailLanguage struct {
 type DetailSource struct {
 	Key  string `json:"key"`
 	Name string `json:"name"`
+}
+
+type DetailSubtitleTemplate struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	URLTemplate string `json:"urlTemplate"`
 }
 
 type DetailTorrent struct {

@@ -95,6 +95,30 @@ function fallbackCategoryHref(mediaType?: string): string {
   return "/media/movie";
 }
 
+function applySubtitleTemplate(urlTemplate: string, title: string, releaseYear?: number): string | null {
+  const template = urlTemplate.trim();
+  if (!template) {
+    return null;
+  }
+
+  const encodedTitle = encodeURIComponent(title);
+  const resolved = template
+    .replaceAll("{title}", encodedTitle)
+    .replaceAll("{titleEncoded}", encodedTitle)
+    .replaceAll("{titleRaw}", title)
+    .replaceAll("{year}", releaseYear ? String(releaseYear) : "");
+
+  try {
+    const parsed = new URL(resolved);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 function TorrentRow({ item, t }: { item: MediaDetailTorrent; t: (key: string) => string }) {
   const torrentTitle = item.title || item.torrent.name;
   const filesCount = item.filesCount ?? item.torrent.filesCount;
@@ -247,6 +271,19 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
     item.originalLanguage,
     ...(item.spokenLanguages ?? [])
   ]);
+  const subtitleLinks = (payload.subtitleTemplates ?? [])
+    .map((template) => {
+      const href = applySubtitleTemplate(template.urlTemplate, selectedDisplayTitle || originalDisplayTitle, item.releaseYear);
+      if (!href) {
+        return null;
+      }
+      return {
+        id: template.id,
+        label: template.name?.trim() || t("media.detail.subtitleTemplateFallback"),
+        href
+      };
+    })
+    .filter((entry): entry is { id: string; label: string; href: string } => Boolean(entry));
 
   const metaRows = [
     { label: t("media.detail.tagline"), value: metadataValue(item.tagline) },
@@ -412,53 +449,77 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
           </Group>
         </Card>
 
-        {(externalLinks.length > 0 || recommendedTorrent) ? (
+        {(externalLinks.length > 0 || recommendedTorrent || subtitleLinks.length > 0) ? (
           <div className="media-detail-sidecars">
-            {quickExternalLinks.length > 0 ? (
+            {(quickExternalLinks.length > 0 || subtitleLinks.length > 0) ? (
               <Card className="media-detail-sidecar-card media-external-card" withBorder>
                 <Text fw={600} mb="sm">{t("media.detail.externalLinks")}</Text>
-                <div className="media-external-links-grid" style={externalGridStyle}>
-                  {quickExternalLinks.map((link) => (
-                    <div key={link.href} className="media-external-link-row">
-                      {(() => {
-                        const linkValue = link.value;
+                {quickExternalLinks.length > 0 ? (
+                  <div className="media-external-links-grid" style={externalGridStyle}>
+                    {quickExternalLinks.map((link) => (
+                      <div key={link.href} className="media-external-link-row">
+                        {(() => {
+                          const linkValue = link.value;
 
-                        return (
-                          <>
-                            <div>
-                              <Text size="sm" fw={700} className="card-title">
-                                {link.key === "tmdb" || link.key === "imdb" || link.key === "tvdb" || link.key === "douban"
-                                  ? t(`media.sources.${link.key}`)
-                                  : link.key === "homepage"
-                                    ? t("media.detail.homepage")
-                                    : link.label}
-                              </Text>
-                              <Text
+                          return (
+                            <>
+                              <div>
+                                <Text size="sm" fw={700} className="card-title">
+                                  {link.key === "tmdb" || link.key === "imdb" || link.key === "tvdb" || link.key === "douban"
+                                    ? t(`media.sources.${link.key}`)
+                                    : link.key === "homepage"
+                                      ? t("media.detail.homepage")
+                                      : link.label}
+                                </Text>
+                                <Text
+                                  size="xs"
+                                  c="dimmed"
+                                  lineClamp={1}
+                                  title={linkValue}
+                                >
+                                  {linkValue}
+                                </Text>
+                              </div>
+                              <Button
+                                component="a"
+                                href={link.href}
+                                target="_blank"
+                                rel="noreferrer"
+                                variant="light"
                                 size="xs"
-                                c="dimmed"
-                                lineClamp={1}
-                                title={linkValue}
+                                rightSection={<ExternalLink size={13} />}
                               >
-                                {linkValue}
-                              </Text>
-                            </div>
-                            <Button
-                              component="a"
-                              href={link.href}
-                              target="_blank"
-                              rel="noreferrer"
-                              variant="light"
-                              size="xs"
-                              rightSection={<ExternalLink size={13} />}
-                            >
-                              {t("media.detail.openLink")}
-                            </Button>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  ))}
-                </div>
+                                {t("media.detail.openLink")}
+                              </Button>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {subtitleLinks.length > 0 ? (
+                  <div className="media-external-subtitle-row">
+                    <Text fw={700} size="sm">{t("media.detail.subtitleLinks")}</Text>
+                    <Group gap={8} wrap="wrap" mt={8}>
+                      {subtitleLinks.map((link) => (
+                        <Button
+                          key={link.id}
+                          component="a"
+                          href={link.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          variant="light"
+                          size="xs"
+                          rightSection={<ExternalLink size={13} />}
+                        >
+                          {link.label}
+                        </Button>
+                      ))}
+                    </Group>
+                  </div>
+                ) : null}
               </Card>
             ) : null}
 

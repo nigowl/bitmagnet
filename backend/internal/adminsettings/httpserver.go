@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/nigowl/bitmagnet/internal/auth"
 	"github.com/nigowl/bitmagnet/internal/httpserver"
+	"github.com/nigowl/bitmagnet/internal/subtitles"
 	"go.uber.org/fx"
 )
 
@@ -40,6 +41,10 @@ func (b *builder) Key() string {
 func (b *builder) Apply(e *gin.Engine) error {
 	e.GET("/api/admin/settings", b.authMiddleware(), b.requireAdmin(), b.getSettings)
 	e.PUT("/api/admin/settings", b.authMiddleware(), b.requireAdmin(), b.updateSettings)
+	e.GET("/api/admin/settings/subtitle-templates", b.authMiddleware(), b.requireAdmin(), b.listSubtitleTemplates)
+	e.POST("/api/admin/settings/subtitle-templates", b.authMiddleware(), b.requireAdmin(), b.createSubtitleTemplate)
+	e.PUT("/api/admin/settings/subtitle-templates/:templateId", b.authMiddleware(), b.requireAdmin(), b.updateSubtitleTemplate)
+	e.DELETE("/api/admin/settings/subtitle-templates/:templateId", b.authMiddleware(), b.requireAdmin(), b.deleteSubtitleTemplate)
 	e.POST("/api/admin/settings/plugins/:pluginKey/test", b.authMiddleware(), b.requireAdmin(), b.testPlugin)
 	e.POST("/api/admin/settings/media/backfill-localized", b.authMiddleware(), b.requireAdmin(), b.backfillLocalizedMetadata)
 	e.POST("/api/admin/maintenance/tasks", b.authMiddleware(), b.requireAdmin(), b.startMaintenanceTask)
@@ -134,6 +139,85 @@ func (b *builder) testPlugin(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"result": result})
+}
+
+func (b *builder) listSubtitleTemplates(c *gin.Context) {
+	templates, err := b.service.ListSubtitleTemplates(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"templates": templates})
+}
+
+func (b *builder) createSubtitleTemplate(c *gin.Context) {
+	var req subtitles.Input
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	template, err := b.service.CreateSubtitleTemplate(c.Request.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, subtitles.ErrInvalidTemplate):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"template": template})
+}
+
+func (b *builder) updateSubtitleTemplate(c *gin.Context) {
+	templateID := c.Param("templateId")
+	if templateID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "templateId is required"})
+		return
+	}
+
+	var req subtitles.Input
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	template, err := b.service.UpdateSubtitleTemplate(c.Request.Context(), templateID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, subtitles.ErrInvalidTemplate):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, subtitles.ErrTemplateNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "template not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"template": template})
+}
+
+func (b *builder) deleteSubtitleTemplate(c *gin.Context) {
+	templateID := c.Param("templateId")
+	if templateID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "templateId is required"})
+		return
+	}
+
+	if err := b.service.DeleteSubtitleTemplate(c.Request.Context(), templateID); err != nil {
+		switch {
+		case errors.Is(err, subtitles.ErrInvalidTemplate):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, subtitles.ErrTemplateNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "template not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 type backfillLocalizedRequest struct {

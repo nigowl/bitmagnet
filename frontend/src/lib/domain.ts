@@ -27,13 +27,13 @@ export const queueStatuses = ["pending", "retry", "failed", "processed"] as cons
 export const queueOrderFields = ["ran_at", "created_at", "priority"] as const;
 
 export const torrentOrderFields = [
-  "relevance",
-  "published_at",
   "updated_at",
+  "published_at",
   "size",
   "files_count",
   "seeders",
   "leechers",
+  "relevance",
   "name",
   "info_hash"
 ] as const;

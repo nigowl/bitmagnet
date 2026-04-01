@@ -826,6 +826,11 @@ body {
     linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 92%, var(--brand-muted)), var(--card-bg));
 }
 
+.media-external-subtitle-row {
+  margin-top: 10px;
+  padding-top: 5px;
+}
+
 .media-facts-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1040,6 +1045,32 @@ body {
 
 .media-toolbar-search {
   flex: 1 1 520px;
+}
+
+.media-advanced-toggle svg {
+  transition: transform 0.24s ease;
+}
+
+.media-advanced-toggle[data-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.media-advanced-filters {
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: max-height 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.24s ease, transform 0.24s ease;
+}
+
+.media-advanced-filters-open {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.media-advanced-filters-inner {
+  display: grid;
+  gap: 12px;
+  padding-top: 2px;
 }
 
 .media-toolbar-row {
@@ -1593,4 +1624,9 @@ body {
 
 .settings-plugin-accordion .mantine-Accordion-content {
   background: transparent;
+}
+
+.settings-subtitle-template-item {
+  background: color-mix(in srgb, var(--card-bg) 86%, var(--muted-surface));
+  border-color: color-mix(in srgb, var(--card-border) 85%, transparent);
 }

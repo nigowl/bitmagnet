@@ -70,6 +70,12 @@ export type MediaDetailAttribute = {
   value: string;
 };
 
+export type MediaSubtitleTemplate = {
+  id: string;
+  name: string;
+  urlTemplate: string;
+};
+
 export type MediaDetailTorrent = {
   infoHash: string;
   title: string;
@@ -148,6 +154,7 @@ export type MediaDetailResponse = {
     languages: MediaDetailLanguage[];
   };
   torrents: MediaDetailTorrent[];
+  subtitleTemplates: MediaSubtitleTemplate[];
 };
 
 function normalizeStringArray(value: string[] | null | undefined): string[] {
@@ -164,6 +171,17 @@ function normalizeDetailCollections(value: MediaDetailCollection[] | null | unde
 
 function normalizeDetailAttributes(value: MediaDetailAttribute[] | null | undefined): MediaDetailAttribute[] {
   return Array.isArray(value) ? value : [];
+}
+
+function normalizeSubtitleTemplates(value: MediaSubtitleTemplate[] | null | undefined): MediaSubtitleTemplate[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => ({
+      id: typeof item?.id === "string" ? item.id : "",
+      name: typeof item?.name === "string" ? item.name : "",
+      urlTemplate: typeof item?.urlTemplate === "string" ? item.urlTemplate : ""
+    }))
+    .filter((item) => item.id && item.urlTemplate);
 }
 
 export async function fetchMediaList(params: {
@@ -281,6 +299,7 @@ export async function fetchMediaDetail(id: string, options?: { refresh?: boolean
       attributes: normalizeDetailAttributes(response.item?.attributes),
       languages: normalizeDetailLanguages(response.item?.languages)
     },
+    subtitleTemplates: normalizeSubtitleTemplates(response.subtitleTemplates),
     torrents: Array.isArray(response.torrents)
       ? response.torrents.map((torrent) => ({
           ...torrent,

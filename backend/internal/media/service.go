@@ -285,6 +285,9 @@ func (s *service) Detail(ctx context.Context, id string, options ...DetailOption
 	for _, tc := range torrentContents {
 		result.Torrents = append(result.Torrents, detailTorrentFromModel(*tc))
 	}
+	if templates, templateErr := loadDetailSubtitleTemplates(ctx, db); templateErr == nil {
+		result.SubtitleTemplates = templates
+	}
 
 	return result, nil
 }
