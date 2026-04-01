@@ -24,6 +24,7 @@ import { LogIn, RefreshCcw, Save } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { apiRequest } from "@/lib/api";
+import { useTabsUnderline } from "@/lib/use-tabs-underline";
 import { useI18n } from "@/languages/provider";
 
 type SystemSettings = {
@@ -71,18 +72,6 @@ type PluginTestResponse = {
   result: PluginTestResult;
 };
 
-type BackfillLocalizedResult = {
-  requested: number;
-  processed: number;
-  updated: number;
-  remaining: number;
-  durationMs: number;
-};
-
-type BackfillLocalizedResponse = {
-  result: BackfillLocalizedResult;
-};
-
 const LOG_LEVEL_OPTIONS = [
   { value: "DEBUG", label: "DEBUG" },
   { value: "INFO", label: "INFO" },
@@ -124,17 +113,16 @@ export function SettingsPage() {
   const [logsCategory, setLogsCategory] = useState("main");
   const [logsFile, setLogsFile] = useState("");
   const [logsPage, setLogsPage] = useState(1);
-  const [logsLines, setLogsLines] = useState(200);
+  const [logsLines, setLogsLines] = useState(1000);
   const [logs, setLogs] = useState<LogsResponse | null>(null);
   const [pluginTesting, setPluginTesting] = useState<Record<string, boolean>>({});
   const [pluginResults, setPluginResults] = useState<Record<string, PluginTestResult | null>>({});
-  const [backfillLimit, setBackfillLimit] = useState(200);
-  const [backfilling, setBackfilling] = useState(false);
   const [pluginInputs, setPluginInputs] = useState({
     tmdb: { query: "", contentType: "movie", year: "" },
     imdb: { imdbId: "" },
     douban: { title: "", contentType: "movie", year: "" }
   });
+  const tabsRef = useTabsUnderline();
 
   const loadSettings = useCallback(async () => {
     if (!isAdmin) return;
@@ -259,27 +247,6 @@ export function SettingsPage() {
     }
   };
 
-  const runLocalizedBackfill = async () => {
-    setBackfilling(true);
-    try {
-      const data = await apiRequest<BackfillLocalizedResponse>("/api/admin/settings/media/backfill-localized", {
-        method: "POST",
-        data: { limit: backfillLimit }
-      });
-      notifications.show({
-        color: "green",
-        message: t("settings.backfillDone")
-          .replace("{processed}", String(data.result.processed))
-          .replace("{updated}", String(data.result.updated))
-          .replace("{remaining}", String(data.result.remaining))
-      });
-    } catch (error) {
-      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
-    } finally {
-      setBackfilling(false);
-    }
-  };
-
   const categoryOptions = useMemo(
     () =>
       (logs?.categories?.length ? logs.categories : [{ key: "main" }, { key: "dht" }, { key: "site_plugins" }]).map((item) => ({
@@ -309,7 +276,7 @@ export function SettingsPage() {
     const result = pluginResults[plugin];
     if (!result) return null;
     return (
-      <ScrollArea className="settings-plugin-test-scroll">
+      <ScrollArea className="settings-plugin-test-scroll" h={320} type="auto" scrollbarSize={8}>
         <pre className="settings-plugin-test-content">{JSON.stringify(result, null, 2)}</pre>
       </ScrollArea>
     );
@@ -359,8 +326,8 @@ export function SettingsPage() {
       </Card>
 
       <Card className="glass-card" withBorder>
-        <Tabs defaultValue="logs">
-          <Tabs.List>
+        <Tabs ref={tabsRef} className="app-tabs" defaultValue="logs">
+          <Tabs.List grow>
             <Tabs.Tab value="logs">{t("settings.tabLogs")}</Tabs.Tab>
             <Tabs.Tab value="plugins">{t("settings.tabSitePlugins")}</Tabs.Tab>
           </Tabs.List>
@@ -405,8 +372,8 @@ export function SettingsPage() {
                   data={LOG_LINES_OPTIONS.map((item) => ({ value: item.value, label: item.label }))}
                   allowDeselect={false}
                   onChange={(value) => {
-                    const parsed = Number(value || "200");
-                    setLogsLines(Number.isFinite(parsed) ? parsed : 200);
+                    const parsed = Number(value || "1000");
+                    setLogsLines(Number.isFinite(parsed) ? parsed : 1000);
                     setLogsPage(1);
                   }}
                 />
@@ -432,7 +399,7 @@ export function SettingsPage() {
                 onChange={setLogsPage}
               />
 
-              <ScrollArea className="settings-log-scroll">
+              <ScrollArea className="settings-log-scroll" h={560} type="auto" scrollbarSize={8}>
                 <pre className="settings-log-content">{logContent}</pre>
               </ScrollArea>
             </Stack>
@@ -442,7 +409,7 @@ export function SettingsPage() {
             <Stack gap="md">
               <Title order={4}>{t("settings.sitePluginTitle")}</Title>
 
-              <Accordion variant="separated" radius="md" defaultValue="douban">
+              <Accordion className="settings-plugin-accordion" variant="separated" radius="lg">
                 <Accordion.Item value="tmdb">
                   <Accordion.Control>TMDB</Accordion.Control>
                   <Accordion.Panel>
@@ -488,21 +455,6 @@ export function SettingsPage() {
                       <Group justify="flex-end">
                         <Button loading={Boolean(pluginTesting.tmdb)} onClick={() => void runPluginTest("tmdb")}>
                           {t("settings.testButton")}
-                        </Button>
-                      </Group>
-                      <Group grow align="flex-end">
-                        <NumberInput
-                          label={t("settings.backfillLimit")}
-                          min={10}
-                          max={2000}
-                          step={50}
-                          value={backfillLimit}
-                          onChange={(value) =>
-                            setBackfillLimit(typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : 200)
-                          }
-                        />
-                        <Button loading={backfilling} onClick={() => void runLocalizedBackfill()}>
-                          {t("settings.backfillButton")}
                         </Button>
                       </Group>
                       {renderPluginResult("tmdb")}

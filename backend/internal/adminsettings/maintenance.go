@@ -19,6 +19,8 @@ const (
 	MaintenanceTaskTypeFixCoverCache = "fix_cover_cache"
 )
 
+const maintenanceTaskMaxLogs = 180
+
 const (
 	MaintenanceTaskStatusPending = "pending"
 	MaintenanceTaskStatusRunning = "running"
@@ -29,6 +31,11 @@ const (
 type MaintenanceTaskInput struct {
 	Type  string `json:"type"`
 	Limit int    `json:"limit"`
+}
+
+type MaintenanceStats struct {
+	Type    string `json:"type"`
+	Pending int    `json:"pending"`
 }
 
 type MaintenanceTask struct {
@@ -43,6 +50,7 @@ type MaintenanceTask struct {
 	Failed     int        `json:"failed"`
 	Message    string     `json:"message,omitempty"`
 	Error      string     `json:"error,omitempty"`
+	Logs       []string   `json:"logs,omitempty"`
 	CreatedAt  time.Time  `json:"createdAt"`
 	StartedAt  *time.Time `json:"startedAt,omitempty"`
 	FinishedAt *time.Time `json:"finishedAt,omitempty"`
@@ -77,6 +85,7 @@ func (s *service) StartMaintenanceTask(_ context.Context, input MaintenanceTaskI
 		Message:   "queued",
 		CreatedAt: now,
 	}
+	appendMaintenanceLog(task, "queued")
 
 	s.maintenanceMu.Lock()
 	s.maintenanceTasks[id] = task
@@ -86,6 +95,35 @@ func (s *service) StartMaintenanceTask(_ context.Context, input MaintenanceTaskI
 	go s.runMaintenanceTask(id)
 
 	return cloneMaintenanceTask(task), nil
+}
+
+func (s *service) GetMaintenanceStats(ctx context.Context, taskType string) (MaintenanceStats, error) {
+	if s.mediaService == nil {
+		return MaintenanceStats{}, errors.New("media service not available")
+	}
+
+	normalized := strings.TrimSpace(strings.ToLower(taskType))
+	var (
+		pending int
+		err     error
+	)
+
+	switch normalized {
+	case MaintenanceTaskTypeFixLocalized:
+		pending, err = s.mediaService.CountPendingLocalizedMetadata(ctx)
+	case MaintenanceTaskTypeFixCoverCache:
+		pending, err = s.mediaService.CountPendingCoverCache(ctx)
+	default:
+		return MaintenanceStats{}, fmt.Errorf("%w: type", ErrInvalidInput)
+	}
+	if err != nil {
+		return MaintenanceStats{}, err
+	}
+
+	return MaintenanceStats{
+		Type:    normalized,
+		Pending: pending,
+	}, nil
 }
 
 func (s *service) GetMaintenanceTask(_ context.Context, taskID string) (MaintenanceTask, error) {
@@ -109,6 +147,7 @@ func (s *service) runMaintenanceTask(taskID string) {
 		task.Status = MaintenanceTaskStatusRunning
 		task.StartedAt = &started
 		task.Message = "running"
+		appendMaintenanceLog(task, "task started")
 	})
 
 	task, ok := s.readMaintenanceTask(taskID)
@@ -137,6 +176,15 @@ func (s *service) runLocalizedTask(task MaintenanceTask) {
 				current.Remaining = progress.Remaining
 				if strings.TrimSpace(progress.CurrentID) != "" {
 					current.Message = fmt.Sprintf("processing %s", progress.CurrentID)
+					appendMaintenanceLog(current, fmt.Sprintf(
+						"localized: %s (%d/%d)",
+						progress.CurrentID,
+						progress.Processed,
+						maxInt(progress.Requested, 1),
+					))
+				} else if strings.TrimSpace(progress.Message) != "" {
+					current.Message = progress.Message
+					appendMaintenanceLog(current, progress.Message)
 				}
 			})
 		},
@@ -152,6 +200,13 @@ func (s *service) runLocalizedTask(task MaintenanceTask) {
 		current.Updated = result.Updated
 		current.Remaining = result.Remaining
 		current.DurationMs = result.DurationMs
+		appendMaintenanceLog(current, fmt.Sprintf(
+			"localized completed: processed=%d updated=%d remaining=%d duration=%dms",
+			result.Processed,
+			result.Updated,
+			result.Remaining,
+			result.DurationMs,
+		))
 	})
 	s.finishMaintenanceTask(task.ID, MaintenanceTaskStatusSuccess, nil, "localized metadata repair completed")
 }
@@ -167,6 +222,15 @@ func (s *service) runCoverCacheTask(task MaintenanceTask) {
 				current.Remaining = progress.Remaining
 				if strings.TrimSpace(progress.CurrentID) != "" {
 					current.Message = fmt.Sprintf("processing %s", progress.CurrentID)
+					appendMaintenanceLog(current, fmt.Sprintf(
+						"cover cache: %s (%d/%d)",
+						progress.CurrentID,
+						progress.Processed,
+						maxInt(progress.Requested, 1),
+					))
+				} else if strings.TrimSpace(progress.Message) != "" {
+					current.Message = progress.Message
+					appendMaintenanceLog(current, progress.Message)
 				}
 			})
 		},
@@ -183,6 +247,14 @@ func (s *service) runCoverCacheTask(task MaintenanceTask) {
 		current.Remaining = result.Remaining
 		current.Failed = result.Failed
 		current.DurationMs = result.DurationMs
+		appendMaintenanceLog(current, fmt.Sprintf(
+			"cover cache completed: processed=%d updated=%d failed=%d remaining=%d duration=%dms",
+			result.Processed,
+			result.Updated,
+			result.Failed,
+			result.Remaining,
+			result.DurationMs,
+		))
 	})
 	s.finishMaintenanceTask(task.ID, MaintenanceTaskStatusSuccess, nil, "cover cache repair completed")
 }
@@ -198,8 +270,10 @@ func (s *service) finishMaintenanceTask(taskID string, status string, runErr err
 		if runErr != nil {
 			task.Error = runErr.Error()
 			task.Message = "failed"
+			appendMaintenanceLog(task, fmt.Sprintf("failed: %s", runErr.Error()))
 		} else if strings.TrimSpace(message) != "" {
 			task.Message = message
+			appendMaintenanceLog(task, message)
 		}
 	})
 	if runErr != nil {
@@ -236,6 +310,9 @@ func cloneMaintenanceTask(task *MaintenanceTask) MaintenanceTask {
 		return MaintenanceTask{}
 	}
 	copy := *task
+	if len(task.Logs) > 0 {
+		copy.Logs = append([]string(nil), task.Logs...)
+	}
 	return copy
 }
 
@@ -258,4 +335,26 @@ func (s *service) pruneMaintenanceTasksLocked(max int) {
 		}
 		delete(s.maintenanceTasks, oldestID)
 	}
+}
+
+func appendMaintenanceLog(task *MaintenanceTask, message string) {
+	if task == nil {
+		return
+	}
+	trimmed := strings.TrimSpace(message)
+	if trimmed == "" {
+		return
+	}
+	entry := fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), trimmed)
+	task.Logs = append(task.Logs, entry)
+	if len(task.Logs) > maintenanceTaskMaxLogs {
+		task.Logs = task.Logs[len(task.Logs)-maintenanceTaskMaxLogs:]
+	}
+}
+
+func maxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
 }

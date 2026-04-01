@@ -121,6 +121,7 @@
     "title": "维护",
     "subtitle": "执行系统维护任务，并实时查看处理进度与结果。",
     "taskType": "任务类型",
+    "pendingCount": "待处理数量",
     "limit": "处理数量",
     "start": "开始执行",
     "started": "维护任务已启动",
@@ -143,7 +144,9 @@
       "failed": "失败",
       "remaining": "剩余",
       "duration": "耗时"
-    }
+    },
+    "executionLogs": "执行详情",
+    "logsEmpty": "暂无执行日志"
   },
   "home": {
     "title": "bitmagnet（比特磁铁）",

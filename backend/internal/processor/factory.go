@@ -6,6 +6,7 @@ import (
 	"github.com/nigowl/bitmagnet/internal/database/dao"
 	"github.com/nigowl/bitmagnet/internal/database/search"
 	"github.com/nigowl/bitmagnet/internal/lazy"
+	"github.com/nigowl/bitmagnet/internal/media"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -17,6 +18,7 @@ type Params struct {
 	Workflow         lazy.Lazy[classifier.Runner]
 	Dao              lazy.Lazy[*dao.Query]
 	BlockingManager  lazy.Lazy[blocking.Manager]
+	MediaService     media.Service `optional:"true"`
 	Logger           *zap.SugaredLogger
 }
 
@@ -44,13 +46,14 @@ func New(p Params) Result {
 			if err != nil {
 				return nil, err
 			}
-
 			return processor{
 				dao:             d,
 				search:          s,
 				blockingManager: bm,
 				runner:          w,
 				defaultWorkflow: p.ClassifierConfig.Workflow,
+				mediaService:    p.MediaService,
+				logger:          p.Logger,
 			}, nil
 		}),
 	}

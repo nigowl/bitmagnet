@@ -4,9 +4,9 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/nigowl/bitmagnet/internal/auth"
 	"github.com/nigowl/bitmagnet/internal/httpserver"
-	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 )
 
@@ -43,6 +43,7 @@ func (b *builder) Apply(e *gin.Engine) error {
 	e.POST("/api/admin/settings/plugins/:pluginKey/test", b.authMiddleware(), b.requireAdmin(), b.testPlugin)
 	e.POST("/api/admin/settings/media/backfill-localized", b.authMiddleware(), b.requireAdmin(), b.backfillLocalizedMetadata)
 	e.POST("/api/admin/maintenance/tasks", b.authMiddleware(), b.requireAdmin(), b.startMaintenanceTask)
+	e.GET("/api/admin/maintenance/stats", b.authMiddleware(), b.requireAdmin(), b.getMaintenanceStats)
 	e.GET("/api/admin/maintenance/tasks/:taskId", b.authMiddleware(), b.requireAdmin(), b.getMaintenanceTask)
 	return nil
 }
@@ -160,6 +161,10 @@ type startMaintenanceTaskRequest struct {
 	Limit int    `json:"limit"`
 }
 
+type maintenanceStatsQuery struct {
+	Type string `form:"type"`
+}
+
 func (b *builder) startMaintenanceTask(c *gin.Context) {
 	var req startMaintenanceTaskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -200,4 +205,25 @@ func (b *builder) getMaintenanceTask(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"task": task})
+}
+
+func (b *builder) getMaintenanceStats(c *gin.Context) {
+	var query maintenanceStatsQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query"})
+		return
+	}
+
+	stats, err := b.service.GetMaintenanceStats(c.Request.Context(), query.Type)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"stats": stats})
 }

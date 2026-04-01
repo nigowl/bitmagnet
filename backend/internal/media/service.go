@@ -36,6 +36,9 @@ type Service interface {
 	Cover(ctx context.Context, id string, kind string, size string) (CoverResult, error)
 	BackfillLocalizedMetadata(ctx context.Context, input BackfillLocalizedInput) (BackfillLocalizedResult, error)
 	BackfillCoverCache(ctx context.Context, input BackfillCoverCacheInput) (BackfillCoverCacheResult, error)
+	CountPendingLocalizedMetadata(ctx context.Context) (int, error)
+	CountPendingCoverCache(ctx context.Context) (int, error)
+	EnsureContentRefsReady(ctx context.Context, refs []model.ContentRef) error
 }
 
 type Params struct {
@@ -304,14 +307,8 @@ func (s *service) BackfillLocalizedMetadata(ctx context.Context, input BackfillL
 	startedAt := time.Now()
 
 	var rows []model.MediaEntry
-	if err := db.WithContext(ctx).
-		Table(model.TableNameMediaEntry).
-		Where("content_source = ?", model.SourceTmdb).
-		Where("content_type IN ?", []model.ContentType{model.ContentTypeMovie, model.ContentTypeTvShow}).
-		Where(`coalesce(name_zh, '') = ''
-			OR coalesce(overview_zh, '') = ''
-			OR coalesce(name_en, '') = ''
-			OR coalesce(overview_en, '') = ''`).
+	if err := localizedPendingScope(db.WithContext(ctx).
+		Table(model.TableNameMediaEntry)).
 		Order("updated_at DESC").
 		Limit(limit).
 		Find(&rows).Error; err != nil {
@@ -365,14 +362,8 @@ func (s *service) BackfillLocalizedMetadata(ctx context.Context, input BackfillL
 	}
 
 	var remaining int64
-	if err := db.WithContext(ctx).
-		Table(model.TableNameMediaEntry).
-		Where("content_source = ?", model.SourceTmdb).
-		Where("content_type IN ?", []model.ContentType{model.ContentTypeMovie, model.ContentTypeTvShow}).
-		Where(`coalesce(name_zh, '') = ''
-			OR coalesce(overview_zh, '') = ''
-			OR coalesce(name_en, '') = ''
-			OR coalesce(overview_en, '') = ''`).
+	if err := localizedPendingScope(db.WithContext(ctx).
+		Table(model.TableNameMediaEntry)).
 		Count(&remaining).Error; err == nil {
 		result.Remaining = int(remaining)
 	}
@@ -406,14 +397,8 @@ func (s *service) BackfillCoverCache(ctx context.Context, input BackfillCoverCac
 	db := q.TorrentContent.WithContext(ctx).UnderlyingDB()
 	startedAt := time.Now()
 
-	var rows []model.MediaEntry
-	if err := db.WithContext(ctx).
-		Table(model.TableNameMediaEntry).
-		Where("torrent_count > 0").
-		Where(`coalesce(poster_path, '') <> '' OR coalesce(backdrop_path, '') <> ''`).
-		Order("updated_at DESC").
-		Limit(limit).
-		Find(&rows).Error; err != nil {
+	rows, err := s.loadPendingCoverEntries(ctx, db, limit)
+	if err != nil {
 		return BackfillCoverCacheResult{}, err
 	}
 
@@ -434,8 +419,7 @@ func (s *service) BackfillCoverCache(ctx context.Context, input BackfillCoverCac
 		result.Processed++
 
 		if strings.TrimSpace(row.PosterPath.String) != "" {
-			cachePath := s.coverCache.variantPath(row.ID, coverKindPoster, coverSizeMD)
-			if !fileExists(cachePath) {
+			if s.entryNeedsCoverCacheKind(row.ID, coverKindPoster, row.PosterPath.String) {
 				if _, resolveErr := s.coverCache.resolvePath(ctx, row.ID, coverKindPoster, coverSizeMD, row.PosterPath.String); resolveErr != nil {
 					result.Failed++
 				} else {
@@ -445,8 +429,7 @@ func (s *service) BackfillCoverCache(ctx context.Context, input BackfillCoverCac
 		}
 
 		if strings.TrimSpace(row.BackdropPath.String) != "" {
-			cachePath := s.coverCache.variantPath(row.ID, coverKindBackdrop, coverSizeMD)
-			if !fileExists(cachePath) {
+			if s.entryNeedsCoverCacheKind(row.ID, coverKindBackdrop, row.BackdropPath.String) {
 				if _, resolveErr := s.coverCache.resolvePath(ctx, row.ID, coverKindBackdrop, coverSizeMD, row.BackdropPath.String); resolveErr != nil {
 					result.Failed++
 				} else {
@@ -469,6 +452,9 @@ func (s *service) BackfillCoverCache(ctx context.Context, input BackfillCoverCac
 		}
 	}
 
+	if remaining, countErr := s.countPendingCoverCacheWithDB(ctx, db); countErr == nil {
+		result.Remaining = remaining
+	}
 	result.DurationMs = time.Since(startedAt).Milliseconds()
 	if input.Progress != nil {
 		input.Progress(BackfillProgressInfo{
@@ -483,11 +469,172 @@ func (s *service) BackfillCoverCache(ctx context.Context, input BackfillCoverCac
 	return result, nil
 }
 
+func (s *service) CountPendingLocalizedMetadata(ctx context.Context) (int, error) {
+	q, err := s.dao.Get()
+	if err != nil {
+		return 0, err
+	}
+
+	db := q.TorrentContent.WithContext(ctx).UnderlyingDB()
+	var count int64
+	if err := localizedPendingScope(db.WithContext(ctx).
+		Table(model.TableNameMediaEntry)).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+
+	return int(count), nil
+}
+
+func (s *service) CountPendingCoverCache(ctx context.Context) (int, error) {
+	q, err := s.dao.Get()
+	if err != nil {
+		return 0, err
+	}
+
+	db := q.TorrentContent.WithContext(ctx).UnderlyingDB()
+	return s.countPendingCoverCacheWithDB(ctx, db)
+}
+
+func (s *service) EnsureContentRefsReady(ctx context.Context, refs []model.ContentRef) error {
+	filteredRefs := filterSupportedRefs(refs)
+	if len(filteredRefs) == 0 {
+		return nil
+	}
+
+	q, err := s.dao.Get()
+	if err != nil {
+		return err
+	}
+
+	db := q.TorrentContent.WithContext(ctx).UnderlyingDB()
+	mediaIDs := make([]string, 0, len(filteredRefs))
+	for _, ref := range filteredRefs {
+		mediaIDs = append(mediaIDs, model.MediaEntryID(ref.Type, ref.Source, ref.ID))
+	}
+
+	var rows []model.MediaEntry
+	if err := db.WithContext(ctx).
+		Table(model.TableNameMediaEntry).
+		Where("id IN ?", mediaIDs).
+		Where("torrent_count > 0").
+		Find(&rows).Error; err != nil {
+		return err
+	}
+
+	var runErr error
+	for _, row := range rows {
+		enriched := s.sitePluginManager.Enrich(ctx, db, row)
+		if enrichErr := enrichStructuredMetadata(ctx, db, []string{enriched.ID}); enrichErr != nil && runErr == nil {
+			runErr = enrichErr
+		}
+
+		current := enriched
+		var refreshed model.MediaEntry
+		if reloadErr := db.WithContext(ctx).
+			Table(model.TableNameMediaEntry).
+			Where("id = ?", enriched.ID).
+			Take(&refreshed).Error; reloadErr == nil {
+			current = refreshed
+		}
+
+		if strings.TrimSpace(current.PosterPath.String) != "" &&
+			s.entryNeedsCoverCacheKind(current.ID, coverKindPoster, current.PosterPath.String) {
+			if _, resolveErr := s.coverCache.resolvePath(ctx, current.ID, coverKindPoster, coverSizeMD, current.PosterPath.String); resolveErr != nil && runErr == nil {
+				runErr = resolveErr
+			}
+		}
+		if strings.TrimSpace(current.BackdropPath.String) != "" &&
+			s.entryNeedsCoverCacheKind(current.ID, coverKindBackdrop, current.BackdropPath.String) {
+			if _, resolveErr := s.coverCache.resolvePath(ctx, current.ID, coverKindBackdrop, coverSizeMD, current.BackdropPath.String); resolveErr != nil && runErr == nil {
+				runErr = resolveErr
+			}
+		}
+	}
+
+	return runErr
+}
+
 func hasBilingualOverviewAndTitle(entry model.MediaEntry) bool {
 	return strings.TrimSpace(entry.NameZh.String) != "" &&
 		strings.TrimSpace(entry.OverviewZh.String) != "" &&
 		strings.TrimSpace(entry.NameEn.String) != "" &&
 		strings.TrimSpace(entry.OverviewEn.String) != ""
+}
+
+func localizedPendingScope(db *gorm.DB) *gorm.DB {
+	return db.Where("torrent_count > 0").
+		Where("content_source = ?", model.SourceTmdb).
+		Where("content_type IN ?", []model.ContentType{model.ContentTypeMovie, model.ContentTypeTvShow}).
+		Where(`coalesce(name_zh, '') = ''
+			OR coalesce(overview_zh, '') = ''
+			OR coalesce(name_en, '') = ''
+			OR coalesce(overview_en, '') = ''`)
+}
+
+func (s *service) loadPendingCoverEntries(ctx context.Context, db *gorm.DB, limit int) ([]model.MediaEntry, error) {
+	candidates, err := s.loadCoverCacheCandidates(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+
+	capacity := len(candidates)
+	if limit < capacity {
+		capacity = limit
+	}
+	entries := make([]model.MediaEntry, 0, capacity)
+	for _, row := range candidates {
+		if !s.entryNeedsCoverCache(row) {
+			continue
+		}
+		entries = append(entries, row)
+		if len(entries) >= limit {
+			break
+		}
+	}
+
+	return entries, nil
+}
+
+func (s *service) loadCoverCacheCandidates(ctx context.Context, db *gorm.DB) ([]model.MediaEntry, error) {
+	var rows []model.MediaEntry
+	if err := db.WithContext(ctx).
+		Table(model.TableNameMediaEntry).
+		Where("torrent_count > 0").
+		Where(`coalesce(poster_path, '') <> '' OR coalesce(backdrop_path, '') <> ''`).
+		Order("updated_at DESC").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func (s *service) countPendingCoverCacheWithDB(ctx context.Context, db *gorm.DB) (int, error) {
+	candidates, err := s.loadCoverCacheCandidates(ctx, db)
+	if err != nil {
+		return 0, err
+	}
+
+	pending := 0
+	for _, row := range candidates {
+		if s.entryNeedsCoverCache(row) {
+			pending++
+		}
+	}
+	return pending, nil
+}
+
+func (s *service) entryNeedsCoverCache(entry model.MediaEntry) bool {
+	return s.entryNeedsCoverCacheKind(entry.ID, coverKindPoster, entry.PosterPath.String) ||
+		s.entryNeedsCoverCacheKind(entry.ID, coverKindBackdrop, entry.BackdropPath.String)
+}
+
+func (s *service) entryNeedsCoverCacheKind(mediaID string, kind coverKind, sourcePath string) bool {
+	if strings.TrimSpace(sourcePath) == "" {
+		return false
+	}
+	cachePath := s.coverCache.variantPath(mediaID, kind, coverSizeMD)
+	return !fileExists(cachePath)
 }
 
 func (s *service) Cover(ctx context.Context, id string, kind string, size string) (CoverResult, error) {

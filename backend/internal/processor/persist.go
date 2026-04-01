@@ -62,7 +62,8 @@ func (c processor) persist(ctx context.Context, payload persistPayload) error {
 		}
 	}
 
-	return c.dao.Transaction(func(tx *dao.Query) error {
+	refsToWarm := make([]model.ContentRef, 0, len(affectedMediaRefs))
+	if err := c.dao.Transaction(func(tx *dao.Query) error {
 		if len(payload.deleteIDs) > 0 {
 			deletedRows, deletedErr := tx.TorrentContent.WithContext(ctx).Where(
 				c.dao.TorrentContent.ID.In(payload.deleteIDs...),
@@ -151,10 +152,16 @@ func (c processor) persist(ctx context.Context, payload persistPayload) error {
 			if err := mediasvc.SyncEntries(ctx, tx.TorrentContent.WithContext(ctx).UnderlyingDB(), affectedRefs); err != nil {
 				return err
 			}
+			refsToWarm = append(refsToWarm[:0], affectedRefs...)
 		}
 
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	c.ensureMediaRefsReady(refsToWarm)
+	return nil
 }
 
 func mediaContentRefFromTorrentContent(tc model.TorrentContent) (model.ContentRef, bool) {

@@ -160,17 +160,17 @@ body {
 }
 
 .site-footer {
-  position: relative;
   z-index: 3;
-  padding: 10px clamp(14px, 2.2vw, 34px) 18px;
-  display: flex;
-  align-items: center;
+  color: var(--muted-text);
+  text-align: center;
   justify-content: center;
+  align-items: center;
   gap: 10px;
-  color: color-mix(in srgb, var(--page-text) 74%, var(--muted-text));
   font-size: 12px;
   font-weight: 600;
-  text-align: center;
+  display: flex;
+  position: relative;
+  padding: 30px 0;
 }
 
 .site-footer-copy,
@@ -562,6 +562,61 @@ body {
   color: var(--brand-orange-deep);
 }
 
+.app-tabs .mantine-Tabs-list {
+  position: relative;
+  border-bottom: 1px solid color-mix(in srgb, var(--card-border) 86%, transparent);
+  gap: 2px;
+}
+
+.app-tabs .mantine-Tabs-tab {
+  position: relative;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted-text);
+  font-weight: 700;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.app-tabs .mantine-Tabs-tab:hover {
+  background: transparent;
+  color: var(--page-text);
+}
+
+.app-tabs .mantine-Tabs-tab[data-active="true"] {
+  color: var(--brand-orange-deep);
+}
+
+.app-tabs-inkbar {
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  height: 2px;
+  width: 0;
+  border-radius: var(--radius-pill);
+  background: var(--brand-orange);
+  opacity: 1;
+  pointer-events: none;
+  transform: translateX(0);
+  transition:
+    transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.app-tabs-inkbar[data-state="hover"] {
+  opacity: 0.72;
+}
+
+.app-tabs-inkbar[data-state="active"] {
+  opacity: 1;
+}
+
+.app-tabs-inkbar.app-tabs-inkbar-instant {
+  transition: none;
+}
+
 .mantine-Pagination-control {
   background: color-mix(in srgb, var(--card-bg) 86%, var(--muted-surface));
   border-color: var(--card-border);
@@ -876,6 +931,50 @@ body {
 
 .home-media-item {
   width: 240px;
+}
+
+.favorites-media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 180px));
+  gap: 16px;
+  justify-content: center;
+}
+
+.favorites-media-item {
+  width: 100%;
+  max-width: 180px;
+}
+
+.favorites-media-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.favorites-media-link {
+  display: block;
+  color: inherit;
+}
+
+.favorites-media-card .media-wall-content {
+  padding: 12px;
+}
+
+.favorites-media-card .media-wall-title {
+  font-size: 14px;
+}
+
+.favorites-media-card .media-wall-facts {
+  font-size: 11px;
+}
+
+.favorites-media-actions {
+  margin-top: auto;
+  padding: 0 10px 10px;
+}
+
+.favorites-media-remove {
+  width: 100%;
 }
 
 .home-media-card {
@@ -1372,6 +1471,15 @@ body {
     justify-content: stretch;
   }
 
+  .favorites-media-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    justify-content: stretch;
+  }
+
+  .favorites-media-item {
+    max-width: none;
+  }
+
   .home-media-item {
     width: auto;
   }
@@ -1443,4 +1551,46 @@ body {
   color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.settings-plugin-accordion .mantine-Accordion-item {
+  border: 1px solid color-mix(in srgb, var(--card-border) 82%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--card-bg) 82%, var(--muted-surface));
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
+}
+
+.settings-plugin-accordion .mantine-Accordion-item+.mantine-Accordion-item {
+  margin-top: 10px;
+}
+
+.settings-plugin-accordion .mantine-Accordion-item:hover {
+  border-color: color-mix(in srgb, var(--brand-orange) 38%, var(--card-border));
+  box-shadow: var(--soft-shadow);
+  transform: translateY(-1px);
+}
+
+.settings-plugin-accordion .mantine-Accordion-item[data-active="true"] {
+  border-color: color-mix(in srgb, var(--brand-orange) 46%, var(--card-border));
+  background: color-mix(in srgb, var(--card-bg) 88%, var(--brand-muted));
+}
+
+.settings-plugin-accordion .mantine-Accordion-control {
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--page-text);
+  font-weight: 700;
+}
+
+.settings-plugin-accordion .mantine-Accordion-control:hover {
+  background: color-mix(in srgb, var(--brand-muted) 40%, transparent);
+}
+
+.settings-plugin-accordion .mantine-Accordion-panel {
+  border-top: 1px solid color-mix(in srgb, var(--card-border) 74%, transparent);
+}
+
+.settings-plugin-accordion .mantine-Accordion-content {
+  background: transparent;
 }

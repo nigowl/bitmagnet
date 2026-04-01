@@ -45,18 +45,6 @@ func (s *service) TestPlugin(ctx context.Context, pluginKey string, input Plugin
 }
 
 func (s *service) testTMDBPlugin(ctx context.Context, input PluginTestInput) (PluginTestResult, error) {
-	settings, err := s.Get(ctx)
-	if err != nil {
-		return PluginTestResult{}, err
-	}
-	if !settings.TMDBEnabled {
-		return PluginTestResult{
-			Plugin:  model.SourceTmdb,
-			Success: false,
-			Message: "TMDB plugin is disabled",
-		}, nil
-	}
-
 	query := strings.TrimSpace(input.Query)
 	if query == "" {
 		query = strings.TrimSpace(input.Title)
@@ -134,18 +122,6 @@ func (s *service) testTMDBPlugin(ctx context.Context, input PluginTestInput) (Pl
 }
 
 func (s *service) testIMDbPlugin(ctx context.Context, input PluginTestInput) (PluginTestResult, error) {
-	settings, err := s.Get(ctx)
-	if err != nil {
-		return PluginTestResult{}, err
-	}
-	if !settings.IMDbEnabled {
-		return PluginTestResult{
-			Plugin:  model.SourceImdb,
-			Success: false,
-			Message: "IMDb plugin is disabled",
-		}, nil
-	}
-
 	rawID := strings.TrimSpace(input.IMDbID)
 	if rawID == "" {
 		rawID = strings.TrimSpace(input.ExternalID)
@@ -208,13 +184,6 @@ func (s *service) testDoubanPlugin(ctx context.Context, input PluginTestInput) (
 	if err != nil {
 		return PluginTestResult{}, err
 	}
-	if !settings.DoubanEnabled {
-		return PluginTestResult{
-			Plugin:  model.SourceDouban,
-			Success: false,
-			Message: "Douban plugin is disabled",
-		}, nil
-	}
 
 	title := strings.TrimSpace(input.Title)
 	if title == "" {
@@ -225,7 +194,7 @@ func (s *service) testDoubanPlugin(ctx context.Context, input PluginTestInput) (
 	}
 
 	testResult, err := douban.TestMatch(ctx, douban.Config{
-		Enabled:        settings.DoubanEnabled,
+		Enabled:        true,
 		SuggestURL:     s.mediaConfig.DoubanSuggestURL,
 		SearchURL:      s.mediaConfig.DoubanSearchURL,
 		MinScore:       settings.DoubanMinScore,

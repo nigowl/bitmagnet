@@ -123,7 +123,7 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
   const [search, setSearch] = useState(initialQuery);
   const [debouncedSearch] = useDebouncedValue(search, 250);
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  const [limit, setLimit] = useState(20);
   const [contentTypeFilters, setContentTypeFilters] = useState<string[]>([]);
   const [sourceFilters, setSourceFilters] = useState<string[]>([]);
   const [tagFilters, setTagFilters] = useState<string[]>([]);
@@ -427,7 +427,7 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
               </Accordion.Panel>
             </Accordion.Item>
 
-            <Accordion.Item value="source">
+            {/* <Accordion.Item value="source">
               <Accordion.Control>{t("torrents.sourceFilter")}</Accordion.Control>
               <Accordion.Panel>
                 {(result?.aggregations.torrentSource.length || 0) === 0 ? (
@@ -457,7 +457,7 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
                   </Checkbox.Group>
                 )}
               </Accordion.Panel>
-            </Accordion.Item>
+            </Accordion.Item> */}
 
             <Accordion.Item value="tag">
               <Accordion.Control>{t("torrents.tagFilter")}</Accordion.Control>
@@ -628,7 +628,7 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
                 ]}
                 value={String(limit)}
                 onChange={(value) => {
-                  setLimit(Number(value) || 10);
+                  setLimit(Number(value) || 20);
                   setPage(1);
                 }}
               />

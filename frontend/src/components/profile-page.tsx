@@ -22,6 +22,7 @@ import { useAuth } from "@/auth/provider";
 import { graphqlRequest } from "@/lib/api";
 import { TORRENT_CONTENT_SEARCH_QUERY } from "@/lib/graphql";
 import { buildMediaDetailHref, buildMediaEntryIdFromContentRef, isAnimeItem, type MediaLikeItem } from "@/lib/media";
+import { useTabsUnderline } from "@/lib/use-tabs-underline";
 import { useI18n } from "@/languages/provider";
 
 type FavoriteItem = {
@@ -101,6 +102,7 @@ export function ProfilePage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
+  const tabsRef = useTabsUnderline();
 
   useEffect(() => {
     const loadFavorites = async () => {
@@ -211,7 +213,7 @@ export function ProfilePage() {
       </Card>
 
       <Card className="glass-card" withBorder>
-        <Tabs defaultValue="favorites">
+        <Tabs ref={tabsRef} className="app-tabs" defaultValue="favorites">
           <Tabs.List grow>
             <Tabs.Tab value="favorites">{t("profile.tabFavorites")}</Tabs.Tab>
             <Tabs.Tab value="security">{t("profile.tabSecurity")}</Tabs.Tab>

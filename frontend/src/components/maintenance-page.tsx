@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Badge,
   Button,
@@ -36,6 +36,7 @@ type MaintenanceTask = {
   failed: number;
   message?: string;
   error?: string;
+  logs?: string[];
   createdAt: string;
   startedAt?: string;
   finishedAt?: string;
@@ -50,6 +51,13 @@ type TaskStatusResponse = {
   task: MaintenanceTask;
 };
 
+type MaintenanceStatsResponse = {
+  stats: {
+    type: MaintenanceTaskType;
+    pending: number;
+  };
+};
+
 export function MaintenancePage() {
   const { t } = useI18n();
   const { user, isAdmin, loading: authLoading } = useAuth();
@@ -59,6 +67,25 @@ export function MaintenancePage() {
   const [starting, setStarting] = useState(false);
   const [task, setTask] = useState<MaintenanceTask | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [pending, setPending] = useState<number | null>(null);
+  const [pendingLoading, setPendingLoading] = useState(false);
+
+  const refreshPending = useCallback(async (type: MaintenanceTaskType) => {
+    if (!user || !isAdmin) {
+      return;
+    }
+    setPendingLoading(true);
+    try {
+      const data = await apiRequest<MaintenanceStatsResponse>(
+        `/api/admin/maintenance/stats?type=${encodeURIComponent(type)}`
+      );
+      setPending(data.stats.pending);
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setPendingLoading(false);
+    }
+  }, [isAdmin, user]);
 
   const refreshTask = async (taskId: string) => {
     setRefreshing(true);
@@ -84,6 +111,20 @@ export function MaintenancePage() {
     return () => window.clearInterval(timer);
   }, [task]);
 
+  useEffect(() => {
+    if (!user || !isAdmin) {
+      return;
+    }
+    void refreshPending(taskType);
+  }, [taskType, user, isAdmin, refreshPending]);
+
+  useEffect(() => {
+    if (!task || (task.status !== "success" && task.status !== "failed")) {
+      return;
+    }
+    void refreshPending(task.type);
+  }, [task, refreshPending]);
+
   const startTask = async () => {
     setStarting(true);
     try {
@@ -95,6 +136,7 @@ export function MaintenancePage() {
         }
       });
       setTask(data.task);
+      void refreshPending(taskType);
       notifications.show({ color: "green", message: t("maintenance.started") });
     } catch (error) {
       notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
@@ -155,6 +197,9 @@ export function MaintenancePage() {
             ]}
             allowDeselect={false}
           />
+          <Text size="sm" c="dimmed">
+            {t("maintenance.pendingCount")}: {pendingLoading ? "..." : (pending ?? 0)}
+          </Text>
 
           <NumberInput
             label={t("maintenance.limit")}
@@ -217,10 +262,27 @@ export function MaintenancePage() {
 
             {task.message ? <Text size="sm">{task.message}</Text> : null}
             {task.error ? <Text size="sm" c="red">{task.error}</Text> : null}
+            <Stack gap={4}>
+              <Text size="sm" fw={600}>
+                {t("maintenance.executionLogs")}
+              </Text>
+              {task.logs && task.logs.length > 0 ? (
+                <Stack gap={2}>
+                  {task.logs.map((line, index) => (
+                    <Text key={`${line}-${index}`} size="xs" c="dimmed">
+                      {line}
+                    </Text>
+                  ))}
+                </Stack>
+              ) : (
+                <Text size="sm" c="dimmed">
+                  {t("maintenance.logsEmpty")}
+                </Text>
+              )}
+            </Stack>
           </Stack>
         </Card>
       ) : null}
     </Stack>
   );
 }
-

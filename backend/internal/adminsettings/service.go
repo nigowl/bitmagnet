@@ -55,6 +55,7 @@ type Service interface {
 	TestPlugin(ctx context.Context, pluginKey string, input PluginTestInput) (PluginTestResult, error)
 	BackfillLocalizedMetadata(ctx context.Context, limit int) (media.BackfillLocalizedResult, error)
 	StartMaintenanceTask(ctx context.Context, input MaintenanceTaskInput) (MaintenanceTask, error)
+	GetMaintenanceStats(ctx context.Context, taskType string) (MaintenanceStats, error)
 	GetMaintenanceTask(ctx context.Context, taskID string) (MaintenanceTask, error)
 }
 

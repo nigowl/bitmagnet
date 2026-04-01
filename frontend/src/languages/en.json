@@ -121,6 +121,7 @@
     "title": "Maintenance",
     "subtitle": "Run maintenance tasks and watch progress in real time.",
     "taskType": "Task Type",
+    "pendingCount": "Pending Count",
     "limit": "Processing Limit",
     "start": "Start Task",
     "started": "Maintenance task started",
@@ -143,7 +144,9 @@
       "failed": "Failed",
       "remaining": "Remaining",
       "duration": "Duration"
-    }
+    },
+    "executionLogs": "Execution Details",
+    "logsEmpty": "No execution logs yet"
   },
   "home": {
     "title": "bitmagnet",

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/nigowl/bitmagnet/internal/blocking"
 	"github.com/nigowl/bitmagnet/internal/classifier"
@@ -12,8 +13,10 @@ import (
 	"github.com/nigowl/bitmagnet/internal/database/dao"
 	"github.com/nigowl/bitmagnet/internal/database/query"
 	"github.com/nigowl/bitmagnet/internal/database/search"
+	"github.com/nigowl/bitmagnet/internal/media"
 	"github.com/nigowl/bitmagnet/internal/model"
 	"github.com/nigowl/bitmagnet/internal/protocol"
+	"go.uber.org/zap"
 	"gorm.io/gen/field"
 	"gorm.io/gorm/clause"
 )
@@ -28,6 +31,8 @@ type processor struct {
 	runner          classifier.Runner
 	dao             *dao.Query
 	blockingManager blocking.Manager
+	mediaService    media.Service
+	logger          *zap.SugaredLogger
 }
 
 type MissingHashesError struct {
@@ -231,4 +236,20 @@ func newTorrentContent(t model.Torrent, c classification.Result) model.TorrentCo
 	tc.UpdateTsv()
 
 	return tc
+}
+
+func (c processor) ensureMediaRefsReady(refs []model.ContentRef) {
+	if c.mediaService == nil || len(refs) == 0 {
+		return
+	}
+
+	refsCopy := append([]model.ContentRef(nil), refs...)
+	go func() {
+		runCtx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+
+		if err := c.mediaService.EnsureContentRefsReady(runCtx, refsCopy); err != nil && c.logger != nil {
+			c.logger.Warnw("ensure media refs ready failed", "error", err, "refCount", len(refsCopy))
+		}
+	}()
 }
