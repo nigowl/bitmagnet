@@ -31,6 +31,10 @@ func (r *queueJobResolver) RanAt(ctx context.Context, obj *model.QueueJob) (*tim
 
 // Jobs is the resolver for the jobs field.
 func (r *queueQueryResolver) Jobs(ctx context.Context, obj *gqlmodel.QueueQuery, input gqlmodel.QueueJobsQueryInput) (gqlmodel.QueueJobsQueryResult, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return gqlmodel.QueueJobsQueryResult{}, err
+	}
+
 	return gqlmodel.QueueQuery{QueueJobSearch: r.Search}.Jobs(ctx, input)
 }
 

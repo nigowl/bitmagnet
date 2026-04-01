@@ -64,17 +64,19 @@ func (c Content) ExternalLinks() []ExternalLink {
 
 func getExternalLinkURL(contentType ContentType, source, id string) NullString {
 	switch source {
-	case "imdb":
+	case SourceImdb:
 		return NewNullString("https://www.imdb.com/title/" + id)
-	case "tmdb":
+	case SourceTmdb:
 		switch contentType {
 		case ContentTypeTvShow:
 			return NewNullString("https://www.themoviedb.org/tv/" + id)
 		default:
 			return NewNullString("https://www.themoviedb.org/movie/" + id)
 		}
-	case "tvdb":
+	case SourceTvdb:
 		return NewNullString("https://www.thetvdb.com/dereferrer/series/" + id)
+	case SourceDouban:
+		return NewNullString("https://movie.douban.com/subject/" + id + "/")
 	}
 
 	return NullString{}

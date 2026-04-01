@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge, Button, Card, Group, Loader, Stack, Table, Text, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { ArrowLeft, ExternalLink, RefreshCw } from "lucide-react";
+import { ArrowLeft, ExternalLink, Heart, HeartOff, RefreshCw } from "lucide-react";
+import { useAuthDialog } from "@/auth/dialog";
+import { useAuth } from "@/auth/provider";
 import { graphqlRequest } from "@/lib/api";
 import { TORRENT_CONTENT_SEARCH_QUERY, TORRENT_FILES_QUERY } from "@/lib/graphql";
 import { useI18n } from "@/languages/provider";
@@ -67,6 +69,8 @@ function formatBytes(size: number): string {
 
 export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
   const { t } = useI18n();
+  const { openLogin } = useAuthDialog();
+  const { user, hasFavorite, toggleFavorite } = useAuth();
   const [loading, setLoading] = useState(true);
   const [item, setItem] = useState<DetailResponse["torrentContent"]["search"]["items"][number] | null>(null);
   const [files, setFiles] = useState<FilesResponse["torrent"]["files"]["items"]>([]);
@@ -202,28 +206,54 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
     );
   }
 
+  const favoriteActive = hasFavorite(infoHash);
+
   return (
     <Stack gap="md">
       <Group justify="space-between">
         <Button renderRoot={(props) => <Link href="/torrents" {...props} />} leftSection={<ArrowLeft size={14} />} variant="light">
           {t("torrents.backToList")}
         </Button>
-        <Button leftSection={<RefreshCw size={14} />} variant="default" onClick={() => void load()}>
-          {t("common.refresh")}
-        </Button>
+        <Group>
+          <Button
+            leftSection={favoriteActive ? <HeartOff size={14} /> : <Heart size={14} />}
+            variant={favoriteActive ? "light" : "default"}
+            onClick={() => {
+              if (!user) {
+                openLogin();
+                return;
+              }
+              void toggleFavorite(infoHash)
+                .then(() => {
+                  notifications.show({
+                    color: "green",
+                    message: favoriteActive ? t("profile.favoriteRemoved") : t("profile.favoriteAdded")
+                  });
+                })
+                .catch((error: unknown) => {
+                  notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+                });
+            }}
+          >
+            {favoriteActive ? t("profile.removeFavorite") : t("profile.addFavorite")}
+          </Button>
+          <Button leftSection={<RefreshCw size={14} />} variant="default" onClick={() => void load()}>
+            {t("common.refresh")}
+          </Button>
+        </Group>
       </Group>
 
       <Card className="glass-card" withBorder>
-        <Stack gap="xs">
-          <Title order={2}>{item.content?.title || item.title || item.torrent.name}</Title>
-          <Text c="dimmed">{item.content?.overview || item.torrent.name}</Text>
-          <Group gap="xs">
+        <Stack gap="xs" className="entity-hero-stack">
+          <Title order={2} className="entity-title">{item.content?.title || item.title || item.torrent.name}</Title>
+          <Text c="dimmed" className="entity-subtitle">{item.content?.overview || item.torrent.name}</Text>
+          <Group gap="xs" className="card-meta-row">
             <Badge variant="light">{renderContentType(item.contentType)}</Badge>
             <Badge variant="light">{t("torrents.table.seeders")}: {item.seeders ?? "-"}</Badge>
             <Badge variant="light">{t("torrents.table.leechers")}: {item.leechers ?? "-"}</Badge>
             <Badge variant="light">{formatBytes(item.torrent.size)}</Badge>
           </Group>
-          <Text size="sm" ff="monospace">
+          <Text size="sm" ff="monospace" className="detail-code-line">
             {item.infoHash}
           </Text>
           <Group gap={6}>

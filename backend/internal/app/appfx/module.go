@@ -9,6 +9,7 @@ import (
 	"github.com/bitmagnet-io/bitmagnet/internal/app/cmd/processcmd"
 	"github.com/bitmagnet-io/bitmagnet/internal/app/cmd/reprocesscmd"
 	"github.com/bitmagnet-io/bitmagnet/internal/app/cmd/workercmd"
+	"github.com/bitmagnet-io/bitmagnet/internal/auth/authfx"
 	"github.com/bitmagnet-io/bitmagnet/internal/blocking/blockingfx"
 	"github.com/bitmagnet-io/bitmagnet/internal/classifier/classifierfx"
 	"github.com/bitmagnet-io/bitmagnet/internal/config/configfx"
@@ -20,6 +21,7 @@ import (
 	"github.com/bitmagnet-io/bitmagnet/internal/httpserver/httpserverfx"
 	"github.com/bitmagnet-io/bitmagnet/internal/importer/importerfx"
 	"github.com/bitmagnet-io/bitmagnet/internal/logging/loggingfx"
+	"github.com/bitmagnet-io/bitmagnet/internal/media/mediafx"
 	"github.com/bitmagnet-io/bitmagnet/internal/metrics/metricsfx"
 	"github.com/bitmagnet-io/bitmagnet/internal/processor/processorfx"
 	"github.com/bitmagnet-io/bitmagnet/internal/protocol/dht/dhtfx"
@@ -38,6 +40,7 @@ import (
 func New() fx.Option {
 	return fx.Module(
 		"app",
+		authfx.New(),
 		blockingfx.New(),
 		classifierfx.New(),
 		configfx.New(),
@@ -49,6 +52,7 @@ func New() fx.Option {
 		httpserverfx.New(),
 		importerfx.New(),
 		loggingfx.New(),
+		mediafx.New(),
 		metainfofx.New(),
 		metricsfx.New(),
 		processorfx.New(),

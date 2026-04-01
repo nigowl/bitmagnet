@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const TableNameMetadataSource = "metadata_sources"
+var TableNameMetadataSource = "metadata_sources"
 
 // MetadataSource mapped from table <metadata_sources>
 type MetadataSource struct {

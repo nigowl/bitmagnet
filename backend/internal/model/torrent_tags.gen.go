@@ -10,7 +10,7 @@ import (
 	"github.com/bitmagnet-io/bitmagnet/internal/protocol"
 )
 
-const TableNameTorrentTag = "torrent_tags"
+var TableNameTorrentTag = "torrent_tags"
 
 // TorrentTag mapped from table <torrent_tags>
 type TorrentTag struct {

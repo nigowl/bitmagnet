@@ -11,6 +11,7 @@ type Config struct {
 	User              string
 	Port              uint
 	Name              string
+	TablePrefix       string
 	ConnectionTimeout uint
 	Password          string
 	SSLMode           string
@@ -21,10 +22,11 @@ type Config struct {
 
 func NewDefaultConfig() Config {
 	return Config{
-		Host: "localhost",
-		User: "postgres",
-		Port: 5432,
-		Name: "bitmagnet",
+		Host:        "localhost",
+		User:        "postgres",
+		Port:        5432,
+		Name:        "bitmagnet",
+		TablePrefix: "bm_",
 	}
 }
 

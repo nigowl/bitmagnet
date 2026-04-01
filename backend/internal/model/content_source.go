@@ -1,7 +1,8 @@
 package model
 
 const (
-	SourceTmdb = "tmdb"
-	SourceImdb = "imdb"
-	SourceTvdb = "tvdb"
+	SourceTmdb   = "tmdb"
+	SourceImdb   = "imdb"
+	SourceTvdb   = "tvdb"
+	SourceDouban = "douban"
 )

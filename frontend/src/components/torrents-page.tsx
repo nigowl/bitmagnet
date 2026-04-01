@@ -3,15 +3,15 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Accordion,
   ActionIcon,
   Badge,
   Button,
   Card,
+  Checkbox,
   Group,
   Loader,
   Modal,
-  MultiSelect,
-  NumberInput,
   Pagination,
   ScrollArea,
   Select,
@@ -50,6 +50,7 @@ type TorrentRow = {
     infoHash: string;
     name: string;
     size: number;
+    filesCount?: number | null;
     singleFile?: boolean | null;
     fileType?: string | null;
     seeders?: number | null;
@@ -122,8 +123,8 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
   const [search, setSearch] = useState(initialQuery);
   const [debouncedSearch] = useDebouncedValue(search, 250);
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
-  const [contentType, setContentType] = useState<string | null>(null);
+  const [limit, setLimit] = useState(10);
+  const [contentTypeFilters, setContentTypeFilters] = useState<string[]>([]);
   const [sourceFilters, setSourceFilters] = useState<string[]>([]);
   const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [orderBy, setOrderBy] = useState<(typeof torrentOrderFields)[number]>("updated_at");
@@ -163,12 +164,23 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
     [t]
   );
 
-  const contentTypeOptions = useMemo(
-    () => [
-      { value: "", label: t("torrents.all") },
-      ...contentTypes.map((key) => ({ value: key, label: t(`contentTypes.${key}`) }))
-    ],
-    [t]
+  const contentTypeCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    (result?.aggregations.contentType || []).forEach((item) => {
+      if (!item.value) return;
+      counts.set(item.value, item.count);
+    });
+    return counts;
+  }, [result?.aggregations.contentType]);
+
+  const contentTypeBlockOptions = useMemo(
+    () =>
+      contentTypes.map((key) => ({
+        value: key,
+        label: t(`contentTypes.${key}`),
+        count: contentTypeCounts.get(key) ?? 0
+      })),
+    [contentTypeCounts, t]
   );
 
   const totalPages = useMemo(() => {
@@ -205,7 +217,7 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
           facets: {
             contentType: {
               aggregate: true,
-              filter: contentType ? [contentType] : undefined
+              filter: contentTypeFilters.length ? contentTypeFilters : undefined
             },
             torrentSource: {
               aggregate: true,
@@ -224,7 +236,7 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
     } finally {
       setLoading(false);
     }
-  }, [contentType, debouncedSearch, descending, limit, orderBy, page, sourceFilters, tagFilters]);
+  }, [contentTypeFilters, debouncedSearch, descending, limit, orderBy, page, sourceFilters, tagFilters]);
 
   useEffect(() => {
     void load();
@@ -237,7 +249,7 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
 
   const clearFilters = () => {
     setSearch("");
-    setContentType(null);
+    setContentTypeFilters([]);
     setSourceFilters([]);
     setTagFilters([]);
     setOrderBy("updated_at");
@@ -354,8 +366,8 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
     <Stack gap="md">
       <Group justify="space-between">
         <div>
-          <Title order={2}>{t("torrents.title")}</Title>
-          <Text c="dimmed">{t("torrents.subtitle")}</Text>
+          <Title order={2} className="page-title">{t("torrents.title")}</Title>
+          <Text c="dimmed" className="page-subtitle">{t("torrents.subtitle")}</Text>
         </div>
         <Group>
           <Button leftSection={<FilterX size={16} />} variant="light" onClick={clearFilters}>
@@ -367,149 +379,260 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
         </Group>
       </Group>
 
-      <Group align="flex-start" wrap="wrap">
-        <Card className="glass-card" withBorder w={{ base: "100%", lg: 320 }}>
-          <Stack>
-            <TextInput
-              label={t("torrents.search")}
-              leftSection={<Search size={16} />}
-              value={search}
-              onChange={(event) => {
-                setSearch(event.currentTarget.value);
-                setPage(1);
-              }}
-            />
-            <Select
-              label={t("torrents.contentType")}
-              data={contentTypeOptions}
-              value={contentType || ""}
-              onChange={(value) => {
-                setContentType(value || null);
-                setPage(1);
-              }}
-            />
-            <Select
-              label={t("torrents.orderBy")}
-              data={torrentOrderFields.map((item) => ({ value: item, label: orderLabels[item] }))}
-              value={orderBy}
-              onChange={(value) => {
-                if (!value) return;
-                setOrderBy(value as (typeof torrentOrderFields)[number]);
-                setPage(1);
-              }}
-            />
-            <Select
-              label={t("torrents.direction")}
-              data={[
-                { value: "desc", label: t("common.desc") },
-                { value: "asc", label: t("common.asc") }
-              ]}
-              value={descending ? "desc" : "asc"}
-              onChange={(value) => {
-                setDescending(value !== "asc");
-                setPage(1);
-              }}
-            />
-            <NumberInput
-              label={t("torrents.pageSize")}
-              min={5}
-              max={100}
-              value={limit}
-              onChange={(value) => {
-                setLimit(Number(value) || 20);
-                setPage(1);
-              }}
-            />
-            <MultiSelect
-              label={t("torrents.sourceFilter")}
-              data={(result?.aggregations.torrentSource || []).map((item) => ({ value: item.value, label: `${item.label} (${item.count})` }))}
-              value={sourceFilters}
-              onChange={(value) => {
-                setSourceFilters(value);
-                setPage(1);
-              }}
-              searchable
-            />
-            <MultiSelect
-              label={t("torrents.tagFilter")}
-              data={(result?.aggregations.torrentTag || []).map((item) => ({ value: item.value, label: `${item.label} (${item.count})` }))}
-              value={tagFilters}
-              onChange={(value) => {
-                setTagFilters(value);
-                setPage(1);
-              }}
-              searchable
-            />
-          </Stack>
+      <Group align="flex-start" wrap="wrap" className="torrents-layout">
+        <Card className="glass-card torrent-filter-sidebar" withBorder w={{ base: "100%", lg: 320 }}>
+          <Accordion className="torrents-filters" multiple defaultValue={["searchSort", "contentType", "source", "tag"]}>
+            <Accordion.Item value="searchSort">
+              <Accordion.Control>{t("torrents.search")} / {t("torrents.orderBy")}</Accordion.Control>
+              <Accordion.Panel>
+                <Stack>
+                  <TextInput
+                    label={t("torrents.search")}
+                    leftSection={<Search size={16} />}
+                    value={search}
+                    onChange={(event) => {
+                      setSearch(event.currentTarget.value);
+                      setPage(1);
+                    }}
+                  />
+                </Stack>
+              </Accordion.Panel>
+            </Accordion.Item>
+
+            <Accordion.Item value="contentType">
+              <Accordion.Control>{t("torrents.contentType")}</Accordion.Control>
+              <Accordion.Panel>
+                <Checkbox.Group
+                  value={contentTypeFilters}
+                  onChange={(value) => {
+                    setContentTypeFilters(value);
+                    setPage(1);
+                  }}
+                >
+                  <Stack gap={8}>
+                    {contentTypeBlockOptions.map((item) => (
+                      <Checkbox
+                        key={item.value}
+                        value={item.value}
+                        label={
+                          <span className="filter-option-label">
+                            <Text size="sm">{item.label}</Text>
+                            <Badge size="xs" variant="light" className="filter-option-count">{item.count}</Badge>
+                          </span>
+                        }
+                      />
+                    ))}
+                  </Stack>
+                </Checkbox.Group>
+              </Accordion.Panel>
+            </Accordion.Item>
+
+            <Accordion.Item value="source">
+              <Accordion.Control>{t("torrents.sourceFilter")}</Accordion.Control>
+              <Accordion.Panel>
+                {(result?.aggregations.torrentSource.length || 0) === 0 ? (
+                  <Text size="sm" c="dimmed">{t("torrents.noFilterOptions")}</Text>
+                ) : (
+                  <Checkbox.Group
+                    value={sourceFilters}
+                    onChange={(value) => {
+                      setSourceFilters(value);
+                      setPage(1);
+                    }}
+                  >
+                    <Stack gap={8}>
+                      {(result?.aggregations.torrentSource || []).map((item) => (
+                        <Checkbox
+                          key={item.value}
+                          value={item.value}
+                          label={
+                            <span className="filter-option-label">
+                              <Text size="sm" lineClamp={1}>{item.label}</Text>
+                              <Badge size="xs" variant="light" className="filter-option-count">{item.count}</Badge>
+                            </span>
+                          }
+                        />
+                      ))}
+                    </Stack>
+                  </Checkbox.Group>
+                )}
+              </Accordion.Panel>
+            </Accordion.Item>
+
+            <Accordion.Item value="tag">
+              <Accordion.Control>{t("torrents.tagFilter")}</Accordion.Control>
+              <Accordion.Panel>
+                {(result?.aggregations.torrentTag.length || 0) === 0 ? (
+                  <Text size="sm" c="dimmed">{t("torrents.noFilterOptions")}</Text>
+                ) : (
+                  <ScrollArea.Autosize mah={280} offsetScrollbars>
+                    <Checkbox.Group
+                      value={tagFilters}
+                      onChange={(value) => {
+                        setTagFilters(value);
+                        setPage(1);
+                      }}
+                    >
+                      <Stack gap={8}>
+                        {(result?.aggregations.torrentTag || []).map((item) => (
+                          <Checkbox
+                            key={item.value}
+                            value={item.value}
+                            label={
+                              <span className="filter-option-label">
+                                <Text size="sm" lineClamp={1}>{item.label}</Text>
+                                <Badge size="xs" variant="light" className="filter-option-count">{item.count}</Badge>
+                              </span>
+                            }
+                          />
+                        ))}
+                      </Stack>
+                    </Checkbox.Group>
+                  </ScrollArea.Autosize>
+                )}
+              </Accordion.Panel>
+            </Accordion.Item>
+          </Accordion>
         </Card>
 
-        <Stack style={{ flex: 1, minWidth: 0 }}>
-          <Card className="glass-card" withBorder>
-            <ScrollArea>
-              <Table striped highlightOnHover withTableBorder>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>{t("torrents.table.title")}</Table.Th>
-                    <Table.Th>{t("torrents.table.type")}</Table.Th>
-                    <Table.Th>{t("torrents.table.size")}</Table.Th>
-                    <Table.Th>{t("torrents.table.seeders")}</Table.Th>
-                    <Table.Th>{t("torrents.table.leechers")}</Table.Th>
-                    <Table.Th>{t("torrents.table.source")}</Table.Th>
-                    <Table.Th>{t("torrents.table.actions")}</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {loading ? (
-                    <Table.Tr>
-                      <Table.Td colSpan={7}>
-                        <Group justify="center" py="md">
-                          <Loader size="sm" />
+        <Stack className="torrent-results-column torrent-results-flex">
+          <Card className="glass-card torrent-results-card" withBorder>
+            <Stack gap="sm">
+              <Group justify="space-between" wrap="wrap">
+                <Group gap={8} className="sort-button-group">
+                  {torrentOrderFields.map((field) => (
+                    <Button
+                      key={field}
+                      size="xs"
+                      variant={orderBy === field ? "light" : "subtle"}
+                      color={orderBy === field ? "cyan" : "gray"}
+                      onClick={() => {
+                        setOrderBy(field);
+                        setPage(1);
+                      }}
+                    >
+                      {orderLabels[field]}
+                    </Button>
+                  ))}
+                </Group>
+                <Group gap={8} className="sort-button-group">
+                  <Button
+                    size="xs"
+                    variant={descending ? "light" : "subtle"}
+                    color={descending ? "cyan" : "gray"}
+                    onClick={() => {
+                      setDescending(true);
+                      setPage(1);
+                    }}
+                  >
+                    {t("common.desc")}
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant={!descending ? "light" : "subtle"}
+                    color={!descending ? "cyan" : "gray"}
+                    onClick={() => {
+                      setDescending(false);
+                      setPage(1);
+                    }}
+                  >
+                    {t("common.asc")}
+                  </Button>
+                </Group>
+              </Group>
+
+              {loading ? (
+                <Group justify="center" py="md">
+                  <Loader size="sm" />
+                </Group>
+              ) : (result?.items.length || 0) === 0 ? (
+                <Text c="dimmed" ta="center" py="md">
+                  {t("torrents.noResults")}
+                </Text>
+              ) : (
+                (result?.items || []).map((item) => (
+                  <Card key={item.infoHash} className="torrent-list-item" withBorder>
+                    <Stack gap={8} className="torrent-resource-card">
+                      <Group wrap="nowrap" justify="space-between" align="flex-start">
+                        <Group wrap="nowrap" className="torrent-title-group">
+                          <Link href={`/torrents/${item.infoHash}`} className="unstyled-link torrent-list-link">
+                            <Text fw={800} lineClamp={1} title={item.title || item.torrent.name} className="torrent-resource-title">
+                              {item.title || item.torrent.name}
+                            </Text>
+                          </Link>
+                          <Badge variant="light" color="violet">
+                            {renderContentType(item.contentType)}
+                          </Badge>
                         </Group>
-                      </Table.Td>
-                    </Table.Tr>
-                  ) : (result?.items.length || 0) === 0 ? (
-                    <Table.Tr>
-                      <Table.Td colSpan={7}>
-                        <Text c="dimmed" ta="center" py="md">
-                          {t("torrents.noResults")}
+                      </Group>
+
+                      <Group gap={6} wrap="wrap" className="torrent-resource-meta">
+                        <Text size="xs" c="dimmed" ff="monospace" className="detail-code-line">
+                          {item.infoHash}
                         </Text>
-                      </Table.Td>
-                    </Table.Tr>
-                  ) : (
-                    (result?.items || []).map((item) => (
-                      <Table.Tr key={item.infoHash}>
-                        <Table.Td>
-                          <Stack gap={2}>
-                            <Link href={`/torrents/${item.infoHash}`} style={{ textDecoration: "none", color: "inherit" }}>
-                              <Text fw={600} lineClamp={1} title={item.title || item.torrent.name} style={{ maxWidth: "min(56vw, 620px)" }}>
-                                {item.title || item.torrent.name}
-                              </Text>
-                            </Link>
-                            <Text size="xs" c="dimmed" ff="monospace">{item.infoHash}</Text>
-                          </Stack>
-                        </Table.Td>
-                        <Table.Td>{renderContentType(item.contentType)}</Table.Td>
-                        <Table.Td>{formatBytes(item.torrent.size)}</Table.Td>
-                        <Table.Td>{item.seeders ?? item.torrent.seeders ?? "-"}</Table.Td>
-                        <Table.Td>{item.leechers ?? item.torrent.leechers ?? "-"}</Table.Td>
-                        <Table.Td>{item.torrent.sources[0]?.name || "-"}</Table.Td>
-                        <Table.Td>
+                        <Badge size="xs" variant="dot" color="cyan">
+                          {item.torrent.sources[0]?.name || "-"}
+                        </Badge>
+                      </Group>
+
+                      <Group justify="space-between" wrap="wrap" gap={8}>
+                        <Group gap={8} wrap="wrap" className="card-meta-row">
+                          <Badge variant="light">{formatBytes(item.torrent.size)}</Badge>
+                          <Badge variant="light">
+                            {t("torrents.table.filesCount")}: {item.torrent.filesCount ?? (item.torrent.singleFile ? 1 : "-")}
+                          </Badge>
+                          <Badge variant="light" color="teal">
+                            {t("torrents.table.seeders")}: {item.seeders ?? item.torrent.seeders ?? "-"}
+                          </Badge>
+                          <Badge variant="light" color="orange">
+                            {t("torrents.table.leechers")}: {item.leechers ?? item.torrent.leechers ?? "-"}
+                          </Badge>
+                        </Group>
+                        <Group gap={6}>
+                          <Tooltip label={t("torrents.copyHash")}>
+                            <ActionIcon variant="light" onClick={() => void copyHash(item.infoHash)}>
+                              <Copy size={14} />
+                            </ActionIcon>
+                          </Tooltip>
+                          <Tooltip label={t("torrents.openMagnet")}>
+                            <ActionIcon variant="light" onClick={() => openMagnet(item.torrent.magnetUri)} disabled={!item.torrent.magnetUri}>
+                              <ExternalLink size={14} />
+                            </ActionIcon>
+                          </Tooltip>
                           <Tooltip label={t("torrents.details")}>
                             <ActionIcon variant="light" onClick={() => openDetail(item)}>
                               <Eye size={14} />
                             </ActionIcon>
                           </Tooltip>
-                        </Table.Td>
-                      </Table.Tr>
-                    ))
-                  )}
-                </Table.Tbody>
-              </Table>
-            </ScrollArea>
+                        </Group>
+                      </Group>
+                    </Stack>
+                  </Card>
+                ))
+              )}
+            </Stack>
           </Card>
 
           <Group justify="space-between">
-            <Text size="sm" c="dimmed">{t("common.total")}: {result?.totalCount || 0}</Text>
+            <Group gap="sm" wrap="wrap">
+              <Text size="sm" c="dimmed">{t("common.total")}: {result?.totalCount || 0}</Text>
+              <Select
+                size="xs"
+                w={140}
+                data={[
+                  { value: "10", label: `10 / ${t("common.page")}` },
+                  { value: "20", label: `20 / ${t("common.page")}` },
+                  { value: "40", label: `40 / ${t("common.page")}` },
+                  { value: "60", label: `60 / ${t("common.page")}` },
+                  { value: "100", label: `100 / ${t("common.page")}` }
+                ]}
+                value={String(limit)}
+                onChange={(value) => {
+                  setLimit(Number(value) || 10);
+                  setPage(1);
+                }}
+              />
+            </Group>
             <Pagination total={totalPages} value={page} onChange={setPage} />
           </Group>
         </Stack>
@@ -517,7 +640,7 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
 
       <Modal opened={detailOpen} onClose={() => setDetailOpen(false)} title={activeItem?.title || activeItem?.torrent.name} size="xl">
         {!activeItem ? null : (
-          <Stack>
+          <Stack gap="md">
             <Text c="dimmed">{activeItem.content?.overview || "-"}</Text>
             <Group gap={6}>
               <Badge variant="light">{renderContentType(activeItem.contentType)}</Badge>
@@ -526,20 +649,6 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
               <Badge variant="light">{formatBytes(activeItem.torrent.size)}</Badge>
             </Group>
             <Text ff="monospace" size="sm">{activeItem.infoHash}</Text>
-            <Group>
-              <Button size="xs" leftSection={<Copy size={14} />} variant="light" onClick={() => void copyHash(activeItem.infoHash)}>
-                {t("torrents.copyHash")}
-              </Button>
-              <Button size="xs" leftSection={<ExternalLink size={14} />} variant="light" onClick={() => openMagnet(activeItem.torrent.magnetUri)}>
-                {t("torrents.openMagnet")}
-              </Button>
-              <Button size="xs" leftSection={<WandSparkles size={14} />} variant="light" onClick={() => void reprocessActive()}>
-                {t("torrents.reprocess")}
-              </Button>
-              <Button size="xs" leftSection={<Trash2 size={14} />} color="red" variant="light" onClick={deleteActive}>
-                {t("torrents.delete")}
-              </Button>
-            </Group>
 
             <TextInput
               label={t("torrents.tagsInput")}
@@ -591,6 +700,26 @@ export function TorrentsPage({ initialQuery = "" }: { initialQuery?: string }) {
                 )}
               </Table.Tbody>
             </Table>
+
+            <Group justify="space-between" className="modal-footer">
+              <Group>
+                <Button size="xs" leftSection={<Copy size={14} />} variant="light" onClick={() => void copyHash(activeItem.infoHash)}>
+                  {t("torrents.copyHash")}
+                </Button>
+                <Button size="xs" leftSection={<ExternalLink size={14} />} variant="light" onClick={() => openMagnet(activeItem.torrent.magnetUri)}>
+                  {t("torrents.openMagnet")}
+                </Button>
+                <Button size="xs" leftSection={<WandSparkles size={14} />} variant="light" onClick={() => void reprocessActive()}>
+                  {t("torrents.reprocess")}
+                </Button>
+                <Button size="xs" leftSection={<Trash2 size={14} />} color="red" variant="light" onClick={deleteActive}>
+                  {t("torrents.delete")}
+                </Button>
+              </Group>
+              <Button size="xs" variant="default" onClick={() => setDetailOpen(false)}>
+                {t("common.cancel")}
+              </Button>
+            </Group>
           </Stack>
         )}
       </Modal>

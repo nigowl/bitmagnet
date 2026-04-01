@@ -4,7 +4,7 @@
 
 package model
 
-const TableNameContentCollectionContent = "content_collections_content"
+var TableNameContentCollectionContent = "content_collections_content"
 
 // ContentCollectionContent mapped from table <content_collections_content>
 type ContentCollectionContent struct {

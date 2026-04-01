@@ -1,10 +1,10 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import en from "./en.json";
 import zh from "./zh.json";
 
-type Locale = "en" | "zh";
+export type Locale = "en" | "zh";
 
 type Dictionary = typeof en;
 
@@ -16,6 +16,7 @@ type I18nContextValue = {
 
 const dictionaries: Record<Locale, Dictionary> = { en, zh };
 const localeStorageKey = "bitmagnet-locale";
+const localeCookieKey = "bitmagnet-locale";
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
@@ -30,25 +31,21 @@ function resolveByPath(obj: unknown, key: string): string | undefined {
     ?.toString();
 }
 
-function getInitialLocale(): Locale {
-  if (typeof window === "undefined") {
-    return "en";
-  }
-
-  const saved = window.localStorage.getItem(localeStorageKey);
-  if (saved === "en" || saved === "zh") {
-    return saved;
-  }
-
-  return navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en";
+function persistLocale(locale: Locale) {
+  window.localStorage.setItem(localeStorageKey, locale);
+  document.cookie = `${localeCookieKey}=${locale}; path=/; max-age=31536000; samesite=lax`;
 }
 
-export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(getInitialLocale);
+export function I18nProvider({ children, initialLocale }: { children: React.ReactNode; initialLocale: Locale }) {
+  const [locale, setLocaleState] = useState<Locale>(initialLocale);
+
+  useEffect(() => {
+    persistLocale(initialLocale);
+  }, [initialLocale]);
 
   const setLocale = useCallback((nextLocale: Locale) => {
     setLocaleState(nextLocale);
-    window.localStorage.setItem(localeStorageKey, nextLocale);
+    persistLocale(nextLocale);
   }, []);
 
   const t = useCallback(

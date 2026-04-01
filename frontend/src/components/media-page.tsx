@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActionIcon,
   Badge,
   Button,
   Card,
@@ -10,9 +12,6 @@ import {
   Image,
   Loader,
   Pagination,
-  SegmentedControl,
-  Select,
-  SimpleGrid,
   Stack,
   Text,
   TextInput,
@@ -20,413 +19,570 @@ import {
 } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
-import { FilterX, RefreshCw, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, FilterX, ListOrdered, RefreshCw, Search, Users } from "lucide-react";
 import { useI18n } from "@/languages/provider";
-import { graphqlRequest } from "@/lib/api";
-import { TORRENT_CONTENT_SEARCH_QUERY } from "@/lib/graphql";
+import { fetchMediaList, type MediaListItem } from "@/lib/media-api";
+import { extractMediaFacts, getDisplayTitle, getPosterUrl, pickBestQualityTag } from "@/lib/media";
 
-type MediaContentType = "all" | "movie" | "tv_show";
-type MediaSort = "popular" | "latest" | "updated" | "name";
+type TabValue = "all" | "movie" | "series" | "anime";
+type FilterRowKey = "category" | "quality" | "year" | "genre" | "language" | "country" | "network" | "studio" | "awards" | "sort";
 
-type MediaItem = {
-  infoHash: string;
-  title: string;
-  seeders?: number | null;
-  publishedAt?: string | null;
-  videoResolution?: string | null;
-  torrent: {
-    name: string;
-    size: number;
-  };
-  content?: {
-    title?: string | null;
-    releaseYear?: number | null;
-    overview?: string | null;
-    collections?: Array<{ type: string; name: string }> | null;
-    attributes?: Array<{ source: string; key: string; value: string }> | null;
-  } | null;
+type FilterOption = {
+  value: string;
+  label: string;
 };
 
-type MediaSearchResult = {
-  totalCount: number;
-  totalCountIsEstimate: boolean;
-  hasNextPage?: boolean | null;
-  items: MediaItem[];
-  aggregations: {
-    contentSource?: Array<{ value: string; label: string; count: number; isEstimate: boolean }> | null;
-    genre?: Array<{ value: string; label: string; count: number; isEstimate: boolean }> | null;
-    language?: Array<{ value: string; label: string; count: number; isEstimate: boolean }> | null;
-    releaseYear?: Array<{ value: number | null; label: string; count: number; isEstimate: boolean }> | null;
-    videoResolution?: Array<{ value: string | null; label: string; count: number; isEstimate: boolean }> | null;
-  };
-};
-
-type MediaSearchResponse = {
-  torrentContent: {
-    search: MediaSearchResult;
-  };
-};
-
-const sortMap: Record<MediaSort, { field: string; descending: boolean }> = {
-  popular: { field: "seeders", descending: true },
-  latest: { field: "published_at", descending: true },
-  updated: { field: "updated_at", descending: true },
-  name: { field: "name", descending: false }
-};
-
-function formatBytes(size: number): string {
-  if (!size) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = size;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
+function normalizeCategory(value: string | null): TabValue {
+  if (value === "movie" || value === "series" || value === "anime") {
+    return value;
   }
-  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+  return "all";
 }
 
-function displayResolution(value?: string | null): string {
-  if (!value) return "-";
-  return value.startsWith("V") ? value.slice(1) : value;
+function normalizeSimpleValue(value: string | null, fallback: string): string {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : fallback;
 }
 
-function normalizeKey(value?: string | null): string {
-  return (value || "")
+function normalizeMediaToken(value: string): string {
+  return value
     .trim()
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "_")
+    .replace(/&/g, " and ")
+    .replace(/['’.]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
+}
+
+function localizeGenreLabel(value: string, t: (key: string) => string): string {
+  const normalized = normalizeMediaToken(value);
+  const aliases: Record<string, string> = {
+    sciencefiction: "science_fiction",
+    sci_fi: "sci_fi",
+    sci_fi_and_fantasy: "science_fiction",
+    action_and_adventure: "action_adventure",
+    war_and_politics: "war_politics"
+  };
+  const key = aliases[normalized] || normalized;
+  const translationKey = `media.genres.${key}`;
+  const translated = t(translationKey);
+  return translated === translationKey ? value : translated;
+}
+
+function FilterRow({
+  label,
+  currentValue,
+  options,
+  expanded,
+  onToggleExpand,
+  onSelect
+}: {
+  label: string;
+  currentValue: string;
+  options: FilterOption[];
+  expanded: boolean;
+  onToggleExpand?: () => void;
+  onSelect: (value: string) => void;
+}) {
+  const optionsRef = useRef<HTMLDivElement | null>(null);
+  const [canExpand, setCanExpand] = useState(false);
+  const [collapsedHeight, setCollapsedHeight] = useState(52);
+  const [expandedHeight, setExpandedHeight] = useState(240);
+  const isExpanded = expanded && canExpand;
+
+  useEffect(() => {
+    const element = optionsRef.current;
+    if (!element) return;
+
+    const updateLayout = () => {
+      const children = Array.from(element.children).filter((child): child is HTMLElement => child instanceof HTMLElement);
+      if (children.length === 0) {
+        setCanExpand(false);
+        setCollapsedHeight(52);
+        setExpandedHeight(52);
+        return;
+      }
+
+      const firstRowTop = children[0].offsetTop;
+      const firstRowItems = children.filter((child) => child.offsetTop === firstRowTop);
+      const firstRowBottom = Math.max(...firstRowItems.map((child) => child.offsetTop + child.offsetHeight));
+      const hasOverflow = children.some((child) => child.offsetTop > firstRowTop);
+
+      setCanExpand(hasOverflow);
+      setCollapsedHeight(firstRowBottom);
+      setExpandedHeight(element.scrollHeight);
+    };
+
+    updateLayout();
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => updateLayout());
+    observer.observe(element);
+    Array.from(element.children).forEach((child) => observer.observe(child));
+
+    return () => observer.disconnect();
+  }, [options]);
+
+  return (
+    <div
+      className="media-filter-row"
+      data-expandable={canExpand ? "true" : "false"}
+      data-expanded={isExpanded ? "true" : "false"}
+    >
+      <div className="media-filter-label">{label}</div>
+      <div
+        ref={optionsRef}
+        className={isExpanded ? "media-filter-options media-filter-options-expanded" : "media-filter-options media-filter-options-collapsed"}
+        style={{ maxHeight: `${isExpanded ? expandedHeight : collapsedHeight}px` }}
+      >
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            className={currentValue === option.value ? "media-filter-pill media-filter-pill-active" : "media-filter-pill"}
+            onClick={() => onSelect(option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {canExpand ? (
+        <button
+          type="button"
+          className="media-filter-expand"
+          onClick={onToggleExpand}
+          aria-label={isExpanded ? `Collapse ${label}` : `Expand ${label}`}
+        >
+          {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 export function MediaPage() {
   const { t, locale } = useI18n();
+  const titleLanguage = locale === "en" ? "en" : "zh";
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch] = useDebouncedValue(search, 300);
+  const [searchInput, setSearchInput] = useState("");
+  const [expandedRows, setExpandedRows] = useState<Record<FilterRowKey, boolean>>({
+    category: false,
+    quality: false,
+    year: false,
+    genre: false,
+    language: false,
+    country: false,
+    network: false,
+    studio: false,
+    awards: false,
+    sort: false
+  });
+  const [debouncedSearch] = useDebouncedValue(searchInput, 250);
+  const [items, setItems] = useState<MediaListItem[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalTorrentCount, setTotalTorrentCount] = useState(0);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const pageSize = 30;
 
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
+  const category = normalizeCategory(searchParams.get("category"));
+  const quality = normalizeSimpleValue(searchParams.get("quality"), "all");
+  const year = normalizeSimpleValue(searchParams.get("year"), "all");
+  const genre = normalizeSimpleValue(searchParams.get("genre"), "all");
+  const language = normalizeSimpleValue(searchParams.get("language"), "all");
+  const country = normalizeSimpleValue(searchParams.get("country"), "all");
+  const network = normalizeSimpleValue(searchParams.get("network"), "all");
+  const studio = normalizeSimpleValue(searchParams.get("studio"), "all");
+  const awards = normalizeSimpleValue(searchParams.get("awards"), "all");
+  const sort = normalizeSimpleValue(searchParams.get("sort"), "latest");
+  const page = Math.max(1, Number(searchParams.get("page") || "1") || 1);
+  const searchValue = searchParams.get("search") || "";
 
-  const [contentType, setContentType] = useState<MediaContentType>("all");
-  const [source, setSource] = useState<string | null>(null);
-  const [genre, setGenre] = useState<string | null>(null);
-  const [language, setLanguage] = useState<string | null>(null);
-  const [resolution, setResolution] = useState<string | null>(null);
-  const [year, setYear] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<MediaSort>("popular");
+  useEffect(() => {
+    setSearchInput(searchValue);
+  }, [searchValue]);
 
-  const [result, setResult] = useState<MediaSearchResult | null>(null);
+  const updateQuery = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
 
-  const languageDisplayNames = useMemo(() => {
-    try {
-      const resolvedLocale = locale === "zh" ? "zh-Hans" : "en";
-      return new Intl.DisplayNames([resolvedLocale], { type: "language" });
-    } catch {
-      return null;
-    }
-  }, [locale]);
-
-  const translateFacetLabel = useCallback(
-    (group: "sources" | "genres" | "languages", value?: string | null, fallback?: string | null) => {
-      const base = value || fallback || "";
-      const normalized = normalizeKey(base);
-      if (normalized) {
-        const key = `media.${group}.${normalized}`;
-        const translated = t(key);
-        if (translated !== key) return translated;
-      }
-      return fallback || value || "-";
-    },
-    [t]
-  );
-
-  const translateLanguageLabel = useCallback(
-    (value?: string | null, fallback?: string | null) => {
-      const raw = (value || "").replace(/_/g, "-").toLowerCase();
-      if (raw && languageDisplayNames) {
-        try {
-          const direct = languageDisplayNames.of(raw);
-          if (direct) return direct;
-          const base = raw.split("-")[0];
-          const baseName = languageDisplayNames.of(base);
-          if (baseName) return baseName;
-        } catch {
-          // Fallback to dictionary-based translation below.
+      Object.entries(updates).forEach(([key, value]) => {
+        if (!value || value === "all" || (key === "sort" && value === "latest")) {
+          params.delete(key);
+        } else {
+          params.set(key, value);
         }
-      }
-      return translateFacetLabel("languages", value, fallback);
+      });
+
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
     },
-    [languageDisplayNames, translateFacetLabel]
+    [pathname, router, searchParams]
   );
 
-  const totalPages = useMemo(() => {
-    if (!result?.totalCount) return 1;
-    return Math.max(1, Math.ceil(result.totalCount / limit));
-  }, [limit, result?.totalCount]);
+  useEffect(() => {
+    if (debouncedSearch === searchValue) return;
+    updateQuery({
+      search: debouncedSearch.trim() || null,
+      page: null
+    });
+  }, [debouncedSearch, searchValue, updateQuery]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const sortOption = sortMap[sortBy];
-      const data = await graphqlRequest<MediaSearchResponse>(TORRENT_CONTENT_SEARCH_QUERY, {
-        input: {
-          queryString: debouncedSearch || undefined,
-          limit,
-          page,
-          totalCount: true,
-          hasNextPage: true,
-          orderBy: [
-            {
-              field: sortOption.field,
-              descending: sortOption.descending
-            }
-          ],
-          facets: {
-            contentType: {
-              aggregate: true,
-              filter: contentType === "all" ? undefined : [contentType]
-            },
-            contentSource: {
-              aggregate: true,
-              filter: source ? [source] : undefined
-            },
-            genre: {
-              aggregate: true,
-              filter: genre ? [genre] : undefined
-            },
-            language: {
-              aggregate: true,
-              filter: language ? [language] : undefined
-            },
-            releaseYear: {
-              aggregate: true,
-              filter: year ? [Number(year)] : undefined
-            },
-            videoResolution: {
-              aggregate: true,
-              filter: resolution ? [resolution] : undefined
-            }
-          }
-        }
+      const data = await fetchMediaList({
+        category,
+        search: searchValue || undefined,
+        quality,
+        year,
+        genre,
+        language,
+        country,
+        network,
+        studio,
+        awards,
+        sort,
+        limit: pageSize,
+        page
       });
-
-      setResult(data.torrentContent.search);
+      setItems(data.items || []);
+      setTotalCount(data.totalCount || 0);
+      setTotalTorrentCount(data.totalTorrentCount || 0);
     } catch (error) {
-      notifications.show({
-        color: "red",
-        message: error instanceof Error ? error.message : String(error)
-      });
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
     } finally {
       setLoading(false);
     }
-  }, [contentType, debouncedSearch, genre, language, limit, page, resolution, sortBy, source, year]);
+  }, [awards, category, country, genre, language, network, page, quality, searchValue, sort, studio, year]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(totalCount / pageSize)), [totalCount]);
+
+  const yearOptions = useMemo<FilterOption[]>(() => {
+    const currentYear = new Date().getFullYear();
+    return [
+      { value: "all", label: t("media.all") },
+      { value: "upcoming", label: t("media.year.upcoming") },
+      ...Array.from({ length: 7 }, (_, index) => {
+        const value = String(currentYear - index);
+        return { value, label: value };
+      }),
+      { value: "2010s", label: t("media.year.2010s") },
+      { value: "2000s", label: t("media.year.2000s") },
+      { value: "1990s", label: t("media.year.1990s") },
+      { value: "1980s", label: t("media.year.1980s") },
+      { value: "1970s", label: t("media.year.1970s") },
+      { value: "1960s", label: t("media.year.1960s") },
+      { value: "1950s", label: t("media.year.1950s") },
+      { value: "older", label: t("media.year.older") }
+    ];
+  }, [t]);
+
+  const categoryOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: "all", label: t("media.all") },
+      { value: "movie", label: t("contentTypes.movie") },
+      { value: "series", label: t("contentTypes.tv_show") },
+      { value: "anime", label: t("nav.anime") }
+    ],
+    [t]
+  );
+
+  const qualityOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: "all", label: t("media.all") },
+      { value: "3d", label: "3D" },
+      { value: "dolby_vision", label: "Dolby Vision" },
+      { value: "4k", label: "4K" },
+      { value: "1080p", label: "1080P" },
+      { value: "720p", label: "720P" },
+      { value: "480p", label: "480P" },
+      { value: "360p", label: "360P" }
+    ],
+    [t]
+  );
+
+  const genreOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: "all", label: t("media.all") },
+      { value: "comedy", label: t("media.genres.comedy") },
+      { value: "animation", label: t("media.genres.animation") },
+      { value: "action", label: t("media.genres.action") },
+      { value: "romance", label: t("media.genres.romance") },
+      { value: "horror", label: t("media.genres.horror") },
+      { value: "war", label: t("media.genres.war") },
+      { value: "thriller", label: t("media.genres.thriller") },
+      { value: "crime", label: t("media.genres.crime") },
+      { value: "science_fiction", label: t("media.genres.science_fiction") },
+      { value: "mystery", label: t("media.genres.mystery") },
+      { value: "fantasy", label: t("media.genres.fantasy") },
+      { value: "drama", label: t("media.genres.drama") },
+      { value: "adventure", label: t("media.genres.adventure") },
+      { value: "family", label: t("media.genres.family") },
+      { value: "kids", label: t("media.genres.kids") },
+      { value: "history", label: t("media.genres.history") },
+      { value: "biography", label: t("media.genres.biography") },
+      { value: "sport", label: t("media.genres.sport") },
+      { value: "music", label: t("media.genres.music") },
+      { value: "documentary", label: t("media.genres.documentary") },
+      { value: "western", label: t("media.genres.western") }
+    ],
+    [t]
+  );
+
+  const sortOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: "latest", label: t("media.sort.latest") },
+      { value: "popular", label: t("media.sort.popular") },
+      { value: "download", label: t("media.sort.download") },
+      { value: "rating", label: t("media.sort.rating") },
+      { value: "updated", label: t("media.sort.updated") }
+    ],
+    [t]
+  );
+
+  const languageOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: "all", label: t("media.all") },
+      { value: "english", label: t("media.languages.english") },
+      { value: "chinese", label: t("media.languages.chinese") },
+      { value: "japanese", label: t("media.languages.japanese") },
+      { value: "korean", label: t("media.languages.korean") },
+      { value: "french", label: t("media.languages.french") },
+      { value: "german", label: t("media.languages.german") },
+      { value: "spanish", label: t("media.languages.spanish") },
+      { value: "italian", label: t("media.languages.italian") },
+      { value: "russian", label: t("media.languages.russian") },
+      { value: "portuguese", label: t("media.languages.portuguese") },
+      { value: "hindi", label: t("media.languages.hindi") }
+    ],
+    [t]
+  );
+
+  const countryOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: "all", label: t("media.all") },
+      { value: "united_states", label: t("media.countries.united_states") },
+      { value: "china", label: t("media.countries.china") },
+      { value: "japan", label: t("media.countries.japan") },
+      { value: "south_korea", label: t("media.countries.south_korea") },
+      { value: "united_kingdom", label: t("media.countries.united_kingdom") },
+      { value: "france", label: t("media.countries.france") },
+      { value: "germany", label: t("media.countries.germany") },
+      { value: "india", label: t("media.countries.india") },
+      { value: "thailand", label: t("media.countries.thailand") },
+      { value: "hong_kong", label: t("media.countries.hong_kong") },
+      { value: "taiwan", label: t("media.countries.taiwan") },
+      { value: "spain", label: t("media.countries.spain") }
+    ],
+    [t]
+  );
+
+  const networkOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: "all", label: t("media.all") },
+      { value: "netflix", label: "Netflix" },
+      { value: "disney_plus", label: "Disney+" },
+      { value: "hbo", label: "HBO / Max" },
+      { value: "apple_tv_plus", label: "Apple TV+" },
+      { value: "prime_video", label: "Prime Video" },
+      { value: "hulu", label: "Hulu" },
+      { value: "bbc", label: "BBC" },
+      { value: "nhk", label: "NHK" },
+      { value: "tencent_video", label: t("media.networks.tencent_video") },
+      { value: "iqiyi", label: t("media.networks.iqiyi") },
+      { value: "youku", label: t("media.networks.youku") }
+    ],
+    [t]
+  );
+
+  const studioOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: "all", label: t("media.all") },
+      { value: "marvel_studios", label: "Marvel Studios" },
+      { value: "disney", label: "Disney" },
+      { value: "warner_bros", label: "Warner Bros." },
+      { value: "a24", label: "A24" },
+      { value: "pixar", label: "Pixar" },
+      { value: "dreamworks", label: "DreamWorks" },
+      { value: "studio_ghibli", label: "Studio Ghibli" },
+      { value: "toei_animation", label: "Toei Animation" },
+      { value: "mappa", label: "MAPPA" },
+      { value: "netflix", label: "Netflix" },
+      { value: "hbo", label: "HBO" }
+    ],
+    [t]
+  );
+
+  const awardsOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: "all", label: t("media.all") },
+      { value: "oscar", label: t("media.awards.oscar") },
+      { value: "emmy", label: t("media.awards.emmy") },
+      { value: "golden_globe", label: t("media.awards.golden_globe") },
+      { value: "cannes", label: t("media.awards.cannes") },
+      { value: "berlin", label: t("media.awards.berlin") },
+      { value: "venice", label: t("media.awards.venice") },
+      { value: "bafta", label: t("media.awards.bafta") },
+      { value: "sundance", label: t("media.awards.sundance") }
+    ],
+    [t]
+  );
+
   const clearFilters = () => {
-    setSearch("");
-    setContentType("all");
-    setSource(null);
-    setGenre(null);
-    setLanguage(null);
-    setResolution(null);
-    setYear(null);
-    setSortBy("popular");
-    setPage(1);
+    setSearchInput("");
+    router.replace(pathname, { scroll: false });
   };
 
-  const sourceOptions = useMemo(() => {
-    const values = result?.aggregations.contentSource || [];
-    const preferred = ["tmdb", "imdb", "tvdb"];
-    const seen = new Set<string>();
-    const ordered: Array<{ value: string; label: string }> = [];
-
-    for (const key of preferred) {
-      const matched = values.find((item) => item.value === key);
-      if (!matched) continue;
-      seen.add(key);
-      ordered.push({
-        value: key,
-        label: `${translateFacetLabel("sources", matched.value, matched.label)} (${matched.count})`
-      });
-    }
-
-    for (const item of values) {
-      if (seen.has(item.value)) continue;
-      seen.add(item.value);
-      ordered.push({
-        value: item.value,
-        label: `${translateFacetLabel("sources", item.value, item.label)} (${item.count})`
-      });
-    }
-
-    return ordered;
-  }, [result?.aggregations.contentSource, translateFacetLabel]);
-
-  const genreOptions = useMemo(
-    () =>
-      (result?.aggregations.genre || []).map((item) => ({
-        value: item.value,
-        label: `${translateFacetLabel("genres", item.value, item.label)} (${item.count})`
-      })),
-    [result?.aggregations.genre, translateFacetLabel]
-  );
-
-  const languageOptions = useMemo(
-    () =>
-      (result?.aggregations.language || []).map((item) => ({
-        value: item.value,
-        label: `${translateLanguageLabel(item.value, item.label)} (${item.count})`
-      })),
-    [result?.aggregations.language, translateLanguageLabel]
-  );
+  const setExpanded = (key: FilterRowKey) => {
+    setExpandedRows((current) => ({ ...current, [key]: !current[key] }));
+  };
 
   return (
-    <Stack gap="md">
-      <Group justify="space-between">
-        <div>
-          <Title order={2}>{t("media.title")}</Title>
-          <Text c="dimmed">{t("media.subtitle")}</Text>
-        </div>
-        <Group>
-          <Button leftSection={<FilterX size={16} />} variant="light" onClick={clearFilters}>
-            {t("media.clearFilters")}
-          </Button>
-          <Select
-            w={120}
-            data={[
-              { value: "20", label: `20 / ${t("common.page")}` },
-              { value: "40", label: `40 / ${t("common.page")}` },
-              { value: "60", label: `60 / ${t("common.page")}` }
-            ]}
-            value={String(limit)}
-            onChange={(value) => {
-              setLimit(Number(value) || 20);
-              setPage(1);
-            }}
-          />
-          <Button leftSection={<RefreshCw size={16} />} variant="default" onClick={() => void load()}>
-            {t("common.refresh")}
-          </Button>
-        </Group>
-      </Group>
-
-      <Card className="glass-card" withBorder>
-        <Stack gap="md">
-          <TextInput
-            label={t("media.search")}
-            leftSection={<Search size={16} />}
-            value={search}
-            onChange={(event) => {
-              setSearch(event.currentTarget.value);
-              setPage(1);
-            }}
-          />
-          <Group justify="space-between" wrap="wrap">
-            <SegmentedControl
-              value={contentType}
-              onChange={(value) => {
-                setContentType(value as MediaContentType);
-                setPage(1);
-              }}
-              data={[
-                { value: "all", label: t("media.contentTypes.all") },
-                { value: "movie", label: t("media.contentTypes.movie") },
-                { value: "tv_show", label: t("media.contentTypes.tvShow") }
-              ]}
-            />
-            <SegmentedControl
-              value={sortBy}
-              onChange={(value) => {
-                setSortBy(value as MediaSort);
-                setPage(1);
-              }}
-              data={[
-                { value: "popular", label: t("media.sort.popular") },
-                { value: "latest", label: t("media.sort.latest") },
-                { value: "updated", label: t("media.sort.updated") },
-                { value: "name", label: t("media.sort.name") }
-              ]}
-            />
+    <div className="media-cinema-shell">
+      <Card className="glass-card media-hero-panel" withBorder>
+        <Stack gap="lg">
+          <Group justify="space-between" align="flex-start" wrap="wrap">
+            <div>
+              <Title order={1}>{t("media.title")}</Title>
+              <Text c="dimmed" mt={6}>{t("media.subtitle")}</Text>
+            </div>
+            <Group gap="xs">
+              <Badge variant="light" color="orange">{t("media.results")}: {totalCount}</Badge>
+              <Badge variant="outline">{t("media.torrentCount")}: {totalTorrentCount}</Badge>
+            </Group>
           </Group>
-          <SimpleGrid cols={{ base: 1, md: 2, lg: 5 }}>
-            <Select
-              label={t("media.filters.source")}
-              data={[{ value: "", label: t("media.all") }, ...sourceOptions]}
-              value={source || ""}
-              onChange={(value) => {
-                setSource(value || null);
-                setPage(1);
-              }}
-              searchable
-            />
-            <Select
-              label={t("media.filters.genre")}
-              data={[
-                { value: "", label: t("media.all") },
-                ...genreOptions
-              ]}
-              value={genre || ""}
-              onChange={(value) => {
-                setGenre(value || null);
-                setPage(1);
-              }}
-              searchable
-            />
-            <Select
-              label={t("media.filters.language")}
-              data={[
-                { value: "", label: t("media.all") },
-                ...languageOptions
-              ]}
-              value={language || ""}
-              onChange={(value) => {
-                setLanguage(value || null);
-                setPage(1);
-              }}
-              searchable
-            />
-            <Select
-              label={t("media.filters.resolution")}
-              data={[
-                { value: "", label: t("media.all") },
-                ...((result?.aggregations.videoResolution || [])
-                  .filter((item) => !!item.value)
-                  .map((item) => ({
-                    value: item.value || "",
-                    label: `${item.label} (${item.count})`
-                  })))
-              ]}
-              value={resolution || ""}
-              onChange={(value) => {
-                setResolution(value || null);
-                setPage(1);
-              }}
-            />
-            <Select
-              label={t("media.filters.year")}
-              data={[
-                { value: "", label: t("media.all") },
-                ...((result?.aggregations.releaseYear || [])
-                  .filter((item) => item.value != null)
-                  .map((item) => ({
-                    value: String(item.value),
-                    label: `${item.label} (${item.count})`
-                  })))
-              ]}
-              value={year || ""}
-              onChange={(value) => {
-                setYear(value || null);
-                setPage(1);
-              }}
-            />
-          </SimpleGrid>
-          <Text size="sm" c="dimmed">
-            {t("media.results")}: {result?.totalCount || 0}
-          </Text>
+
+          <Card className="glass-card media-toolbar media-toolbar-rich" withBorder>
+            <div className="media-toolbar-actions">
+              <TextInput
+                leftSection={<Search size={16} />}
+                placeholder={t("media.search")}
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.currentTarget.value)}
+                className="media-toolbar-search"
+              />
+              <Group gap="xs">
+                <Button variant="light" leftSection={<FilterX size={14} />} onClick={clearFilters}>
+                  {t("media.clearFilters")}
+                </Button>
+                <Button variant="default" leftSection={<RefreshCw size={14} />} onClick={() => void load()}>
+                  {t("common.refresh")}
+                </Button>
+                <ActionIcon
+                  variant="default"
+                  size={36}
+                  onClick={() => setShowAdvancedFilters((value) => !value)}
+                  aria-label={showAdvancedFilters ? t("media.collapseFilters") : t("media.expandFilters")}
+                >
+                  {showAdvancedFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </ActionIcon>
+              </Group>
+            </div>
+
+            {showAdvancedFilters ? (
+              <>
+                <FilterRow
+                  label={t("media.filters.category")}
+                  currentValue={category}
+                  options={categoryOptions}
+                  expanded={expandedRows.category}
+                  onToggleExpand={() => setExpanded("category")}
+                  onSelect={(value) => updateQuery({ category: value, page: null })}
+                />
+
+                <FilterRow
+                  label={t("media.filters.quality")}
+                  currentValue={quality}
+                  options={qualityOptions}
+                  expanded={expandedRows.quality}
+                  onToggleExpand={() => setExpanded("quality")}
+                  onSelect={(value) => updateQuery({ quality: value, page: null })}
+                />
+
+                <FilterRow
+                  label={t("media.filters.year")}
+                  currentValue={year}
+                  options={yearOptions}
+                  expanded={expandedRows.year}
+                  onToggleExpand={() => setExpanded("year")}
+                  onSelect={(value) => updateQuery({ year: value, page: null })}
+                />
+
+                <FilterRow
+                  label={t("media.filters.genre")}
+                  currentValue={genre}
+                  options={genreOptions}
+                  expanded={expandedRows.genre}
+                  onToggleExpand={() => setExpanded("genre")}
+                  onSelect={(value) => updateQuery({ genre: value, page: null })}
+                />
+
+                <FilterRow
+                  label={t("media.filters.language")}
+                  currentValue={language}
+                  options={languageOptions}
+                  expanded={expandedRows.language}
+                  onToggleExpand={() => setExpanded("language")}
+                  onSelect={(value) => updateQuery({ language: value, page: null })}
+                />
+
+                <FilterRow
+                  label={t("media.filters.country")}
+                  currentValue={country}
+                  options={countryOptions}
+                  expanded={expandedRows.country}
+                  onToggleExpand={() => setExpanded("country")}
+                  onSelect={(value) => updateQuery({ country: value, page: null })}
+                />
+
+                <FilterRow
+                  label={t("media.filters.network")}
+                  currentValue={network}
+                  options={networkOptions}
+                  expanded={expandedRows.network}
+                  onToggleExpand={() => setExpanded("network")}
+                  onSelect={(value) => updateQuery({ network: value, page: null })}
+                />
+
+                <FilterRow
+                  label={t("media.filters.studio")}
+                  currentValue={studio}
+                  options={studioOptions}
+                  expanded={expandedRows.studio}
+                  onToggleExpand={() => setExpanded("studio")}
+                  onSelect={(value) => updateQuery({ studio: value, page: null })}
+                />
+
+                <FilterRow
+                  label={t("media.filters.awards")}
+                  currentValue={awards}
+                  options={awardsOptions}
+                  expanded={expandedRows.awards}
+                  onToggleExpand={() => setExpanded("awards")}
+                  onSelect={(value) => updateQuery({ awards: value, page: null })}
+                />
+
+                <FilterRow
+                  label={t("media.filters.sort")}
+                  currentValue={sort}
+                  options={sortOptions}
+                  expanded={expandedRows.sort}
+                  onToggleExpand={() => setExpanded("sort")}
+                  onSelect={(value) => updateQuery({ sort: value, page: null })}
+                />
+              </>
+            ) : null}
+          </Card>
         </Stack>
       </Card>
 
@@ -436,79 +592,109 @@ export function MediaPage() {
             <Loader />
           </Group>
         </Card>
-      ) : (result?.items.length || 0) === 0 ? (
+      ) : items.length === 0 ? (
         <Card className="glass-card" withBorder>
           <Text c="dimmed">{t("media.noResults")}</Text>
         </Card>
       ) : (
-        <div className="media-masonry">
-          {(result?.items || []).map((item) => {
-            const poster = item.content?.attributes?.find(
-              (attr) => attr.source === "tmdb" && attr.key === "poster_path"
-            )?.value;
+        <>
+          <div className="media-wall">
+            {items.map((item) => {
+              const poster = getPosterUrl(item, "md");
+              const titleText = getDisplayTitle(item, titleLanguage);
+              const originalTitleText = getDisplayTitle(item, "original");
+              const qualityTags = Array.from(new Set((item.qualityTags ?? []).map((tag) => tag.trim()).filter(Boolean)));
+              const genreTags = Array.from(new Set((item.genres ?? []).filter(Boolean)));
+              const primaryQuality = pickBestQualityTag(qualityTags);
+              const primaryGenre = genreTags[0] || null;
+              const primaryGenreLabel = primaryGenre ? localizeGenreLabel(primaryGenre, t) : null;
+              const originalTitle = originalTitleText.trim().toLowerCase() !== titleText.trim().toLowerCase()
+                ? originalTitleText
+                : null;
+              const categoryLabel = item.isAnime
+                ? t("nav.anime")
+                : (item.contentType ? t(`contentTypes.${item.contentType}`) : null);
+              const factGroups = extractMediaFacts({
+                collections: item.collections ?? [],
+                attributes: item.attributes ?? []
+              });
+              const factMap = new Map(factGroups.map((group) => [group.key, group.values]));
+              const mediaMeta = [
+                { label: t("media.filters.awards"), values: factMap.get("awards") ?? [] }
+              ]
+                .filter((entry) => entry.values.length > 0)
+                .map((entry) => `${entry.label}: ${entry.values.slice(0, 2).join(" / ")}`);
+              const infoLine = [item.releaseYear ? String(item.releaseYear) : null, primaryGenreLabel].filter(Boolean);
+              const maxSeedersText = item.maxSeeders != null ? String(item.maxSeeders) : "-";
 
-            const genres =
-              item.content?.collections
-                ?.filter((collection) => collection.type === "genre")
-                .map((collection) => collection.name)
-                .slice(0, 2) || [];
+              return (
+                <div key={item.id} className="media-wall-item">
+                  <Link href={`/media/${item.id}`} className="unstyled-link">
+                    <article className="media-wall-card">
+                      <div className="media-wall-poster-shell">
+                        {poster ? (
+                          <Image className="media-wall-poster" src={poster} alt={titleText} />
+                        ) : (
+                          <div className="media-wall-poster media-wall-poster-fallback">
+                            <Text c="dimmed" size="sm">{t("media.noPoster")}</Text>
+                          </div>
+                        )}
+                        <div className="media-wall-overlay media-wall-overlay-top">
+                          <div className="media-wall-overlay-group">
+                            {categoryLabel ? <span className="media-poster-chip media-poster-chip-type">{categoryLabel}</span> : null}
+                          </div>
+                          {primaryQuality ? <span className="media-poster-chip media-poster-chip-highlight">{primaryQuality}</span> : null}
+                        </div>
+                        <div className="media-wall-overlay media-wall-overlay-bottom">
+                          <div className="media-wall-overlay-group">
+                            <span className="media-poster-chip">
+                              <ListOrdered size={12} />
+                              {item.torrentCount}
+                            </span>
+                            {item.maxSeeders != null ? (
+                              <span className="media-poster-chip">
+                                <Users size={12} />
+                                {maxSeedersText}
+                              </span>
+                            ) : null}
+                          </div>
+                          {item.voteAverage ? <span className="media-rating-pill">★ {item.voteAverage.toFixed(1)}</span> : null}
+                        </div>
+                      </div>
 
-            const displayTitle = item.content?.title || item.title || item.torrent.name;
-            const releaseYear = item.content?.releaseYear || "-";
-            const detailHref = `/torrents/${item.infoHash}`;
+                      <div className="media-wall-content">
+                        {originalTitle ? <div className="media-wall-subtitle">{originalTitle}</div> : null}
+                        <div className="media-wall-title">{titleText}</div>
+                        {infoLine.length > 0 ? <div className="media-wall-facts">{infoLine.join(" · ")}</div> : null}
+                        {mediaMeta.length > 0 ? (
+                          <div className="media-wall-meta">
+                            {mediaMeta.map((meta) => (
+                              <span key={`${item.id}:${meta}`} className="media-mini-chip">{meta}</span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    </article>
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
 
-            return (
-              <Card key={item.infoHash} className="glass-card media-masonry-item" withBorder>
-                <Stack gap="sm">
-                  {poster ? (
-                    <Link href={detailHref} style={{ textDecoration: "none" }}>
-                      <Image
-                        src={`https://image.tmdb.org/t/p/w342/${poster.replace(/^\/+/, "")}`}
-                        alt={displayTitle}
-                        radius="md"
-                        fit="contain"
-                      />
-                    </Link>
-                  ) : (
-                    <Group justify="center" bg="var(--mantine-color-dark-6)" style={{ borderRadius: "var(--mantine-radius-md)", minHeight: 200 }}>
-                      <Text c="dimmed">{t("media.noPoster")}</Text>
-                    </Group>
-                  )}
-
-                  <Stack gap={4}>
-                    <Link href={detailHref} style={{ textDecoration: "none", color: "inherit" }}>
-                      <Text fw={700} lineClamp={2}>
-                        {displayTitle}
-                      </Text>
-                    </Link>
-                    <Group gap={6}>
-                      <Badge size="xs" variant="light">{releaseYear}</Badge>
-                      <Badge size="xs" variant="light" color="blue">{displayResolution(item.videoResolution)}</Badge>
-                      <Badge size="xs" variant="light" color="green">{t("torrents.table.seeders")}: {item.seeders ?? 0}</Badge>
-                    </Group>
-                    {!!genres.length && (
-                      <Group gap={6}>
-                        {genres.map((genreName) => (
-                          <Badge key={genreName} size="xs" color="grape" variant="outline">
-                            {translateFacetLabel("genres", genreName, genreName)}
-                          </Badge>
-                        ))}
-                      </Group>
-                    )}
-                    <Text size="sm" c="dimmed" lineClamp={4}>{item.content?.overview || item.torrent.name}</Text>
-                    <Text size="xs" c="dimmed">{t("media.size")}: {formatBytes(item.torrent.size)}</Text>
-                    <Text size="xs" c="dimmed" ff="monospace" lineClamp={1}>{item.infoHash}</Text>
-                  </Stack>
-                </Stack>
-              </Card>
-            );
-          })}
-        </div>
+          <Card className="glass-card media-toolbar-pagination" withBorder>
+            <Group justify="space-between" wrap="wrap">
+              <Text c="dimmed" size="sm">{t("media.results")}: {totalCount} / Page {page}</Text>
+              <Pagination
+                total={totalPages}
+                value={page}
+                onChange={(value) => updateQuery({ page: String(value) })}
+                siblings={1}
+                boundaries={1}
+              />
+            </Group>
+          </Card>
+        </>
       )}
-
-      <Group justify="flex-end">
-        <Pagination total={totalPages} value={page} onChange={setPage} />
-      </Group>
-    </Stack>
+    </div>
   );
 }

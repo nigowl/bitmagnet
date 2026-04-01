@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies, headers } from "next/headers";
 import { Manrope, JetBrains_Mono } from "next/font/google";
 import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
@@ -10,15 +11,46 @@ const sans = Manrope({ subsets: ["latin"], variable: "--font-sans" });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "bitmagnet frontend",
-  description: "Next.js + Mantine frontend for bitmagnet"
+  title: "bitmagnet（比特磁铁）",
+  description: "Modern torrent discovery, media browsing, and operations experience powered by bitmagnet."
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+type Locale = "en" | "zh";
+
+const localeCookieKey = "bitmagnet-locale";
+const colorSchemeCookieKey = "bitmagnet-color-scheme";
+
+function normalizeLocale(locale: string | null | undefined): Locale | undefined {
+  if (locale === "en" || locale === "zh") {
+    return locale;
+  }
+
+  return undefined;
+}
+
+function localeFromAcceptLanguage(acceptLanguage: string | null): Locale {
+  return acceptLanguage?.toLowerCase().startsWith("zh") ? "zh" : "en";
+}
+
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const cookieStore = await cookies();
+  const headerStore = await headers();
+  const initialLocale =
+    normalizeLocale(cookieStore.get(localeCookieKey)?.value) ??
+    localeFromAcceptLanguage(headerStore.get("accept-language"));
+  const storedColorScheme = cookieStore.get(colorSchemeCookieKey)?.value;
+  const initialColorScheme = storedColorScheme === "dark" ? "dark" : "light";
+
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
+    <html
+      lang={initialLocale === "zh" ? "zh-CN" : "en"}
+      className={`${sans.variable} ${mono.variable}`}
+      data-mantine-color-scheme={initialColorScheme}
+      suppressHydrationWarning
+    >
+      <head />
       <body>
-        <Providers>
+        <Providers initialLocale={initialLocale}>
           <ApplicationShell>{children}</ApplicationShell>
         </Providers>
       </body>

@@ -58,6 +58,16 @@ func (b *builder) Apply(e *gin.Engine) error {
 		c.Redirect(http.StatusMovedPermanently, target)
 	}
 
+	registerFrontendRoute := func(pattern string) {
+		e.GET(pattern, func(c *gin.Context) {
+			filepath := c.Request.URL.Path
+			if filepath == "" {
+				filepath = "/"
+			}
+			redirect(c, filepath)
+		})
+	}
+
 	e.GET("/", func(c *gin.Context) {
 		redirect(c, "/")
 	})
@@ -71,6 +81,15 @@ func (b *builder) Apply(e *gin.Engine) error {
 		}
 		redirect(c, filepath)
 	})
+	registerFrontendRoute("/media")
+	registerFrontendRoute("/media/*filepath")
+	registerFrontendRoute("/torrents")
+	registerFrontendRoute("/torrents/*filepath")
+	registerFrontendRoute("/login")
+	registerFrontendRoute("/register")
+	registerFrontendRoute("/profile")
+	registerFrontendRoute("/monitor")
+	registerFrontendRoute("/queue")
 
 	return nil
 }

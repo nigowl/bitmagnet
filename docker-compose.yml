@@ -1,202 +1,63 @@
-# This is a full-featured example for running bitmagnet through a gluetun VPN connection with Grafana/Prometheus observability services.
-# See https://bitmagnet.io/setup/installation.html for a minimal docker-compose example.
-
 services:
   bitmagnet:
+    # 基于 backend/Dockerfile 本地构建后端镜像
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        BITMAGNET_GIT_TAG: local
     container_name: bitmagnet
-    image: ghcr.io/bitmagnet-io/bitmagnet:latest
+    hostname: bitmagnet
+    restart: unless-stopped
+    ports:
+      - "3333:3333"
+    environment:
+      # 数据库连接：默认指向宿主机 PostgreSQL，可按需在 .env 覆盖
+      - POSTGRES_HOST=${POSTGRES_HOST:-192.168.31.201}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-bitmagnet}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-jaQ1BezHeQZ741wvjVRCLbGD4X5xK5lA}
+      # 媒体封面缓存目录（映射到 ./backend/data）
+      - MEDIA_CACHE_DIR=/root/.local/share/bitmagnet/cache
+      # 注意：这是返回给浏览器的前端地址（需主机可访问）
+      - WEBUI_BASE_URL=${WEBUI_BASE_URL:-http://localhost:3334}
     volumes:
       - ./backend/config:/root/.config/bitmagnet
-      # Mount data folder (currently only used for logs when file rotation is enabled):
-      - ./backend/data/bitmagnet:/root/.local/share/bitmagnet
-    restart: unless-stopped
-    environment:
-      # Enable logging to rotating files for ingest to Loki:
-      - LOG_FILE_ROTATOR_ENABLED=true
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PASSWORD=postgres
-      # - TMDB_API_KEY=your_api_key
-    network_mode: service:gluetun
-    depends_on:
-      postgres:
-        condition: service_healthy
-      gluetun:
-        condition: service_healthy
+      - ./backend/data:/root/.local/share/bitmagnet
     command:
       - worker
       - run
-      # Run all workers:
       - --all
-      # Or enable individual workers:
-      # - --keys=http_server
-      # - --keys=queue_server
-      # - --keys=dht_crawler
-
-  gluetun:
-    container_name: bitmagnet-gluetun
-    image: qmcgaw/gluetun:latest
-    cap_add:
-      - NET_ADMIN
-    ports:
-      # The bitmagnet ports must be exposed by the gluetun container:
-      - "3333:3333"
-      # BitTorrent ports:
-      - "3334:3334/tcp"
-      - "3334:3334/udp"
-    environment:
-      # Put your personal gluetun/VPN account config and credentials here:
-      # (See https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers)
-      - VPN_SERVICE_PROVIDER=your_vpn_provider
-    devices:
-      # See https://github.com/qdm12/gluetun/issues/2538
-      - /dev/net/tun:/dev/net/tun
-    restart: always
-    # Host names must be manually mapped here for bitmagnet to resolve them:
-    extra_hosts:
-      - "postgres:192.168.55.11"
     networks:
-      bitmagnet:
-        ipv4_address: 192.168.55.10
+      bitmagnet-net:
+        aliases:
+          - bitmagnet
 
-  postgres:
-    image: postgres:16-alpine
-    container_name: bitmagnet-postgres
-    volumes:
-      - ./backend/data/postgres:/var/lib/postgresql/data
-    networks:
-      bitmagnet:
-        ipv4_address: 192.168.55.11
-    ports:
-      - "5432:5432"
-    shm_size: 1g
+  frontend:
+    # 基于 frontend/Dockerfile 本地构建前端镜像
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        BITMAGNET_INTERNAL_API_BASE_URL: http://bitmagnet:3333
+    container_name: bitmagnet-frontend
+    hostname: frontend
     restart: unless-stopped
-    environment:
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=bitmagnet
-      - PGUSER=postgres
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready"]
-      interval: 10s
-      start_period: 20s
-
-  # Optional observability services:
-  # (ensure you have the config files in the `observability` directory in your project root)
-
-  # Visualization and dashboards:
-  grafana:
-    container_name: bitmagnet-grafana
-    image: grafana/grafana:latest
-    environment:
-      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-    volumes:
-      - ./backend/data/grafana:/var/lib/grafana
-      # Provisioned data sources and dashboards:
-      - ./backend/observability/grafana.datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
-      - ./backend/observability/grafana.dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
-      - ./backend/observability/grafana-dashboards:/etc/dashboards
-    ports:
-      - "3000:3000"
-    networks:
-      - bitmagnet
-
-  # Metrics and logs scraping:
-  grafana-agent:
-    container_name: bitmagnet-grafana-agent
-    image: grafana/agent:latest
-    volumes:
-      - ./backend/data/bitmagnet/logs:/var/log/bitmagnet
-      # Mount the logs and metrics scraping configurations:
-      - ./backend/observability/grafana-agent.config.river:/etc/agent-config/config.river
-    command:
-      - run
-      - /etc/agent-config/config.river
-      - --server.http.listen-addr=0.0.0.0:12345
-    environment:
-      HOSTNAME: grafana-agent
-      AGENT_MODE: flow
-      LOKI_HOST: loki:3100
-      POSTGRES_HOST: postgres:5432
-      REDIS_HOST: redis:6379
-    # The bitmagnet host must be mapped to the gluetun container:
-    extra_hosts:
-      - "bitmagnet:192.168.55.10"
-    ports:
-      - "12345:12345"
     depends_on:
-      - gluetun
-      - loki
-    networks:
-      - bitmagnet
-
-  # Metrics storage and aggregation:
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: bitmagnet-prometheus
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
+      bitmagnet:
+        condition: service_started
     ports:
-      - 9090:9090
-    # The bitmagnet host must be mapped to the gluetun container:
-    extra_hosts:
-      - "bitmagnet:192.168.55.10"
-    restart: unless-stopped
-    volumes:
-      - ./backend/data/prometheus:/prometheus
-      - ./backend/observability/prometheus.config.yaml:/etc/prometheus/prometheus.yml
-    networks:
-      - bitmagnet
-
-  # Log storage and aggregation:
-  loki:
-    container_name: bitmagnet-loki
-    image: grafana/loki:latest
-    ports:
-      - "3100:3100"
-    volumes:
-      - ./backend/data/loki:/loki
-      - ./backend/observability/loki.config.yaml:/etc/loki/local-config.yaml
-    command: -config.file=/etc/loki/local-config.yaml
-    networks:
-      - bitmagnet
-
-  # Runtime profiling:
-  pyroscope:
-    container_name: bitmagnet-pyroscope
-    image: grafana/pyroscope:latest
-    deploy:
-      restart_policy:
-        condition: on-failure
-    ports:
-      - "4040:4040"
-    command:
-      - "server"
-    volumes:
-      - ./backend/observability/pyroscope.config.yaml:/etc/pyroscope/server.yaml
-      - ./backend/data/pyroscope:/var/lib/pyroscope
-    networks:
-      - bitmagnet
-
-  # Prometheus metrics for Postgres:
-  postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:latest
-    container_name: bitmagnet-postgres-exporter
-    ports:
-      - 9187:9187
+      - "3334:3000"
     environment:
-      DATA_SOURCE_NAME: "postgresql://postgres:postgres@postgres:5432/bitmagnet?sslmode=disable"
-    links:
-      - postgres
-      - prometheus
+      # 前端服务端转发到后端时使用容器 hostname（见 next.config.ts rewrites）
+      - BITMAGNET_INTERNAL_API_BASE_URL=http://bitmagnet:3333
     networks:
-      - bitmagnet
+      bitmagnet-net:
+        aliases:
+          - frontend
 
 networks:
-  bitmagnet:
+  bitmagnet-net:
+    # 所有服务共享同一个虚拟网络
     driver: bridge
-    ipam:
-      driver: default
-      config:
-        - subnet: 192.168.55.0/24
-          gateway: 192.168.55.1

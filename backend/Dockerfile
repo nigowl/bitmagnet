@@ -1,25 +1,29 @@
 FROM golang:1.23.6-alpine3.20 AS build
 
-RUN apk --update add \
+RUN apk add --no-cache \
     gcc \
-    musl-dev \
-    git
-
-RUN mkdir /build
-
-COPY . /build
+    musl-dev
 
 WORKDIR /build
+ENV GOFLAGS="-buildvcs=false"
 
-RUN go build -ldflags "-s -w -X github.com/bitmagnet-io/bitmagnet/internal/version.GitTag=$(git describe --tags --always --dirty)"
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ARG BITMAGNET_GIT_TAG=local
+RUN go build -o /tmp/bitmagnet \
+    -ldflags "-s -w -X github.com/bitmagnet-io/bitmagnet/internal/version.GitTag=${BITMAGNET_GIT_TAG}"
 
 FROM alpine:3.20
 
-RUN apk --update add \
+RUN apk add --no-cache \
     curl \
     iproute2-ss \
-    && rm -rf /var/cache/apk/*
+    ca-certificates
 
-COPY --from=build /build/bitmagnet /usr/bin/bitmagnet
+COPY --from=build /tmp/bitmagnet /usr/bin/bitmagnet
+EXPOSE 3333
 
 ENTRYPOINT ["bitmagnet"]

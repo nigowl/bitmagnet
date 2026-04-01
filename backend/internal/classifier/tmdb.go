@@ -68,7 +68,8 @@ func (c executionContext) tmdbSearchTVShow(title string, year model.Year) (model
 
 func (c executionContext) tmdbGetMovieByTMDBID(id int64) (movie model.Content, err error) {
 	d, getDetailsErr := c.tmdbClient.MovieDetails(c.Context, tmdb.MovieDetailsRequest{
-		ID: id,
+		ID:               id,
+		AppendToResponse: []string{"credits"},
 	})
 	if getDetailsErr != nil {
 		if errors.Is(getDetailsErr, tmdb.ErrNotFound) {
@@ -86,7 +87,7 @@ func (c executionContext) tmdbGetMovieByTMDBID(id int64) (movie model.Content, e
 func (c executionContext) tmdbGetTVShowByTMDBID(id int64) (movie model.Content, err error) {
 	d, getDetailsErr := c.tmdbClient.TvDetails(c.Context, tmdb.TvDetailsRequest{
 		SeriesID:         id,
-		AppendToResponse: []string{"external_ids"},
+		AppendToResponse: []string{"external_ids", "aggregate_credits"},
 	})
 	if getDetailsErr != nil {
 		if errors.Is(getDetailsErr, tmdb.ErrNotFound) {

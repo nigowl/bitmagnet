@@ -127,16 +127,16 @@ func (s search) TorrentSuggestTags(
 		query.Options(append([]query.Option{
 			query.Select(
 				clause.Expr{
-					SQL: "torrent_tags.name AS name",
+					SQL: model.TableNameTorrentTag + ".name AS name",
 				},
 				clause.Expr{
-					SQL: "count(torrent_tags.*) AS total_count",
+					SQL: "count(" + model.TableNameTorrentTag + ".*) AS total_count",
 				},
 			),
 			query.Where(criteria...),
 			query.Group(
 				clause.Column{
-					Name: "torrent_tags.name",
+					Name: model.TableNameTorrentTag + ".name",
 				},
 			),
 			query.OrderBy(

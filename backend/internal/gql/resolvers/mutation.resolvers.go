@@ -17,37 +17,65 @@ import (
 
 // Torrent is the resolver for the torrent field.
 func (r *mutationResolver) Torrent(ctx context.Context) (gqlmodel.TorrentMutation, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return gqlmodel.TorrentMutation{}, err
+	}
+
 	return gqlmodel.TorrentMutation{}, nil
 }
 
 // Queue is the resolver for the queue field.
 func (r *mutationResolver) Queue(ctx context.Context) (gqlmodel.QueueMutation, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return gqlmodel.QueueMutation{}, err
+	}
+
 	return gqlmodel.QueueMutation{QueueManager: r.QueueManager}, nil
 }
 
 // Delete is the resolver for the delete field.
 func (r *torrentMutationResolver) Delete(ctx context.Context, obj *gqlmodel.TorrentMutation, infoHashes []protocol.ID) (*string, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+
 	err := r.BlockingManager.Block(ctx, infoHashes, true)
 	return nil, err
 }
 
 // PutTags is the resolver for the putTags field.
 func (r *torrentMutationResolver) PutTags(ctx context.Context, obj *gqlmodel.TorrentMutation, infoHashes []protocol.ID, tagNames []string) (*string, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+
 	return nil, r.Dao.TorrentTag.Put(ctx, infoHashes, tagNames)
 }
 
 // SetTags is the resolver for the setTags field.
 func (r *torrentMutationResolver) SetTags(ctx context.Context, obj *gqlmodel.TorrentMutation, infoHashes []protocol.ID, tagNames []string) (*string, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+
 	return nil, r.Dao.TorrentTag.Set(ctx, infoHashes, tagNames)
 }
 
 // DeleteTags is the resolver for the deleteTags field.
 func (r *torrentMutationResolver) DeleteTags(ctx context.Context, obj *gqlmodel.TorrentMutation, infoHashes []protocol.ID, tagNames []string) (*string, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+
 	return nil, r.Dao.TorrentTag.Delete(ctx, infoHashes, tagNames)
 }
 
 // Reprocess is the resolver for the reprocess field.
 func (r *torrentMutationResolver) Reprocess(ctx context.Context, obj *gqlmodel.TorrentMutation, input gen.TorrentReprocessInput) (*string, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+
 	params := processor.MessageParams{
 		InfoHashes:      input.InfoHashes,
 		ClassifierFlags: make(classifier.Flags),

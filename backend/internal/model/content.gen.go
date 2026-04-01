@@ -10,7 +10,7 @@ import (
 	"github.com/bitmagnet-io/bitmagnet/internal/database/fts"
 )
 
-const TableNameContent = "content"
+var TableNameContent = "content"
 
 // Content mapped from table <content>
 type Content struct {

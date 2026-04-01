@@ -9,6 +9,7 @@ import (
 	"github.com/bitmagnet-io/bitmagnet/internal/database/migrations"
 	"github.com/bitmagnet-io/bitmagnet/internal/database/postgres"
 	"github.com/bitmagnet-io/bitmagnet/internal/database/search"
+	"github.com/bitmagnet-io/bitmagnet/internal/model"
 	"go.uber.org/fx"
 )
 
@@ -30,5 +31,8 @@ func New() fx.Option {
 		fx.Decorate(
 			cache.NewDecorator,
 		),
+		fx.Invoke(func(cfg postgres.Config) {
+			model.ApplyTablePrefix(cfg.TablePrefix)
+		}),
 	)
 }

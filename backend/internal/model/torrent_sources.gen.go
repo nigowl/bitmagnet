@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const TableNameTorrentSource = "torrent_sources"
+var TableNameTorrentSource = "torrent_sources"
 
 // TorrentSource mapped from table <torrent_sources>
 type TorrentSource struct {

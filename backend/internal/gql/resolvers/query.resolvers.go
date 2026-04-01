@@ -24,6 +24,10 @@ func (r *queryResolver) Version(ctx context.Context) (string, error) {
 
 // Workers is the resolver for the workers field.
 func (r *queryResolver) Workers(ctx context.Context) (gen.WorkersQuery, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return gen.WorkersQuery{}, err
+	}
+
 	var workers []gen.Worker
 	for _, w := range r.Resolver.Workers.Workers() {
 		workers = append(workers, gen.Worker{
@@ -41,6 +45,10 @@ func (r *queryResolver) Workers(ctx context.Context) (gen.WorkersQuery, error) {
 
 // Health is the resolver for the health field.
 func (r *queryResolver) Health(ctx context.Context) (gen.HealthQuery, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return gen.HealthQuery{}, err
+	}
+
 	transformHealthCheckStatus := func(s health.AvailabilityStatus) gen.HealthStatus {
 		switch s {
 		case health.StatusInactive:
@@ -86,6 +94,10 @@ func (r *queryResolver) Health(ctx context.Context) (gen.HealthQuery, error) {
 
 // Queue is the resolver for the queue field.
 func (r *queryResolver) Queue(ctx context.Context) (gqlmodel.QueueQuery, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return gqlmodel.QueueQuery{}, err
+	}
+
 	return gqlmodel.QueueQuery{QueueMetricsClient: r.QueueMetricsClient}, nil
 }
 

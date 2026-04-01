@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const TableNameContentAttribute = "content_attributes"
+var TableNameContentAttribute = "content_attributes"
 
 // ContentAttribute mapped from table <content_attributes>
 type ContentAttribute struct {

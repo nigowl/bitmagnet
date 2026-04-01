@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const TableNameQueueJob = "queue_jobs"
+var TableNameQueueJob = "queue_jobs"
 
 // QueueJob mapped from table <queue_jobs>
 type QueueJob struct {

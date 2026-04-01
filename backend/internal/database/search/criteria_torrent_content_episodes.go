@@ -15,7 +15,7 @@ func TorrentContentEpisodesCriteria(episodes model.Episodes) query.Criteria {
 		for _, s := range episodes.SeasonEntries() {
 			if len(s.Episodes) == 0 {
 				and = append(and, query.DBCriteria{
-					SQL: fmt.Sprintf("torrent_contents.episodes #> '{%d}' = '{}'::jsonb", s.Season),
+					SQL: fmt.Sprintf("%s.episodes #> '{%d}' = '{}'::jsonb", model.TableNameTorrentContent, s.Season),
 				})
 			} else {
 				keyParts := make([]string, 0, len(s.Episodes))
@@ -25,7 +25,8 @@ func TorrentContentEpisodesCriteria(episodes model.Episodes) query.Criteria {
 
 				and = append(and, query.DBCriteria{
 					SQL: fmt.Sprintf(
-						"torrent_contents.episodes #> '{%d}' @> '{%s}'::jsonb",
+						"%s.episodes #> '{%d}' @> '{%s}'::jsonb",
+						model.TableNameTorrentContent,
 						s.Season,
 						strings.Join(keyParts, ","),
 					),

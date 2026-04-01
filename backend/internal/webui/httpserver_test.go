@@ -70,3 +70,47 @@ func TestBuilderRedirectsWebUIPathToFrontend(t *testing.T) {
 		t.Fatalf("expected redirect location %q, got %q", "http://localhost:3334/media", got)
 	}
 }
+
+func TestBuilderRedirectsMediaDetailPathToFrontend(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	b := newTestBuilder("http://localhost:3334")
+	if err := b.Apply(router); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/media/tmdb-tv-261091", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMovedPermanently {
+		t.Fatalf("expected status %d, got %d", http.StatusMovedPermanently, rec.Code)
+	}
+
+	if got := rec.Header().Get("Location"); got != "http://localhost:3334/media/tmdb-tv-261091" {
+		t.Fatalf("expected redirect location %q, got %q", "http://localhost:3334/media/tmdb-tv-261091", got)
+	}
+}
+
+func TestBuilderRedirectsTorrentDetailPathToFrontend(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	b := newTestBuilder("http://localhost:3334")
+	if err := b.Apply(router); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/torrents/0123456789ABCDEF0123456789ABCDEF01234567", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMovedPermanently {
+		t.Fatalf("expected status %d, got %d", http.StatusMovedPermanently, rec.Code)
+	}
+
+	if got := rec.Header().Get("Location"); got != "http://localhost:3334/torrents/0123456789ABCDEF0123456789ABCDEF01234567" {
+		t.Fatalf("expected redirect location %q, got %q", "http://localhost:3334/torrents/0123456789ABCDEF0123456789ABCDEF01234567", got)
+	}
+}

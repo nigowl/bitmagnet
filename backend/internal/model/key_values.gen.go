@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const TableNameKeyValue = "key_values"
+var TableNameKeyValue = "key_values"
 
 // KeyValue mapped from table <key_values>
 type KeyValue struct {

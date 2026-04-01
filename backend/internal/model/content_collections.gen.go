@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const TableNameContentCollection = "content_collections"
+var TableNameContentCollection = "content_collections"
 
 // ContentCollection mapped from table <content_collections>
 type ContentCollection struct {

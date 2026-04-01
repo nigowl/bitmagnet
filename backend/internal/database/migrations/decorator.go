@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 
+	"github.com/bitmagnet-io/bitmagnet/internal/database/postgres"
 	"github.com/bitmagnet-io/bitmagnet/internal/lazy"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -11,9 +12,10 @@ import (
 
 type DecoratorParams struct {
 	fx.In
-	DB       lazy.Lazy[*gorm.DB]
-	Migrator lazy.Lazy[Migrator]
-	Logger   *zap.SugaredLogger
+	DB             lazy.Lazy[*gorm.DB]
+	Migrator       lazy.Lazy[Migrator]
+	PostgresConfig postgres.Config
+	Logger         *zap.SugaredLogger
 }
 
 type DecoratorResult struct {
@@ -34,6 +36,9 @@ func NewDecorator(p DecoratorParams) DecoratorResult {
 			}
 			if migrateErr := m.Up(context.TODO()); migrateErr != nil {
 				return nil, migrateErr
+			}
+			if prefixErr := EnsureTablePrefix(context.TODO(), db, p.PostgresConfig.TablePrefix); prefixErr != nil {
+				return nil, prefixErr
 			}
 			return db, nil
 		}),

@@ -2,11 +2,13 @@ package manager
 
 import (
 	"context"
+
+	"github.com/bitmagnet-io/bitmagnet/internal/model"
 )
 
 func (m manager) PurgeJobs(ctx context.Context, req PurgeJobsRequest) error {
 	if len(req.Queues) == 0 && len(req.Statuses) == 0 {
-		_, err := m.db.WithContext(ctx).Raw("TRUNCATE TABLE queue_jobs;").Rows()
+		_, err := m.db.WithContext(ctx).Raw("TRUNCATE TABLE " + model.TableNameQueueJob + ";").Rows()
 		return err
 	}
 

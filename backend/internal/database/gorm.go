@@ -7,6 +7,7 @@ import (
 	"github.com/bitmagnet-io/bitmagnet/internal/database/exclause"
 	"github.com/bitmagnet-io/bitmagnet/internal/database/logger"
 	"github.com/bitmagnet-io/bitmagnet/internal/lazy"
+	"github.com/bitmagnet-io/bitmagnet/internal/model"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
@@ -50,6 +51,9 @@ func New(p Params) Result {
 			}
 			if pluginErr := gDB.Use(exclause.New()); pluginErr != nil {
 				return nil, pluginErr
+			}
+			if setupErr := gDB.SetupJoinTable(&model.Content{}, "Collections", &model.ContentCollectionContent{}); setupErr != nil {
+				return nil, setupErr
 			}
 			return gDB, nil
 		}),

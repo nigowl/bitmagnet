@@ -59,6 +59,7 @@ require (
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/google/pprof v0.0.0-20241210010833-40e02aabc2ad // indirect
+	golang.org/x/image v0.24.0 // indirect
 )
 
 require (
@@ -170,10 +171,10 @@ require (
 	go.uber.org/dig v1.18.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.13.0 // indirect
-	golang.org/x/crypto v0.33.0 // indirect
+	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8 // indirect
-	golang.org/x/mod v0.23.0 // indirect
-	golang.org/x/net v0.35.0 // indirect
+	golang.org/x/mod v0.25.0 // indirect
+	golang.org/x/net v0.36.0 // indirect
 	golang.org/x/term v0.29.0 // indirect
 	golang.org/x/tools v0.30.0 // indirect
 	golang.org/x/tools/cmd/cover v0.1.0-deprecated // indirect

@@ -144,7 +144,8 @@ func TestClassifier(t *testing.T) {
 					"MovieDetails",
 					matchContext,
 					tmdb.MovieDetailsRequest{
-						ID: 123,
+						ID:               123,
+						AppendToResponse: []string{"credits"},
 					},
 				).
 					Return(tmdb.MovieDetailsResponse{

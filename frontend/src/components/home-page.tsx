@@ -1,245 +1,209 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import dynamic from "next/dynamic";
-import { Badge, Button, Card, Group, Loader, Stack, Table, Text, Title } from "@mantine/core";
+import { useCallback, useEffect, useState } from "react";
+import { Badge, Button, Card, Group, Image, Loader, Stack, Text, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { Clapperboard, Flame, RefreshCw } from "lucide-react";
-import { graphqlRequest } from "@/lib/api";
-import { TORRENT_CONTENT_SEARCH_QUERY, TORRENT_METRICS_QUERY } from "@/lib/graphql";
+import { Clapperboard, ListOrdered, RefreshCw, Users } from "lucide-react";
 import { useI18n } from "@/languages/provider";
+import { fetchMediaList, type MediaListItem } from "@/lib/media-api";
+import { extractMediaFacts, getDisplayTitle, getPosterUrl, pickBestQualityTag } from "@/lib/media";
 
-const ECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
+function pickDailyRecommendations(items: MediaListItem[], count: number): MediaListItem[] {
+  if (items.length <= count) return items;
+  const dayToken = Number(new Date().toISOString().slice(0, 10).replace(/-/g, ""));
+  const start = dayToken % items.length;
+  const rotated = [...items.slice(start), ...items.slice(0, start)];
+  return rotated.slice(0, count);
+}
 
-type TorrentListItem = {
-  infoHash: string;
+function HomeSection({ title, items, loading, emptyText, t, titleLanguage }: {
   title: string;
-  seeders?: number | null;
-  leechers?: number | null;
-  contentType?: string | null;
-  torrent: {
-    size: number;
-    sources: Array<{ key: string; name: string }>;
-  };
-};
+  items: MediaListItem[];
+  loading: boolean;
+  emptyText: string;
+  t: (key: string) => string;
+  titleLanguage: "zh" | "en";
+}) {
+  const sectionItems = items.slice(0, 12);
 
-type SearchResponse = {
-  torrentContent: {
-    search: {
-      totalCount: number;
-      items: TorrentListItem[];
-    };
-  };
-};
+  return (
+    <Stack gap="sm">
+      <div className="da-section-title-wrap">
+        <div className="da-section-title">{title}</div>
+      </div>
 
-type TorrentMetricsResponse = {
-  torrent: {
-    metrics: {
-      buckets: Array<{
-        source: string;
-        bucket: string;
-        count: number;
-      }>;
-    };
-  };
-};
+      {loading ? (
+        <Card className="glass-card" withBorder>
+          <Group justify="center" py="xl">
+            <Loader />
+          </Group>
+        </Card>
+      ) : sectionItems.length === 0 ? (
+        <Card className="glass-card" withBorder>
+          <Text c="dimmed">{emptyText}</Text>
+        </Card>
+      ) : (
+        <div className="home-media-grid">
+          {sectionItems.map((item) => {
+            const poster = getPosterUrl(item, "md");
+            const titleText = getDisplayTitle(item, titleLanguage);
+            const originalTitleText = getDisplayTitle(item, "original");
+            const qualityTags = Array.from(new Set((item.qualityTags ?? []).map((tag) => tag.trim()).filter(Boolean)));
+            const primaryQuality = pickBestQualityTag(qualityTags);
+            const categoryLabel = item.isAnime
+              ? t("nav.anime")
+              : (item.contentType ? t(`contentTypes.${item.contentType}`) : null);
+            const factGroups = extractMediaFacts({
+              collections: item.collections ?? [],
+              attributes: item.attributes ?? []
+            });
+            const awards = factGroups.find((group) => group.key === "awards")?.values ?? [];
+            const mediaMeta = awards.length > 0 ? [`${t("media.filters.awards")}: ${awards.slice(0, 2).join(" / ")}`] : [];
+            const originalTitle = originalTitleText.trim().toLowerCase() !== titleText.trim().toLowerCase()
+              ? originalTitleText
+              : null;
+            const maxSeedersText = item.maxSeeders != null ? String(item.maxSeeders) : "-";
 
-function formatBytes(size: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = size;
-  let index = 0;
-  while (value >= 1024 && index < units.length - 1) {
-    value /= 1024;
-    index += 1;
-  }
-  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[index]}`;
+            return (
+              <div key={item.id} className="home-media-item">
+                <Link href={`/media/${item.id}`} className="unstyled-link">
+                  <article className="media-wall-card home-media-card">
+                    <div className="media-wall-poster-shell">
+                      {poster ? (
+                        <Image className="media-wall-poster home-media-poster" src={poster} alt={titleText} />
+                      ) : (
+                        <div className="media-wall-poster home-media-poster media-wall-poster-fallback">
+                          <Text c="dimmed" size="sm">{t("media.noPoster")}</Text>
+                        </div>
+                      )}
+
+                      <div className="media-wall-overlay media-wall-overlay-top">
+                        <div className="media-wall-overlay-group">
+                          {categoryLabel ? <span className="media-poster-chip media-poster-chip-type">{categoryLabel}</span> : null}
+                        </div>
+                        {primaryQuality ? <span className="media-poster-chip media-poster-chip-highlight">{primaryQuality}</span> : null}
+                      </div>
+
+                      <div className="media-wall-overlay media-wall-overlay-bottom">
+                        <div className="media-wall-overlay-group">
+                          <span className="media-poster-chip">
+                            <ListOrdered size={12} />
+                            {item.torrentCount}
+                          </span>
+                          {item.maxSeeders != null ? (
+                            <span className="media-poster-chip">
+                              <Users size={12} />
+                              {maxSeedersText}
+                            </span>
+                          ) : null}
+                        </div>
+                        {item.voteAverage ? <span className="media-rating-pill">★ {item.voteAverage.toFixed(1)}</span> : null}
+                      </div>
+                    </div>
+
+                    <div className="media-wall-content">
+                      {originalTitle ? <div className="media-wall-subtitle">{originalTitle}</div> : null}
+                      <div className="media-wall-title">{titleText}</div>
+                      {item.releaseYear ? <div className="media-wall-facts">{item.releaseYear}</div> : null}
+                      {mediaMeta.length > 0 ? (
+                        <div className="media-wall-meta">
+                          {mediaMeta.map((meta) => (
+                            <span key={`${item.id}:${meta}`} className="media-mini-chip">{meta}</span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </article>
+                </Link>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Stack>
+  );
 }
 
 export function HomePage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const titleLanguage = locale === "en" ? "en" : "zh";
   const [loading, setLoading] = useState(true);
-  const [latest, setLatest] = useState<TorrentListItem[]>([]);
-  const [hottest, setHottest] = useState<TorrentListItem[]>([]);
-  const [latestTotal, setLatestTotal] = useState(0);
-  const [metricsBuckets, setMetricsBuckets] = useState<TorrentMetricsResponse["torrent"]["metrics"]["buckets"]>([]);
+  const [dailyPicks, setDailyPicks] = useState<MediaListItem[]>([]);
+  const [highScore, setHighScore] = useState<MediaListItem[]>([]);
+  const [hotPicks, setHotPicks] = useState<MediaListItem[]>([]);
+  const [movies, setMovies] = useState<MediaListItem[]>([]);
+  const [series, setSeries] = useState<MediaListItem[]>([]);
+  const [anime, setAnime] = useState<MediaListItem[]>([]);
+
+  const loadSection = useCallback(async (category: "movie" | "series" | "anime", limit: number) => {
+    const data = await fetchMediaList({ category, limit, page: 1 });
+    return data.items || [];
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const startTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const [latestResp, hotResp, metricsResp] = await Promise.all([
-        graphqlRequest<SearchResponse>(TORRENT_CONTENT_SEARCH_QUERY, {
-          input: {
-            limit: 12,
-            page: 1,
-            totalCount: true,
-            orderBy: [{ field: "published_at", descending: true }]
-          }
-        }),
-        graphqlRequest<SearchResponse>(TORRENT_CONTENT_SEARCH_QUERY, {
-          input: {
-            limit: 12,
-            page: 1,
-            totalCount: true,
-            orderBy: [{ field: "seeders", descending: true }]
-          }
-        }),
-        graphqlRequest<TorrentMetricsResponse>(TORRENT_METRICS_QUERY, {
-          input: { bucketDuration: "hour", startTime }
-        })
+      const [popularData, ratingData, downloadData, movieItems, seriesItems, animeItems] = await Promise.all([
+        fetchMediaList({ sort: "popular", limit: 36, page: 1 }),
+        fetchMediaList({ sort: "rating", limit: 12, page: 1 }),
+        fetchMediaList({ sort: "download", limit: 12, page: 1 }),
+        loadSection("movie", 12),
+        loadSection("series", 12),
+        loadSection("anime", 12)
       ]);
 
-      setLatest(latestResp.torrentContent.search.items || []);
-      setLatestTotal(latestResp.torrentContent.search.totalCount || 0);
-      setHottest(hotResp.torrentContent.search.items || []);
-      setMetricsBuckets(metricsResp.torrent.metrics.buckets || []);
+      const popularItems = popularData.items || [];
+      setDailyPicks(pickDailyRecommendations(popularItems, 12));
+      setHighScore((ratingData.items || []).slice(0, 12));
+      setHotPicks((downloadData.items || []).length > 0 ? (downloadData.items || []).slice(0, 12) : popularItems.slice(0, 12));
+      setMovies(movieItems);
+      setSeries(seriesItems);
+      setAnime(animeItems);
     } catch (error) {
       notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadSection]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const metricsOption = useMemo(() => {
-    const points = metricsBuckets.slice(-160);
-    const sources = Array.from(new Set(points.map((item) => item.source))).slice(0, 5);
-    const buckets = Array.from(new Set(points.map((item) => item.bucket))).sort();
-
-    return {
-      tooltip: { trigger: "axis" },
-      legend: { textStyle: { color: "#d6e4ff" } },
-      grid: { left: 34, right: 16, top: 40, bottom: 28 },
-      xAxis: { type: "category", data: buckets.map((item) => item.slice(11, 16)) },
-      yAxis: { type: "value" },
-      series: sources.map((source) => ({
-        name: source,
-        type: "line",
-        smooth: true,
-        showSymbol: false,
-        data: buckets.map((bucket) =>
-          points
-            .filter((item) => item.bucket === bucket && item.source === source)
-            .reduce((sum, item) => sum + item.count, 0)
-        )
-      }))
-    };
-  }, [metricsBuckets]);
-
   return (
     <Stack gap="md">
-      <Card className="glass-card glass-strong" withBorder>
-        <Group justify="space-between" align="flex-start">
-          <Stack gap={4}>
-            <Title order={2}>{t("home.title")}</Title>
-            <Text c="dimmed">{t("home.subtitle")}</Text>
-            <Group gap="xs">
-              <Badge variant="light">{t("home.latestCount")}: {latestTotal}</Badge>
-              <Badge variant="light" color="orange">{t("home.hot")}</Badge>
+      <Card className="glass-card da-search-card" withBorder>
+        <Group justify="space-between" align="flex-start" wrap="wrap">
+          <Stack gap={4} className="page-heading">
+            <Title order={2} className="page-title">{t("home.title")}</Title>
+            <Text c="dimmed" className="page-subtitle">{t("home.subtitle")}</Text>
+            <Group gap="xs" className="card-meta-row">
+              <Badge variant="light" color="orange">{t("contentTypes.movie")}</Badge>
+              <Badge variant="light" color="orange">{t("contentTypes.tv_show")}</Badge>
+              <Badge variant="light" color="orange">{t("nav.anime")}</Badge>
             </Group>
           </Stack>
           <Group>
-            <Button renderRoot={(props) => <Link href="/torrents" {...props} />} variant="light">
-              {t("home.gotoTorrents")}
-            </Button>
-            <Button renderRoot={(props) => <Link href="/media" {...props} />} leftSection={<Clapperboard size={14} />} variant="light">
+            <Button renderRoot={(props) => <Link href="/media" {...props} />} leftSection={<Clapperboard size={14} />}>
               {t("home.gotoMedia")}
             </Button>
-            <Button leftSection={<RefreshCw size={14} />} variant="default" onClick={() => void load()}>
+            <Button renderRoot={(props) => <Link href="/torrents" {...props} />} variant="default" leftSection={<ListOrdered size={14} />}>
+              {t("home.gotoTorrents")}
+            </Button>
+            <Button variant="default" leftSection={<RefreshCw size={14} />} onClick={() => void load()}>
               {t("common.refresh")}
             </Button>
           </Group>
         </Group>
       </Card>
 
-      <Card className="glass-card" withBorder>
-        <Text fw={600} mb="sm">
-          {t("home.updateTrend")}
-        </Text>
-        <ECharts option={metricsOption} style={{ height: 290 }} />
-      </Card>
-
-      <Stack>
-        <Card className="glass-card" withBorder>
-          <Group justify="space-between" mb="sm">
-            <Text fw={600}>{t("home.latest")}</Text>
-            <Badge variant="light">{latest.length}</Badge>
-          </Group>
-          {loading ? (
-            <Group justify="center" py="xl">
-              <Loader />
-            </Group>
-          ) : (
-            <Table striped withTableBorder>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>{t("home.name")}</Table.Th>
-                  <Table.Th>{t("home.type")}</Table.Th>
-                  <Table.Th>{t("home.size")}</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {latest.map((item) => (
-                  <Table.Tr key={item.infoHash}>
-                    <Table.Td>
-                      <Link href={`/torrents/${item.infoHash}`} style={{ textDecoration: "none", color: "inherit" }}>
-                        <Text lineClamp={1} title={item.title} style={{ maxWidth: "min(56vw, 620px)" }}>
-                          {item.title}
-                        </Text>
-                      </Link>
-                    </Table.Td>
-                    <Table.Td>{item.contentType ? t(`contentTypes.${item.contentType}`) : "-"}</Table.Td>
-                    <Table.Td>{formatBytes(item.torrent.size)}</Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          )}
-        </Card>
-
-        <Card className="glass-card" withBorder>
-          <Group justify="space-between" mb="sm">
-            <Text fw={600}>{t("home.hottest")}</Text>
-            <Badge variant="light" color="orange" leftSection={<Flame size={12} />}>
-              {hottest.length}
-            </Badge>
-          </Group>
-          {loading ? (
-            <Group justify="center" py="xl">
-              <Loader />
-            </Group>
-          ) : (
-            <Table striped withTableBorder>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>{t("home.name")}</Table.Th>
-                  <Table.Th>{t("home.seeders")}</Table.Th>
-                  <Table.Th>{t("home.leechers")}</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {hottest.map((item) => (
-                  <Table.Tr key={item.infoHash}>
-                    <Table.Td>
-                      <Link href={`/torrents/${item.infoHash}`} style={{ textDecoration: "none", color: "inherit" }}>
-                        <Text lineClamp={1} title={item.title} style={{ maxWidth: "min(56vw, 620px)" }}>
-                          {item.title}
-                        </Text>
-                      </Link>
-                    </Table.Td>
-                    <Table.Td>{item.seeders ?? "-"}</Table.Td>
-                    <Table.Td>{item.leechers ?? "-"}</Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          )}
-        </Card>
-      </Stack>
+      <HomeSection title={t("home.dailyPicks")} items={dailyPicks} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
+      <HomeSection title={t("home.highRated")} items={highScore} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
+      <HomeSection title={t("home.hotNow")} items={hotPicks} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
+      <HomeSection title={t("contentTypes.movie")} items={movies} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
+      <HomeSection title={t("contentTypes.tv_show")} items={series} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
+      <HomeSection title={t("nav.anime")} items={anime} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
     </Stack>
   );
 }

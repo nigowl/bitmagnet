@@ -63,7 +63,7 @@ func (qmc *queueMetricsCollector) collectQueueStatusInfos() ([]*queueStatusInfo,
 	var queueInfos []*queueStatusInfo
 
 	err = q.QueueJob.WithContext(context.Background()).UnderlyingDB().Raw(
-		"SELECT queue, status, count(*) FROM queue_jobs GROUP BY queue, status",
+		"SELECT queue, status, count(*) FROM " + model.TableNameQueueJob + " GROUP BY queue, status",
 	).Find(&queueInfos).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to get queue status info: %w", err)

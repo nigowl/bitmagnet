@@ -44,3 +44,6 @@ testem.log
 Thumbs.db
 
 /frontend/tsconfig.tsbuildinfo
+
+# docker
+docker-compose.yml

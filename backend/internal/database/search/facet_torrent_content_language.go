@@ -62,7 +62,7 @@ func (torrentContentLanguageFacet) Criteria(filter query.FacetFilter) []query.Cr
 			}
 			array += "]"
 			return query.RawCriteria{
-				Query: "torrent_contents.languages ?| " + array,
+				Query: model.TableNameTorrentContent + ".languages ?| " + array,
 				Joins: maps.NewInsertMap(
 					maps.MapEntry[string, struct{}]{Key: model.TableNameTorrentContent},
 				),

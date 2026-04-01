@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bitmagnet-io/bitmagnet/internal/bloom"
+	"github.com/bitmagnet-io/bitmagnet/internal/model"
 	"github.com/bitmagnet-io/bitmagnet/internal/protocol"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -104,7 +105,7 @@ func (m *manager) flush(ctx context.Context) error {
 	}()
 
 	if len(hashes) > 0 {
-		_, err = tx.Exec(ctx, "DELETE FROM torrents WHERE info_hash = any($1)", hashes)
+		_, err = tx.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE info_hash = any($1)", model.TableNameTorrent), hashes)
 		if err != nil {
 			return fmt.Errorf("failed to delete from torrents table: %w", err)
 		}
@@ -120,7 +121,7 @@ func (m *manager) flush(ctx context.Context) error {
 
 	var nullOid sql.NullInt32
 
-	err = tx.QueryRow(ctx, "SELECT oid FROM bloom_filters WHERE key = $1", blockedTorrentsBloomFilterKey).
+	err = tx.QueryRow(ctx, fmt.Sprintf("SELECT oid FROM %s WHERE key = $1", model.TableNameBloomFilter), blockedTorrentsBloomFilterKey).
 		Scan(&nullOid)
 	if err == nil {
 		found = true
@@ -170,14 +171,14 @@ func (m *manager) flush(ctx context.Context) error {
 	now := time.Now()
 	if !found {
 		_, err = tx.Exec(ctx,
-			"INSERT INTO bloom_filters (key, oid, created_at, updated_at) VALUES ($1, $2, $3, $4)",
+			fmt.Sprintf("INSERT INTO %s (key, oid, created_at, updated_at) VALUES ($1, $2, $3, $4)", model.TableNameBloomFilter),
 			blockedTorrentsBloomFilterKey, oid, now, now)
 		if err != nil {
 			return fmt.Errorf("failed to save new bloom filter record: %w", err)
 		}
 	} else if !nullOid.Valid {
 		_, err = tx.Exec(ctx,
-			"UPDATE bloom_filters SET oid = $1, updated_at = $2 WHERE key = $3",
+			fmt.Sprintf("UPDATE %s SET oid = $1, updated_at = $2 WHERE key = $3", model.TableNameBloomFilter),
 			oid, now, blockedTorrentsBloomFilterKey)
 		if err != nil {
 			return fmt.Errorf("failed to update bloom filter record: %w", err)

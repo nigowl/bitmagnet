@@ -5,6 +5,7 @@ import (
 	"database/sql/driver"
 
 	"github.com/bitmagnet-io/bitmagnet/internal/database/dao"
+	mediasvc "github.com/bitmagnet-io/bitmagnet/internal/media"
 	"github.com/bitmagnet-io/bitmagnet/internal/model"
 	"github.com/bitmagnet-io/bitmagnet/internal/protocol"
 	"github.com/bitmagnet-io/bitmagnet/internal/slice"
@@ -20,6 +21,7 @@ type persistPayload struct {
 
 func (c processor) persist(ctx context.Context, payload persistPayload) error {
 	contentsMap := make(map[model.ContentRef]struct{}, len(payload.torrentContents))
+	affectedMediaRefs := make(map[model.ContentRef]struct{}, len(payload.torrentContents))
 	contentsPtr := make([]*model.Content, 0, len(payload.torrentContents))
 	torrentContentsPtr := make([]*model.TorrentContent, 0, len(payload.torrentContents))
 	torrentTagsPtr := make([]*model.TorrentTag, 0, len(payload.addTags))
@@ -35,6 +37,10 @@ func (c processor) persist(ctx context.Context, payload persistPayload) error {
 				contentCopy := tcCopy.Content
 				contentsPtr = append(contentsPtr, &contentCopy)
 			}
+		}
+
+		if ref, ok := mediaContentRefFromTorrentContent(tcCopy); ok {
+			affectedMediaRefs[ref] = struct{}{}
 		}
 
 		tcCopy.Content = model.Content{}
@@ -57,6 +63,37 @@ func (c processor) persist(ctx context.Context, payload persistPayload) error {
 	}
 
 	return c.dao.Transaction(func(tx *dao.Query) error {
+		if len(payload.deleteIDs) > 0 {
+			deletedRows, deletedErr := tx.TorrentContent.WithContext(ctx).Where(
+				c.dao.TorrentContent.ID.In(payload.deleteIDs...),
+			).Find()
+			if deletedErr != nil {
+				return deletedErr
+			}
+			for _, row := range deletedRows {
+				if ref, ok := mediaContentRefFromTorrentContent(*row); ok {
+					affectedMediaRefs[ref] = struct{}{}
+				}
+			}
+		}
+
+		if len(payload.deleteInfoHashes) > 0 {
+			valuers := slice.Map(payload.deleteInfoHashes, func(infoHash protocol.ID) driver.Valuer {
+				return infoHash
+			})
+			deletedRows, deletedErr := tx.TorrentContent.WithContext(ctx).Where(
+				c.dao.TorrentContent.InfoHash.In(valuers...),
+			).Find()
+			if deletedErr != nil {
+				return deletedErr
+			}
+			for _, row := range deletedRows {
+				if ref, ok := mediaContentRefFromTorrentContent(*row); ok {
+					affectedMediaRefs[ref] = struct{}{}
+				}
+			}
+		}
+
 		if len(contentsPtr) > 0 {
 			if createContentErr := tx.Content.WithContext(ctx).Clauses(
 				clause.OnConflict{
@@ -106,6 +143,33 @@ func (c processor) persist(ctx context.Context, payload persistPayload) error {
 			}
 		}
 
+		affectedRefs := make([]model.ContentRef, 0, len(affectedMediaRefs))
+		for ref := range affectedMediaRefs {
+			affectedRefs = append(affectedRefs, ref)
+		}
+		if len(affectedRefs) > 0 {
+			if err := mediasvc.SyncEntries(ctx, tx.TorrentContent.WithContext(ctx).UnderlyingDB(), affectedRefs); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
+}
+
+func mediaContentRefFromTorrentContent(tc model.TorrentContent) (model.ContentRef, bool) {
+	if !tc.ContentType.Valid || !tc.ContentSource.Valid || !tc.ContentID.Valid {
+		return model.ContentRef{}, false
+	}
+
+	contentType := tc.ContentType.ContentType
+	if contentType != model.ContentTypeMovie && contentType != model.ContentTypeTvShow {
+		return model.ContentRef{}, false
+	}
+
+	return model.ContentRef{
+		Type:   contentType,
+		Source: tc.ContentSource.String,
+		ID:     tc.ContentID.String,
+	}, true
 }

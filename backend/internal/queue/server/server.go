@@ -128,7 +128,7 @@ func (s *server) runGarbageCollection(ctx context.Context) {
 			s.query.QueueJob.Status.In(string(model.QueueJobStatusProcessed), string(model.QueueJobStatusFailed)),
 		).
 			UnderlyingDB().Where(
-			"queue_jobs.ran_at + queue_jobs.archival_duration < ?::timestamptz",
+			model.TableNameQueueJob+".ran_at + "+model.TableNameQueueJob+".archival_duration < ?::timestamptz",
 			time.Now(),
 		).Delete(&model.QueueJob{})
 		if tx.Error != nil {

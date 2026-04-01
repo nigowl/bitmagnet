@@ -74,7 +74,7 @@ func (c client) Request(ctx context.Context, req Request) ([]Bucket, error) {
         date_trunc(?, updated_at) as bucket,
         updated_at > (created_at + interval '1 hour') as updated,
         count(*) as count
-        from torrents_torrent_sources
+        from `+model.TableNameTorrentsTorrentSource+`
        `+
 		conditionClause+
 		`

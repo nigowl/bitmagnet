@@ -121,9 +121,24 @@ type MovieDetailsResponse struct {
 		Iso3166_1 string `json:"iso_3166_1"`
 		Name      string `json:"name"`
 	} `json:"production_countries"`
-	ReleaseDate     string `json:"release_date"`
-	Revenue         int64  `json:"revenue"`
-	Runtime         int    `json:"runtime"`
+	ReleaseDate string `json:"release_date"`
+	Revenue     int64  `json:"revenue"`
+	Runtime     int    `json:"runtime"`
+	Credits     struct {
+		Cast []struct {
+			ID           int64  `json:"id"`
+			Name         string `json:"name"`
+			OriginalName string `json:"original_name"`
+			Order        int    `json:"order"`
+		} `json:"cast"`
+		Crew []struct {
+			ID           int64  `json:"id"`
+			Name         string `json:"name"`
+			OriginalName string `json:"original_name"`
+			Department   string `json:"department"`
+			Job          string `json:"job"`
+		} `json:"crew"`
+	} `json:"credits"`
 	SpokenLanguages []struct {
 		Iso639_1 string `json:"iso_639_1"`
 		Name     string `json:"name"`
@@ -235,6 +250,21 @@ type TvDetailsResponse struct {
 		TwitterID   string `json:"twitter_id"`
 		ID          int64  `json:"id,omitempty"`
 	} `json:"external_ids,omitempty"`
+	AggregateCredits struct {
+		Cast []struct {
+			ID           int64  `json:"id"`
+			Name         string `json:"name"`
+			OriginalName string `json:"original_name"`
+			Order        int    `json:"order"`
+		} `json:"cast"`
+		Crew []struct {
+			ID           int64  `json:"id"`
+			Name         string `json:"name"`
+			OriginalName string `json:"original_name"`
+			Department   string `json:"department"`
+			Job          string `json:"job"`
+		} `json:"crew"`
+	} `json:"aggregate_credits,omitempty"`
 }
 
 type FindByIDRequest struct {
