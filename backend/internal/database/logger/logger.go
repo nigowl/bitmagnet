@@ -73,7 +73,8 @@ func (l *customLogger) Trace(_ context.Context, begin time.Time, fc func() (stri
 	switch {
 	case err != nil && l.logLevel >= gormlogger.Error &&
 		!errors.Is(err, gormlogger.ErrRecordNotFound) &&
-		!errors.Is(err, context.Canceled):
+		!errors.Is(err, context.Canceled) &&
+		!errors.Is(err, context.DeadlineExceeded):
 		sql, rows := fc()
 		l.zap.Errorw("gorm trace",
 			"location", utils.FileWithLineNum(),

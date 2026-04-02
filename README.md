@@ -1,113 +1,193 @@
-# bitmagnet（比特磁铁） (custom full-stack workspace)
+# bitmagnet（比特磁铁）
 
-这是一个包含后端（Go）与前端（Next.js + Mantine）的 bitmagnet 改造版工作区。
+一个基于 `Go + Next.js + Mantine` 的 bitmagnet 增强版全栈工作区，面向“种子检索 + 影视浏览 + 运维管理”一体化场景。
+
+## 功能特点（牛逼版）
+
+- 全链路产品化：种子检索、影视页、详情页、收藏、管理员后台（监控 / 队列 / 设置 / 日志 / 维护）全部打通。
+- 队列管理更强：支持任务聚合统计、筛选排序、任务详情展开、按任务类型清理、队列清理阈值配置。
+- 封面缓存更快：封面缺失时异步入队，前端先返回“加载中”临时封面，缓存完成后自动命中本地文件。
+- 封面缓存更稳：同一媒体封面任务去重入队，下载失败会记录错误并带远端 `source_url` 日志，便于排查。
+- 队列自动保洁：已完成/失败任务每天凌晨 `02:00` 自动清理，按“最大保留条数 + 最大保留天数”双阈值控制。
+- 维护任务标准化：`/maintenance` 页面提交的是队列任务，实际执行统一由 queue worker 处理。
+- 运维可视化：监控页展示健康状态、worker 状态、队列指标、种子事件指标，定位问题更直观。
+- 中英双语界面：前端文案支持中英文切换，管理员页面交互风格统一（右上角图标操作按钮 + Tooltip）。
+
+## 技术栈
+
+- 后端：Go（GraphQL + REST）
+- 前端：Next.js 16 + React 19 + Mantine 8 + ECharts
+- 数据库：PostgreSQL
+- 任务系统：内置队列 + worker
+- 部署：Docker Compose / 本地脚本
 
 ## 快速开始
 
+### 前置依赖
+
+- Go（建议 1.22+）
+- Node.js（建议 20+）与 npm
+- PostgreSQL（本地或远程）
+- Docker（可选，用于自动拉起本地 Postgres 或 Compose 部署）
+
 ### 本地开发（推荐）
 
-1. 只启动后端：
+1. 启动后端：
 
 ```bash
 ./startup.sh service
 ```
 
-2. 同时启动后端 + 前端：
+2. 启动后端 + 前端：
 
 ```bash
 ./startup.sh service --frontend
 ```
 
-默认端口：
-- 后端 API: `http://localhost:3333`
-- 前端开发服务: `http://localhost:3334`
+3. 热重载调试模式（后端）：
+
+```bash
+./startup.sh debug --frontend
+```
+
+默认地址：
+
+- 后端 API：`http://localhost:3333`
+- 前端开发服务：`http://localhost:3334`
+
+说明：
+
+- 根目录 `startup.sh` 会调用 `backend/startup.sh`，并可选带起 `frontend/startup.sh`。
+- 后端脚本支持 `POSTGRES_AUTO_START=auto|1|0`。当数据库是本机地址且不可达时，`auto` 模式会尝试用 Docker 启动本地 Postgres 容器。
 
 ### Docker Compose
 
-可用编排文件：
-- `docker-compose.with-db.yml`：`postgres + bitmagnet + frontend`
-- `docker-compose.no-db.yml`：`bitmagnet + frontend`（外部数据库）
-- `docker-compose.yml`：当前本地默认编排
-
-启动全部服务：
+1. 使用内置 PostgreSQL 的样例编排：
 
 ```bash
-docker compose up -d
+docker compose -f docker-compose.sample.yml up -d --build
+```
+
+2. 使用当前默认编排（通常连接外部 PostgreSQL）：
+
+```bash
+docker compose up -d --build
 ```
 
 默认访问地址：
-- 后端 API: `http://localhost:3333`
-- 前端（compose）: `http://localhost:3334`
 
-### 一键部署（从 GitHub 下载）
+- 后端 API：`http://localhost:3333`
+- 前端：`http://localhost:3334`
 
-提供脚本：`scripts/deploy-from-github.sh`
+## 配置说明
 
-支持两种模式：
-- `with-db`：内置 PostgreSQL（使用 `docker-compose.with-db.yml`）
-- `no-db`：外部 PostgreSQL（使用 `docker-compose.no-db.yml`）
+### 后端常用环境变量
 
-示例：
+数据库：
 
-```bash
-# 有数据库（默认）
-./scripts/deploy-from-github.sh --repo nigowl/bitmagnet --ref main --mode with-db
+- `POSTGRES_HOST`
+- `POSTGRES_PORT`
+- `POSTGRES_DB`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `POSTGRES_AUTO_START`（`auto|1|0`）
 
-# 无数据库（外部 PostgreSQL）
-./scripts/deploy-from-github.sh --repo nigowl/bitmagnet --ref main --mode no-db
-```
+worker：
 
-常用参数：
-- `--target-dir <目录>`：下载并解压到指定目录（默认 `./deployments`）
-- `--skip-build`：跳过镜像构建，直接 `docker compose up -d`
+- `BITMAGNET_WORKER_KEYS`（默认 `all`，可指定部分 worker）
 
-## 前端环境变量
+日志：
 
-前端通过 `NEXT_PUBLIC_BITMAGNET_API_BASE_URL` 指向后端地址，例如：
-
-```bash
-NEXT_PUBLIC_BITMAGNET_API_BASE_URL=http://localhost:3333
-```
-
-## 后端日志环境变量（`.env`）
-
-可在项目根目录 `.env` 或 `backend/.env` 中配置以下变量：
-
-```bash
-# 日志等级（支持 DEBUG / INFO / WARNING / ERROR / CRITICAL / ALERT / EMERGENCY）
-BITMAGNET_LOG_LEVEL=INFO
-
-# 单个日志文件滚动大小（MiB）
-BITMAGNET_LOG_MAX_SIZE_MB=16
-
-# 保留滚动文件数量
-BITMAGNET_LOG_MAX_BACKUPS=10
-```
-
-兼容原生配置键：
 - `LOG_LEVEL`
-- `LOG_FILE_ROTATOR_MAX_SIZE`（字节）
+- `LOG_FILE_ROTATOR_LEVEL`
+- `LOG_FILE_ROTATOR_MAX_SIZE`
 - `LOG_FILE_ROTATOR_MAX_BACKUPS`
 
-## 封面缓存（后端）
+别名（会自动映射到上面的日志变量）：
 
-后端提供封面缓存与多尺寸切图，缓存目录默认为：
+- `BITMAGNET_LOG_LEVEL`
+- `BITMAGNET_LOG_MAX_SIZE_MB`
+- `BITMAGNET_LOG_MAX_BACKUPS`
 
-```bash
-backend/data/cache/{mediaid}/
-```
+### 前端常用环境变量
 
-封面调用格式：
+- `NEXT_PUBLIC_BITMAGNET_API_BASE_URL`
+  - 配置后：浏览器直接请求该后端地址。
+  - 不配置：前端通过 Next.js rewrite 代理到 `BITMAGNET_INTERNAL_API_BASE_URL`（默认 `http://localhost:3333`）。
+- `BITMAGNET_INTERNAL_API_BASE_URL`
+  - 前端服务端转发后端请求时使用（尤其在容器网络中）。
+
+## 关键工作流
+
+### 1) 封面缓存与回源
+
+接口：
 
 ```text
 /api/media/:id/cover/:kind/:size
 ```
 
-- `kind`: `poster` 或 `backdrop`
-- `size`: `sm` / `md` / `lg` / `xl`
+- `kind`：`poster` 或 `backdrop`
+- `size`：`sm|md|lg|xl`
+- 缓存目录（默认）：`backend/data/cache/{mediaID}/`
 
-## 目录
+行为：
 
-- `backend/`：Go 服务与迁移
-- `frontend/`：Next.js 前端
-- `docker-compose*.yml`：容器编排文件（有库/无库/本地默认）
+- 已缓存：直接返回静态文件。
+- 未缓存：提交队列任务并返回“加载中”临时封面。
+- 无法匹配封面：返回“无封面”占位。
+
+### 2) 队列清理
+
+- 每天凌晨 `02:00` 自动清理 `processed + failed` 任务。
+- 清理策略：
+  - 超过最大保留天数的任务删除。
+  - 总量超过最大保留条数时，按最旧优先删除。
+- 页面可调参数路径：`队列管理 -> 右上角齿轮 -> 清理设置`。
+
+### 3) 维护任务
+
+- `/maintenance` 页面提交的任务会入队。
+- 实际执行由 queue worker 完成。
+- 页面展示的是队列任务状态与结果（不是本地临时任务状态）。
+
+## 开发命令
+
+根目录：
+
+```bash
+task test
+task lint
+task migrate
+```
+
+后端：
+
+```bash
+cd backend
+go test ./...
+task test
+task lint
+```
+
+前端：
+
+```bash
+cd frontend
+npm install
+npm run dev
+npm run typecheck
+npm run lint
+```
+
+## 目录结构
+
+- `backend/`：Go 服务、任务队列、数据库迁移、GraphQL/REST 接口
+- `frontend/`：Next.js 前端页面与组件
+- `docker-compose.yml`：默认编排
+- `docker-compose.sample.yml`：带 PostgreSQL 的样例编排
+- `startup.sh`：一键启动脚本（可同时拉起前后端）
+
+## 说明
+
+本仓库用于学习、开发和二次改造。请在使用爬取、索引、分发能力时遵守当地法律法规及站点规则。

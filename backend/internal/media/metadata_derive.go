@@ -50,6 +50,9 @@ func enrichStructuredMetadata(ctx context.Context, db *gorm.DB, mediaIDs []strin
 	if len(mediaIDs) == 0 {
 		return nil
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	var entries []model.MediaEntry
 	if err := db.WithContext(ctx).
@@ -61,6 +64,9 @@ func enrichStructuredMetadata(ctx context.Context, db *gorm.DB, mediaIDs []strin
 
 	now := time.Now()
 	for i := range entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		enriched := deriveStructuredMetadata(entries[i])
 		enriched.UpdatedAt = now
 		if err := db.WithContext(ctx).
