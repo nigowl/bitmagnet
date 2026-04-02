@@ -1,4 +1,4 @@
-FROM golang:1.23.6-alpine3.20 AS build
+FROM golang:1.24-alpine AS build
 
 RUN apk add --no-cache \
     gcc \

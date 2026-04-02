@@ -39,7 +39,7 @@ export function RegisterPage() {
     <Card className="glass-card" withBorder maw={460} mx="auto">
       <Stack>
         <Title order={2}>{t("auth.register")}</Title>
-        <Text c="dimmed">{t("auth.registerSubtitle")}</Text>
+        <Text size="sm" c="dimmed">{t("auth.registerSubtitle")}</Text>
         <TextInput label={t("auth.username")} value={username} onChange={(event) => setUsername(event.currentTarget.value)} />
         <PasswordInput label={t("auth.password")} value={password} onChange={(event) => setPassword(event.currentTarget.value)} />
         <PasswordInput label={t("auth.confirmPassword")} value={confirmPassword} onChange={(event) => setConfirmPassword(event.currentTarget.value)} />

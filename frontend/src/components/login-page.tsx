@@ -33,7 +33,7 @@ export function LoginPage() {
     <Card className="glass-card" withBorder maw={460} mx="auto">
       <Stack>
         <Title order={2}>{t("auth.login")}</Title>
-        <Text c="dimmed">{t("auth.loginSubtitle")}</Text>
+        <Text size="sm" c="dimmed">{t("auth.loginSubtitle")}</Text>
         <TextInput label={t("auth.username")} value={username} onChange={(event) => setUsername(event.currentTarget.value)} />
         <PasswordInput label={t("auth.password")} value={password} onChange={(event) => setPassword(event.currentTarget.value)} />
         <Button loading={loading} onClick={() => void submit()}>
