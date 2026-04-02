@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/nigowl/bitmagnet/internal/dhtcrawler"
@@ -76,6 +75,8 @@ type QueuePerformanceSettings struct {
 	BackfillCoverCacheConcurrency            int `json:"backfillCoverCacheConcurrency"`
 	BackfillCoverCacheCheckIntervalSeconds   int `json:"backfillCoverCacheCheckIntervalSeconds"`
 	BackfillCoverCacheTimeoutSeconds         int `json:"backfillCoverCacheTimeoutSeconds"`
+	CleanupCompletedMaxRecords               int `json:"cleanupCompletedMaxRecords"`
+	CleanupCompletedMaxAgeDays               int `json:"cleanupCompletedMaxAgeDays"`
 }
 
 type MediaPerformanceSettings struct {
@@ -126,6 +127,8 @@ type QueuePerformanceSettingsInput struct {
 	BackfillCoverCacheConcurrency            *int `json:"backfillCoverCacheConcurrency"`
 	BackfillCoverCacheCheckIntervalSeconds   *int `json:"backfillCoverCacheCheckIntervalSeconds"`
 	BackfillCoverCacheTimeoutSeconds         *int `json:"backfillCoverCacheTimeoutSeconds"`
+	CleanupCompletedMaxRecords               *int `json:"cleanupCompletedMaxRecords"`
+	CleanupCompletedMaxAgeDays               *int `json:"cleanupCompletedMaxAgeDays"`
 }
 
 type MediaPerformanceSettingsInput struct {
@@ -215,29 +218,25 @@ func NewService(p Params) Service {
 	}
 
 	return &service{
-		db:               p.DB,
-		levelController:  p.LevelController,
-		defaults:         defaults,
-		mediaConfig:      p.MediaConfig,
-		mediaService:     p.MediaService,
-		tmdbClient:       p.TMDBClient,
-		logger:           namedLogger(p.Logger, "media_site_plugins.settings"),
-		maintenanceTasks: make(map[string]*MaintenanceTask),
+		db:              p.DB,
+		levelController: p.LevelController,
+		defaults:        defaults,
+		mediaConfig:     p.MediaConfig,
+		mediaService:    p.MediaService,
+		tmdbClient:      p.TMDBClient,
+		logger:          namedLogger(p.Logger, "media_site_plugins.settings"),
 	}
 }
 
 type service struct {
-	db               lazy.Lazy[*gorm.DB]
-	levelController  logging.LevelController
-	workerRegistry   worker.Registry
-	defaults         Settings
-	mediaConfig      media.Config
-	mediaService     media.Service
-	tmdbClient       lazy.Lazy[tmdb.Client]
-	logger           *zap.Logger
-	maintenanceMu    sync.RWMutex
-	maintenanceTasks map[string]*MaintenanceTask
-	maintenanceSeq   uint64
+	db              lazy.Lazy[*gorm.DB]
+	levelController logging.LevelController
+	workerRegistry  worker.Registry
+	defaults        Settings
+	mediaConfig     media.Config
+	mediaService    media.Service
+	tmdbClient      lazy.Lazy[tmdb.Client]
+	logger          *zap.Logger
 }
 
 func (s *service) SetWorkerRegistry(registry worker.Registry) {
@@ -754,6 +753,20 @@ func applyQueuePerformanceUpdate(
 	); err != nil {
 		return err
 	}
+	if err := setInt(
+		input.CleanupCompletedMaxRecords, 100, 1000000, runtimeconfig.KeyQueueCleanupCompletedMaxRecords,
+		func(v int) { effective.Performance.Queue.CleanupCompletedMaxRecords = v },
+		"performance.queue.cleanupCompletedMaxRecords",
+	); err != nil {
+		return err
+	}
+	if err := setInt(
+		input.CleanupCompletedMaxAgeDays, 1, 3650, runtimeconfig.KeyQueueCleanupCompletedMaxAgeDays,
+		func(v int) { effective.Performance.Queue.CleanupCompletedMaxAgeDays = v },
+		"performance.queue.cleanupCompletedMaxAgeDays",
+	); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -875,6 +888,12 @@ func applyQueuePerformanceMerge(result *Settings, values map[string]string) {
 	applyInt(runtimeconfig.KeyQueueBackfillCoverCacheTimeoutSeconds, 5, 7200, func(v int) {
 		result.Performance.Queue.BackfillCoverCacheTimeoutSeconds = v
 	})
+	applyInt(runtimeconfig.KeyQueueCleanupCompletedMaxRecords, 100, 1000000, func(v int) {
+		result.Performance.Queue.CleanupCompletedMaxRecords = v
+	})
+	applyInt(runtimeconfig.KeyQueueCleanupCompletedMaxAgeDays, 1, 3650, func(v int) {
+		result.Performance.Queue.CleanupCompletedMaxAgeDays = v
+	})
 }
 
 func applyMediaPerformanceMerge(result *Settings, values map[string]string) {
@@ -930,6 +949,8 @@ func newQueuePerformanceSettingsDefaults(cfg queue.PerformanceConfig) QueuePerfo
 		BackfillCoverCacheConcurrency:            cfg.BackfillCoverConcurrency,
 		BackfillCoverCacheCheckIntervalSeconds:   int(cfg.BackfillCoverCheckInterval / time.Second),
 		BackfillCoverCacheTimeoutSeconds:         int(cfg.BackfillCoverTimeout / time.Second),
+		CleanupCompletedMaxRecords:               cfg.CleanupCompletedMaxRecords,
+		CleanupCompletedMaxAgeDays:               cfg.CleanupCompletedMaxAgeDays,
 	}
 }
 
@@ -968,6 +989,8 @@ func settingsToRuntimeValueMap(settings Settings) map[string]string {
 		runtimeconfig.KeyQueueBackfillCoverCacheConcurrency:            strconv.Itoa(settings.Performance.Queue.BackfillCoverCacheConcurrency),
 		runtimeconfig.KeyQueueBackfillCoverCacheCheckIntervalSeconds:   strconv.Itoa(settings.Performance.Queue.BackfillCoverCacheCheckIntervalSeconds),
 		runtimeconfig.KeyQueueBackfillCoverCacheTimeoutSeconds:         strconv.Itoa(settings.Performance.Queue.BackfillCoverCacheTimeoutSeconds),
+		runtimeconfig.KeyQueueCleanupCompletedMaxRecords:               strconv.Itoa(settings.Performance.Queue.CleanupCompletedMaxRecords),
+		runtimeconfig.KeyQueueCleanupCompletedMaxAgeDays:               strconv.Itoa(settings.Performance.Queue.CleanupCompletedMaxAgeDays),
 
 		runtimeconfig.KeyMediaAutoCacheCover:     strconv.FormatBool(settings.Performance.Media.AutoCacheCover),
 		runtimeconfig.KeyMediaAutoFetchBilingual: strconv.FormatBool(settings.Performance.Media.AutoFetchBilingual),

@@ -120,12 +120,13 @@
   },
   "maintenance": {
     "title": "维护",
-    "subtitle": "执行系统维护任务，并实时查看处理进度与结果。",
+    "subtitle": "提交维护任务到队列。",
+    "queueWorkerHint": "任务会先入队，实际执行由队列 worker 完成。",
     "taskType": "任务类型",
     "pendingCount": "待处理数量",
     "limit": "处理数量",
     "start": "开始执行",
-    "started": "维护任务已启动",
+    "started": "任务已入队，实际执行由队列 worker 完成。",
     "currentTask": "当前任务",
     "taskId": "任务 ID",
     "taskOptions": {
@@ -360,8 +361,18 @@
     "enqueueDone": "队列任务已提交",
     "purge": "清理任务",
     "purgeTitle": "清理队列任务",
-    "purgeHint": "将删除当前筛选条件匹配到的任务。",
+    "purgeHint": "请选择任务类型并清理对应队列任务。",
+    "purgeAllTypes": "全部任务类型",
     "purgeDone": "队列任务已清理",
+    "cleanupSettings": {
+      "button": "清理设置",
+      "title": "队列清理设置",
+      "hint": "已完成和失败任务将在每天凌晨 2 点按以下阈值清理。",
+      "maxRecords": "最多保留完成任务数",
+      "maxAgeDays": "最长保留天数",
+      "saved": "队列清理设置已保存",
+      "invalidInput": "请输入有效的清理参数"
+    },
     "timeline": "队列时间线",
     "queueSummaryTitle": "队列类型分布",
     "noJobs": "当前筛选下没有队列任务",
@@ -375,7 +386,8 @@
       "title": "任务详情",
       "queueRaw": "原始队列名",
       "nextRun": "计划执行时间",
-      "payload": "任务参数"
+      "payload": "任务参数",
+      "error": "错误详情"
     },
     "queueValues": {
       "process_torrent": "单种子处理",
@@ -523,7 +535,7 @@
     "search": "搜索标题、简介或年份",
     "results": "结果数",
     "noResults": "当前筛选条件下没有匹配内容",
-    "noPoster": "暂无封面",
+    "noPoster": "无封面",
     "clearFilters": "清空筛选",
     "expandFilters": "展开筛选",
     "collapseFilters": "收起筛选",

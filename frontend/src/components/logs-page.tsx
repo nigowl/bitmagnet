@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import {
+  ActionIcon,
   Button,
   Card,
   Group,
@@ -11,6 +12,7 @@ import {
   Select,
   Stack,
   Text,
+  Tooltip,
   Title
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -155,10 +157,23 @@ export function LogsPage() {
   return (
     <Stack gap="md">
       <Card className="glass-card" withBorder>
-        <Stack gap={4}>
-          <Title order={2}>{t("logs.title")}</Title>
-          <Text c="dimmed">{t("logs.subtitle")}</Text>
-        </Stack>
+        <Group justify="space-between" align="flex-start" wrap="wrap">
+          <Stack gap={4}>
+            <Title order={2}>{t("logs.title")}</Title>
+            <Text c="dimmed">{t("logs.subtitle")}</Text>
+          </Stack>
+          <Tooltip label={t("common.refresh")} withArrow>
+            <ActionIcon
+              variant="default"
+              size="lg"
+              loading={logsLoading}
+              onClick={() => setLogsRefreshNonce((current) => current + 1)}
+              aria-label={t("common.refresh")}
+            >
+              <RefreshCcw size={16} />
+            </ActionIcon>
+          </Tooltip>
+        </Group>
       </Card>
 
       <Card className="glass-card" withBorder>
@@ -204,14 +219,6 @@ export function LogsPage() {
             <Text c="dimmed" size="sm">
               {t("logs.path")}: {logs?.path || "-"} · {t("common.total")} {logs?.totalLines || 0}
             </Text>
-            <Button
-              variant="default"
-              leftSection={<RefreshCcw size={14} />}
-              loading={logsLoading}
-              onClick={() => setLogsRefreshNonce((current) => current + 1)}
-            >
-              {t("common.refresh")}
-            </Button>
           </Group>
 
           <Pagination

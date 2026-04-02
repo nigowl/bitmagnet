@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/nigowl/bitmagnet/internal/database/dao"
 	"github.com/nigowl/bitmagnet/internal/lazy"
@@ -75,6 +76,14 @@ func NewBackfillCoverQueueHandler(p QueueHandlerParams) QueueHandlerResult {
 					msg := QueueTaskMessage{}
 					if err := json.Unmarshal([]byte(job.Payload), &msg); err != nil {
 						return err
+					}
+					if strings.TrimSpace(msg.MediaID) != "" {
+						return p.Service.GenerateCover(ctx, GenerateCoverInput{
+							MediaID:    msg.MediaID,
+							Kind:       msg.Kind,
+							Size:       msg.Size,
+							SourcePath: msg.SourcePath,
+						})
 					}
 					_, err := p.Service.BackfillCoverCache(ctx, BackfillCoverCacheInput{
 						Limit: int(msg.Limit),

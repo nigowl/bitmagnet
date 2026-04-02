@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActionIcon,
   Badge,
   Button,
   Card,
@@ -24,12 +25,11 @@ import {
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { CalendarSync, DatabaseBackup, Filter, ImageDown, LogIn, RotateCcw, Sparkles, Trash2 } from "lucide-react";
+import { CalendarSync, DatabaseBackup, Filter, LogIn, RotateCcw, Settings2, Trash2 } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
-import { graphqlRequest } from "@/lib/api";
+import { apiRequest, graphqlRequest } from "@/lib/api";
 import {
-  QUEUE_ENQUEUE_MAINTENANCE_TASK_MUTATION,
   QUEUE_ENQUEUE_REPROCESS_BATCH_MUTATION,
   QUEUE_JOBS_QUERY,
   QUEUE_METRICS_QUERY,
@@ -85,6 +85,19 @@ type QueueMetricsResponse = {
         createdAtBucket: string;
         count: number;
       }>;
+    };
+  };
+};
+
+type AdminQueueSettings = {
+  cleanupCompletedMaxRecords: number;
+  cleanupCompletedMaxAgeDays: number;
+};
+
+type AdminSettingsResponse = {
+  settings: {
+    performance: {
+      queue: AdminQueueSettings;
     };
   };
 };
@@ -319,83 +332,189 @@ export function QueuePage() {
     );
   }
 
-  const enqueueMaintenanceTask = async (taskType: "refresh_media_metadata" | "backfill_cover_cache") => {
-    try {
-      await graphqlRequest(QUEUE_ENQUEUE_MAINTENANCE_TASK_MUTATION, {
-        input: {
-          taskType,
-          purge: false,
-          limit: 200
-        }
-      });
-      notifications.show({ color: "green", message: t("queue.enqueueDone") });
-      void load();
-    } catch (error) {
-      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
-    }
-  };
-
   const openPurgeModal = () => {
-    modals.openConfirmModal({
-      title: t("queue.purgeTitle"),
-      children: <Text size="sm">{t("queue.purgeHint")}</Text>,
-      labels: { confirm: t("queue.purge"), cancel: t("common.cancel") },
-      confirmProps: { color: "red" },
-      onConfirm: async () => {
+    const PurgeForm = () => {
+      const [taskQueue, setTaskQueue] = useState<string>(allFilterOption);
+      const [submitting, setSubmitting] = useState(false);
+      const queueOptions = [
+        { value: allFilterOption, label: t("queue.purgeAllTypes") },
+        ...queueAggregationItems.map((item) => ({ value: item.value, label: item.label }))
+      ];
+
+      const submit = async () => {
+        setSubmitting(true);
         try {
           await graphqlRequest(QUEUE_PURGE_JOBS_MUTATION, {
             input: {
-              queues: activeQueueFilter.length ? activeQueueFilter : undefined,
-              statuses: activeStatusFilter.length ? activeStatusFilter : undefined
+              queues: taskQueue === allFilterOption ? undefined : [taskQueue]
             }
           });
           notifications.show({ color: "green", message: t("queue.purgeDone") });
+          modals.closeAll();
           void load();
         } catch (error) {
           notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+        } finally {
+          setSubmitting(false);
         }
-      }
+      };
+
+      return (
+        <Stack>
+          <Text size="sm">{t("queue.purgeHint")}</Text>
+          <Select
+            label={t("queue.form.taskType")}
+            allowDeselect={false}
+            value={taskQueue}
+            data={queueOptions}
+            onChange={(value) => setTaskQueue(value || allFilterOption)}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => modals.closeAll()}>
+              {t("common.cancel")}
+            </Button>
+            <Button color="red" onClick={() => void submit()} loading={submitting}>
+              {t("queue.purge")}
+            </Button>
+          </Group>
+        </Stack>
+      );
+    };
+
+    modals.open({
+      title: t("queue.purgeTitle"),
+      children: <PurgeForm />,
+      size: 560
+    });
+  };
+
+  const openCleanupSettingsModal = () => {
+    const CleanupSettingsForm = () => {
+      const [loadingSettings, setLoadingSettings] = useState(true);
+      const [savingSettings, setSavingSettings] = useState(false);
+      const [maxRecords, setMaxRecords] = useState<number | "">(5000);
+      const [maxAgeDays, setMaxAgeDays] = useState<number | "">(7);
+
+      useEffect(() => {
+        let mounted = true;
+        const loadSettings = async () => {
+          setLoadingSettings(true);
+          try {
+            const data = await apiRequest<AdminSettingsResponse>("/api/admin/settings");
+            if (!mounted) return;
+            setMaxRecords(data.settings.performance.queue.cleanupCompletedMaxRecords || 5000);
+            setMaxAgeDays(data.settings.performance.queue.cleanupCompletedMaxAgeDays || 7);
+          } catch (error) {
+            if (!mounted) return;
+            notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+          } finally {
+            if (mounted) setLoadingSettings(false);
+          }
+        };
+        void loadSettings();
+        return () => {
+          mounted = false;
+        };
+      }, []);
+
+      const submit = async () => {
+        if (typeof maxRecords !== "number" || typeof maxAgeDays !== "number") {
+          notifications.show({ color: "red", message: t("queue.cleanupSettings.invalidInput") });
+          return;
+        }
+        setSavingSettings(true);
+        try {
+          await apiRequest<AdminSettingsResponse>("/api/admin/settings", {
+            method: "PUT",
+            data: {
+              performance: {
+                queue: {
+                  cleanupCompletedMaxRecords: maxRecords,
+                  cleanupCompletedMaxAgeDays: maxAgeDays
+                }
+              }
+            }
+          });
+          notifications.show({ color: "green", message: t("queue.cleanupSettings.saved") });
+          modals.closeAll();
+        } catch (error) {
+          notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+        } finally {
+          setSavingSettings(false);
+        }
+      };
+
+      return (
+        <Stack>
+          <Text c="dimmed" size="sm">
+            {t("queue.cleanupSettings.hint")}
+          </Text>
+          {loadingSettings ? (
+            <Group justify="center" py="md">
+              <Loader size="sm" />
+            </Group>
+          ) : (
+            <SimpleGrid cols={{ base: 1, md: 2 }}>
+              <NumberInput
+                label={t("queue.cleanupSettings.maxRecords")}
+                min={100}
+                max={1000000}
+                value={maxRecords}
+                onChange={(value) => setMaxRecords(value === "" ? "" : Number(value))}
+              />
+              <NumberInput
+                label={t("queue.cleanupSettings.maxAgeDays")}
+                min={1}
+                max={3650}
+                value={maxAgeDays}
+                onChange={(value) => setMaxAgeDays(value === "" ? "" : Number(value))}
+              />
+            </SimpleGrid>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => modals.closeAll()}>
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={() => void submit()} loading={savingSettings} disabled={loadingSettings}>
+              {t("settings.save")}
+            </Button>
+          </Group>
+        </Stack>
+      );
+    };
+
+    modals.open({
+      title: t("queue.cleanupSettings.title"),
+      children: <CleanupSettingsForm />,
+      size: 560
     });
   };
 
   const openEnqueueModal = () => {
     const EnqueueForm = () => {
-      const [taskType, setTaskType] = useState("reprocess_batch");
       const [purge, setPurge] = useState(true);
       const [classifierRematch, setClassifierRematch] = useState(false);
       const [apisDisabled, setApisDisabled] = useState(true);
       const [localSearchDisabled, setLocalSearchDisabled] = useState(true);
       const [orphans, setOrphans] = useState(false);
-      const [maintenanceLimit, setMaintenanceLimit] = useState<number | "">(200);
       const [batchSize, setBatchSize] = useState<number | "">("");
       const [chunkSize, setChunkSize] = useState<number | "">("");
       const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-      const isReprocess = taskType === "reprocess_batch";
 
       const submit = async () => {
         try {
-          if (isReprocess) {
-            await graphqlRequest(QUEUE_ENQUEUE_REPROCESS_BATCH_MUTATION, {
-              input: {
-                purge,
-                classifierRematch,
-                apisDisabled,
-                localSearchDisabled,
-                orphans: orphans || undefined,
-                batchSize: typeof batchSize === "number" ? batchSize : undefined,
-                chunkSize: typeof chunkSize === "number" ? chunkSize : undefined,
-                contentTypes: selectedTypes.length ? selectedTypes : undefined
-              }
-            });
-          } else {
-            await graphqlRequest(QUEUE_ENQUEUE_MAINTENANCE_TASK_MUTATION, {
-              input: {
-                taskType,
-                purge,
-                limit: typeof maintenanceLimit === "number" ? maintenanceLimit : undefined
-              }
-            });
-          }
+          await graphqlRequest(QUEUE_ENQUEUE_REPROCESS_BATCH_MUTATION, {
+            input: {
+              purge,
+              classifierRematch,
+              apisDisabled,
+              localSearchDisabled,
+              orphans: orphans || undefined,
+              batchSize: typeof batchSize === "number" ? batchSize : undefined,
+              chunkSize: typeof chunkSize === "number" ? chunkSize : undefined,
+              contentTypes: selectedTypes.length ? selectedTypes : undefined
+            }
+          });
           modals.closeAll();
           notifications.show({ color: "green", message: t("queue.enqueueDone") });
           void load();
@@ -406,55 +525,28 @@ export function QueuePage() {
 
       return (
         <Stack>
-          <Select
-            label={t("queue.form.taskType")}
-            value={taskType}
-            allowDeselect={false}
-            onChange={(value) => setTaskType(value || "reprocess_batch")}
-            data={[
-              { value: "reprocess_batch", label: t("queue.form.taskTypes.reprocessBatch") },
-              { value: "refresh_media_metadata", label: t("queue.form.taskTypes.refreshMediaMetadata") },
-              { value: "backfill_cover_cache", label: t("queue.form.taskTypes.backfillCoverCache") }
-            ]}
-          />
           <Text c="dimmed" size="sm">
-            {taskType === "reprocess_batch"
-              ? t("queue.form.taskDescriptions.reprocessBatch")
-              : taskType === "refresh_media_metadata"
-                ? t("queue.form.taskDescriptions.refreshMediaMetadata")
-                : t("queue.form.taskDescriptions.backfillCoverCache")}
+            {t("queue.form.taskDescriptions.reprocessBatch")}
           </Text>
 
           <Checkbox label={t("queue.form.purge")} checked={purge} onChange={(e) => setPurge(e.currentTarget.checked)} />
 
-          {isReprocess ? (
-            <>
-              <SimpleGrid cols={{ base: 1, md: 2 }}>
-                <Checkbox label={t("queue.form.classifierRematch")} checked={classifierRematch} onChange={(e) => setClassifierRematch(e.currentTarget.checked)} />
-                <Checkbox label={t("queue.form.apisDisabled")} checked={apisDisabled} onChange={(e) => setApisDisabled(e.currentTarget.checked)} />
-                <Checkbox label={t("queue.form.localSearchDisabled")} checked={localSearchDisabled} onChange={(e) => setLocalSearchDisabled(e.currentTarget.checked)} />
-                <Checkbox label={t("queue.form.orphans")} checked={orphans} onChange={(e) => setOrphans(e.currentTarget.checked)} />
-              </SimpleGrid>
-              <SimpleGrid cols={{ base: 1, md: 2 }}>
-                <NumberInput label={t("queue.form.batchSize")} min={1} value={batchSize} onChange={(value) => setBatchSize(value === "" ? "" : Number(value))} />
-                <NumberInput label={t("queue.form.chunkSize")} min={1} value={chunkSize} onChange={(value) => setChunkSize(value === "" ? "" : Number(value))} />
-              </SimpleGrid>
-              <MultiSelect
-                label={t("queue.form.contentTypes")}
-                data={contentTypes.map((item) => ({ value: item, label: t(`contentTypes.${item}`) }))}
-                value={selectedTypes}
-                onChange={setSelectedTypes}
-              />
-            </>
-          ) : (
-            <NumberInput
-              label={t("queue.form.limit")}
-              min={1}
-              max={2000}
-              value={maintenanceLimit}
-              onChange={(value) => setMaintenanceLimit(value === "" ? "" : Number(value))}
-            />
-          )}
+          <SimpleGrid cols={{ base: 1, md: 2 }}>
+            <Checkbox label={t("queue.form.classifierRematch")} checked={classifierRematch} onChange={(e) => setClassifierRematch(e.currentTarget.checked)} />
+            <Checkbox label={t("queue.form.apisDisabled")} checked={apisDisabled} onChange={(e) => setApisDisabled(e.currentTarget.checked)} />
+            <Checkbox label={t("queue.form.localSearchDisabled")} checked={localSearchDisabled} onChange={(e) => setLocalSearchDisabled(e.currentTarget.checked)} />
+            <Checkbox label={t("queue.form.orphans")} checked={orphans} onChange={(e) => setOrphans(e.currentTarget.checked)} />
+          </SimpleGrid>
+          <SimpleGrid cols={{ base: 1, md: 2 }}>
+            <NumberInput label={t("queue.form.batchSize")} min={1} value={batchSize} onChange={(value) => setBatchSize(value === "" ? "" : Number(value))} />
+            <NumberInput label={t("queue.form.chunkSize")} min={1} value={chunkSize} onChange={(value) => setChunkSize(value === "" ? "" : Number(value))} />
+          </SimpleGrid>
+          <MultiSelect
+            label={t("queue.form.contentTypes")}
+            data={contentTypes.map((item) => ({ value: item, label: t(`contentTypes.${item}`) }))}
+            value={selectedTypes}
+            onChange={setSelectedTypes}
+          />
           <Group justify="flex-end" className="modal-footer">
             <Button onClick={() => modals.closeAll()} variant="default">
               {t("common.cancel")}
@@ -493,33 +585,26 @@ export function QueuePage() {
           <Text c="dimmed">{t("queue.subtitle")}</Text>
         </div>
         <Group>
-          <Tooltip label={t("queue.quickActions.refreshMetadataHint")} withArrow>
-            <Button
-              variant="light"
-              leftSection={<Sparkles size={16} />}
-              onClick={() => void enqueueMaintenanceTask("refresh_media_metadata")}
-            >
-              {t("queue.quickActions.refreshMetadata")}
-            </Button>
+          <Tooltip label={t("queue.enqueue")} withArrow>
+            <ActionIcon variant="light" size="lg" onClick={openEnqueueModal} aria-label={t("queue.enqueue")}>
+              <CalendarSync size={16} />
+            </ActionIcon>
           </Tooltip>
-          <Tooltip label={t("queue.quickActions.backfillCoverHint")} withArrow>
-            <Button
-              variant="light"
-              leftSection={<ImageDown size={16} />}
-              onClick={() => void enqueueMaintenanceTask("backfill_cover_cache")}
-            >
-              {t("queue.quickActions.backfillCover")}
-            </Button>
+          <Tooltip label={t("queue.purge")} withArrow>
+            <ActionIcon color="red" variant="light" size="lg" onClick={openPurgeModal} aria-label={t("queue.purge")}>
+              <Trash2 size={16} />
+            </ActionIcon>
           </Tooltip>
-          <Button leftSection={<CalendarSync size={16} />} onClick={openEnqueueModal}>
-            {t("queue.enqueue")}
-          </Button>
-          <Button leftSection={<Trash2 size={16} />} color="red" variant="light" onClick={openPurgeModal}>
-            {t("queue.purge")}
-          </Button>
-          <Button leftSection={<RotateCcw size={16} />} variant="default" onClick={() => void load()}>
-            {t("common.refresh")}
-          </Button>
+          <Tooltip label={t("queue.cleanupSettings.button")} withArrow>
+            <ActionIcon variant="light" size="lg" onClick={openCleanupSettingsModal} aria-label={t("queue.cleanupSettings.button")}>
+              <Settings2 size={16} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label={t("common.refresh")} withArrow>
+            <ActionIcon variant="default" size="lg" onClick={() => void load()} aria-label={t("common.refresh")}>
+              <RotateCcw size={16} />
+            </ActionIcon>
+          </Tooltip>
         </Group>
       </Group>
 
@@ -656,13 +741,12 @@ export function QueuePage() {
                 <Table.Th>{t("queue.table.retries")}</Table.Th>
                 <Table.Th>{t("queue.table.created")}</Table.Th>
                 <Table.Th>{t("queue.table.ran")}</Table.Th>
-                <Table.Th>{t("queue.table.error")}</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {loading ? (
                 <Table.Tr>
-                  <Table.Td colSpan={8}>
+                  <Table.Td colSpan={7}>
                     <Group justify="center" py="md">
                       <Loader size="sm" />
                     </Group>
@@ -670,7 +754,7 @@ export function QueuePage() {
                 </Table.Tr>
               ) : (result?.items.length || 0) === 0 ? (
                 <Table.Tr>
-                  <Table.Td colSpan={8}>
+                  <Table.Td colSpan={7}>
                     <Text c="dimmed" ta="center" py="md">
                       {t("queue.noJobs")}
                     </Text>
@@ -703,11 +787,10 @@ export function QueuePage() {
                       </Table.Td>
                       <Table.Td>{new Date(job.createdAt).toLocaleString()}</Table.Td>
                       <Table.Td>{job.ranAt ? new Date(job.ranAt).toLocaleString() : "-"}</Table.Td>
-                      <Table.Td>{job.error || "-"}</Table.Td>
                     </Table.Tr>
                     {expandedJobId === job.id ? (
                       <Table.Tr>
-                        <Table.Td colSpan={8}>
+                        <Table.Td colSpan={7}>
                           <Card className="queue-detail-panel" radius="md" p="sm">
                             <Stack gap="sm">
                               <Text fw={600}>{t("queue.details.title")}</Text>
@@ -725,6 +808,12 @@ export function QueuePage() {
                                 <Text c="dimmed" size="xs">{t("queue.details.payload")}</Text>
                                 <ScrollArea.Autosize mah={180} type="auto">
                                   <Text ff="monospace" size="xs">{formatPayload(job.payload)}</Text>
+                                </ScrollArea.Autosize>
+                              </div>
+                              <div>
+                                <Text c="dimmed" size="xs">{t("queue.details.error")}</Text>
+                                <ScrollArea.Autosize mah={140} type="auto">
+                                  <Text ff="monospace" size="xs">{job.error || "-"}</Text>
                                 </ScrollArea.Autosize>
                               </div>
                             </Stack>

@@ -15,6 +15,11 @@ const (
 
 type QueueTaskMessage struct {
 	Limit uint `json:"Limit,omitempty"`
+
+	MediaID    string `json:"mediaId,omitempty"`
+	Kind       string `json:"kind,omitempty"`
+	Size       string `json:"size,omitempty"`
+	SourcePath string `json:"sourcePath,omitempty"`
 }
 
 func NewRefreshMetadataQueueJob(limit uint, options ...model.QueueJobOption) (model.QueueJob, error) {
@@ -32,6 +37,22 @@ func NewBackfillCoverQueueJob(limit uint, options ...model.QueueJobOption) (mode
 	return model.NewQueueJob(
 		queue.QueueNameBackfillCoverCache,
 		QueueTaskMessage{Limit: limit},
+		append([]model.QueueJobOption{
+			model.QueueJobMaxRetries(1),
+			model.QueueJobPriority(backfillCoverPriority),
+		}, options...)...,
+	)
+}
+
+func NewGenerateCoverQueueJob(mediaID string, kind coverKind, size coverSize, sourcePath string, options ...model.QueueJobOption) (model.QueueJob, error) {
+	return model.NewQueueJob(
+		queue.QueueNameBackfillCoverCache,
+		QueueTaskMessage{
+			MediaID:    mediaID,
+			Kind:       string(kind),
+			Size:       string(size),
+			SourcePath: sourcePath,
+		},
 		append([]model.QueueJobOption{
 			model.QueueJobMaxRetries(1),
 			model.QueueJobPriority(backfillCoverPriority),

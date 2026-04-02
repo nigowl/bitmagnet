@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActionIcon,
   Badge,
   Button,
   Card,
@@ -12,6 +13,7 @@ import {
   Select,
   Stack,
   Text,
+  Tooltip,
   Title
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -152,6 +154,13 @@ export function MaintenancePage() {
     return Math.max(0, Math.min(100, Math.round((task.processed / task.requested) * 100)));
   }, [task]);
 
+  const refreshPage = async () => {
+    await refreshPending(taskType);
+    if (task) {
+      await refreshTask(task.id);
+    }
+  };
+
   if (authLoading) {
     return (
       <Card className="glass-card" withBorder>
@@ -179,10 +188,37 @@ export function MaintenancePage() {
   return (
     <Stack gap="md">
       <Card className="glass-card" withBorder>
-        <Stack gap={4}>
-          <Title order={2}>{t("maintenance.title")}</Title>
-          <Text c="dimmed">{t("maintenance.subtitle")}</Text>
-        </Stack>
+        <Group justify="space-between" align="flex-start" wrap="wrap">
+          <Stack gap={4}>
+            <Title order={2}>{t("maintenance.title")}</Title>
+            <Text c="dimmed">{t("maintenance.subtitle")}</Text>
+            <Text c="dimmed" size="sm">{t("maintenance.queueWorkerHint")}</Text>
+          </Stack>
+          <Group>
+            <Tooltip label={t("maintenance.start")} withArrow>
+              <ActionIcon
+                variant="light"
+                size="lg"
+                loading={starting}
+                onClick={() => void startTask()}
+                aria-label={t("maintenance.start")}
+              >
+                <PlayCircle size={16} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label={t("common.refresh")} withArrow>
+              <ActionIcon
+                variant="default"
+                size="lg"
+                loading={pendingLoading || refreshing}
+                onClick={() => void refreshPage()}
+                aria-label={t("common.refresh")}
+              >
+                <RefreshCw size={16} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+        </Group>
       </Card>
 
       <Card className="glass-card" withBorder>
@@ -209,22 +245,6 @@ export function MaintenancePage() {
             step={1}
             onChange={(value) => setLimit(Number(value) || 10)}
           />
-
-          <Group>
-            <Button loading={starting} leftSection={<PlayCircle size={16} />} onClick={() => void startTask()}>
-              {t("maintenance.start")}
-            </Button>
-            {task ? (
-              <Button
-                variant="default"
-                loading={refreshing}
-                leftSection={<RefreshCw size={14} />}
-                onClick={() => void refreshTask(task.id)}
-              >
-                {t("common.refresh")}
-              </Button>
-            ) : null}
-          </Group>
         </Stack>
       </Card>
 

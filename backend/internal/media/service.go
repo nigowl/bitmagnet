@@ -16,6 +16,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -29,6 +30,9 @@ const (
 	sortDownload = "download"
 	sortRating   = "rating"
 	sortUpdated  = "updated"
+
+	coverFailureRetryTTL    = 2 * time.Minute
+	coverFailureNotFoundTTL = 6 * time.Hour
 )
 
 var ErrNotFound = errors.New("media not found")
@@ -37,6 +41,7 @@ type Service interface {
 	List(ctx context.Context, input ListInput) (ListResult, error)
 	Detail(ctx context.Context, id string, options ...DetailOptions) (DetailResult, error)
 	Cover(ctx context.Context, id string, kind string, size string) (CoverResult, error)
+	GenerateCover(ctx context.Context, input GenerateCoverInput) error
 	BackfillLocalizedMetadata(ctx context.Context, input BackfillLocalizedInput) (BackfillLocalizedResult, error)
 	BackfillCoverCache(ctx context.Context, input BackfillCoverCacheInput) (BackfillCoverCacheResult, error)
 	CountPendingLocalizedMetadata(ctx context.Context) (int, error)
@@ -59,13 +64,16 @@ func NewService(p Params) Service {
 	}
 
 	pluginLogger := zap.NewNop()
+	serviceLogger := zap.NewNop()
 	if p.Logger != nil {
 		pluginLogger = p.Logger.Named("media_site_plugins")
+		serviceLogger = p.Logger.Named("media_service")
 	}
 
 	return &service{
 		dao:        p.Dao,
 		coverCache: cache,
+		logger:     serviceLogger,
 		sitePluginManager: siteplugins.NewManager(siteplugins.ManagerOptions{
 			Logger: pluginLogger,
 			DefaultEnabled: map[string]bool{
@@ -91,6 +99,8 @@ func NewService(p Params) Service {
 type service struct {
 	dao               lazy.Lazy[*dao.Query]
 	coverCache        *coverCache
+	coverFailures     sync.Map
+	logger            *zap.Logger
 	sitePluginManager *siteplugins.Manager
 	runtime           mediaRuntimeSettings
 }
@@ -793,10 +803,208 @@ func (s *service) Cover(ctx context.Context, id string, kind string, size string
 		return CoverResult{}, ErrCoverNotFound
 	}
 
-	filePath, err := s.coverCache.resolvePath(ctx, mediaID, coverKindValue, coverSizeValue, sourcePath)
-	if err != nil {
+	filePath := s.coverCache.variantPath(mediaID, coverKindValue, coverSizeValue)
+	if fileExists(filePath) {
+		return CoverResult{FilePath: filePath}, nil
+	}
+
+	failureKey := coverFailureKey(mediaID, coverKindValue, sourcePath)
+	if status, blocked := s.coverFailureStatus(failureKey); blocked {
+		if status.notFound {
+			return CoverResult{}, ErrCoverNotFound
+		}
+		return CoverResult{Pending: true}, nil
+	}
+
+	if err := s.enqueueCoverGeneration(ctx, mediaID, coverKindValue, coverSizeValue, sourcePath); err != nil {
 		return CoverResult{}, err
 	}
 
-	return CoverResult{FilePath: filePath}, nil
+	return CoverResult{Pending: true}, nil
+}
+
+func (s *service) GenerateCover(ctx context.Context, input GenerateCoverInput) error {
+	mediaID := strings.TrimSpace(input.MediaID)
+	if mediaID == "" {
+		return nil
+	}
+
+	coverKindValue, err := parseCoverKind(strings.TrimSpace(input.Kind))
+	if err != nil {
+		return nil
+	}
+
+	coverSizeValue, err := parseCoverSize(strings.TrimSpace(input.Size))
+	if err != nil {
+		return nil
+	}
+
+	sourcePath := strings.TrimSpace(input.SourcePath)
+	if sourcePath == "" {
+		q, daoErr := s.dao.Get()
+		if daoErr != nil {
+			return daoErr
+		}
+
+		db := q.TorrentContent.WithContext(ctx).UnderlyingDB()
+		entry, entryErr := s.loadOrCreateMediaEntry(ctx, db, mediaID)
+		if entryErr != nil {
+			return entryErr
+		}
+
+		switch coverKindValue {
+		case coverKindPoster:
+			sourcePath = strings.TrimSpace(entry.PosterPath.String)
+		case coverKindBackdrop:
+			sourcePath = strings.TrimSpace(entry.BackdropPath.String)
+		}
+	}
+
+	if sourcePath == "" {
+		return ErrCoverNotFound
+	}
+
+	remoteURL := s.coverCache.sourceURL(sourcePath)
+	if s.logger != nil {
+		s.logger.Info("cover queue job started",
+			zap.String("media_id", mediaID),
+			zap.String("kind", string(coverKindValue)),
+			zap.String("size", string(coverSizeValue)),
+			zap.String("source_path", sourcePath),
+			zap.String("source_url", remoteURL),
+			zap.Bool("cache_all_variants", true),
+		)
+	}
+
+	_, err = s.coverCache.resolvePath(ctx, mediaID, coverKindValue, coverSizeValue, sourcePath)
+	if err != nil {
+		failureKey := coverFailureKey(mediaID, coverKindValue, sourcePath)
+		if errors.Is(err, ErrCoverNotFound) {
+			s.rememberCoverFailure(failureKey, true)
+			if s.logger != nil {
+				s.logger.Info("cover queue job finished without source image",
+					zap.String("media_id", mediaID),
+					zap.String("kind", string(coverKindValue)),
+					zap.String("size", string(coverSizeValue)),
+					zap.String("source_path", sourcePath),
+					zap.String("source_url", remoteURL),
+					zap.Bool("cache_all_variants", true),
+				)
+			}
+			return nil
+		}
+		s.rememberCoverFailure(failureKey, false)
+		if s.logger != nil {
+			s.logger.Error("cover queue job failed",
+				zap.String("media_id", mediaID),
+				zap.String("kind", string(coverKindValue)),
+				zap.String("size", string(coverSizeValue)),
+				zap.String("source_path", sourcePath),
+				zap.String("source_url", remoteURL),
+				zap.Bool("cache_all_variants", true),
+				zap.Error(err),
+			)
+		}
+		return err
+	}
+
+	s.clearCoverFailure(coverFailureKey(mediaID, coverKindValue, sourcePath))
+	if s.logger != nil {
+		s.logger.Info("cover queue job completed",
+			zap.String("media_id", mediaID),
+			zap.String("kind", string(coverKindValue)),
+			zap.String("size", string(coverSizeValue)),
+			zap.String("source_path", sourcePath),
+			zap.String("source_url", remoteURL),
+			zap.Bool("cache_all_variants", true),
+		)
+	}
+
+	return nil
+}
+
+func (s *service) enqueueCoverGeneration(ctx context.Context, mediaID string, kind coverKind, requestedSize coverSize, sourcePath string) error {
+	q, err := s.dao.Get()
+	if err != nil {
+		return err
+	}
+
+	// One queue job renders all cover variants, so we normalize to XL to avoid
+	// duplicate jobs for the same media/kind requested at different sizes.
+	queueSize := coverSizeXL
+	job, err := NewGenerateCoverQueueJob(mediaID, kind, queueSize, sourcePath)
+	if err != nil {
+		return err
+	}
+
+	tx := q.QueueJob.WithContext(ctx).Clauses(clause.OnConflict{
+		DoNothing: true,
+	}).UnderlyingDB().Create(&job)
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	if s.logger != nil {
+		s.logger.Info("cover queue job enqueued",
+			zap.String("media_id", mediaID),
+			zap.String("kind", string(kind)),
+			zap.String("requested_size", string(requestedSize)),
+			zap.String("queue_size", string(queueSize)),
+			zap.String("source_path", sourcePath),
+			zap.String("source_url", s.coverCache.sourceURL(sourcePath)),
+			zap.Bool("duplicate", tx.RowsAffected == 0),
+		)
+	}
+
+	return nil
+}
+
+type coverFailureStatusInfo struct {
+	retryAfter time.Time
+	notFound   bool
+}
+
+func coverFailureKey(mediaID string, kind coverKind, sourcePath string) string {
+	return strings.Join([]string{
+		strings.TrimSpace(mediaID),
+		string(kind),
+		strings.TrimSpace(sourcePath),
+	}, "|")
+}
+
+func (s *service) coverFailureStatus(key string) (coverFailureStatusInfo, bool) {
+	now := time.Now()
+	value, ok := s.coverFailures.Load(key)
+	if !ok {
+		return coverFailureStatusInfo{}, false
+	}
+
+	status, ok := value.(coverFailureStatusInfo)
+	if !ok {
+		s.coverFailures.Delete(key)
+		return coverFailureStatusInfo{}, false
+	}
+
+	if now.After(status.retryAfter) {
+		s.coverFailures.Delete(key)
+		return coverFailureStatusInfo{}, false
+	}
+
+	return status, true
+}
+
+func (s *service) rememberCoverFailure(key string, notFound bool) {
+	ttl := coverFailureRetryTTL
+	if notFound {
+		ttl = coverFailureNotFoundTTL
+	}
+
+	s.coverFailures.Store(key, coverFailureStatusInfo{
+		retryAfter: time.Now().Add(ttl),
+		notFound:   notFound,
+	})
+}
+
+func (s *service) clearCoverFailure(key string) {
+	s.coverFailures.Delete(key)
 }

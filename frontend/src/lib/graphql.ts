@@ -320,11 +320,3 @@ mutation QueueEnqueueReprocessTorrentsBatch($input: QueueEnqueueReprocessTorrent
   }
 }
 `;
-
-export const QUEUE_ENQUEUE_MAINTENANCE_TASK_MUTATION = `
-mutation QueueEnqueueMaintenanceTask($input: QueueEnqueueMaintenanceTaskInput!) {
-  queue {
-    enqueueMaintenanceTask(input: $input)
-  }
-}
-`;

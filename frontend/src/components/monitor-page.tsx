@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { Badge, Button, Card, Group, Loader, ScrollArea, SimpleGrid, Stack, Table, Text, Title, useMantineColorScheme } from "@mantine/core";
+import { ActionIcon, Badge, Button, Card, Group, Loader, ScrollArea, SimpleGrid, Stack, Table, Text, Title, Tooltip, useMantineColorScheme } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { Activity, LogIn, RefreshCw } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
@@ -338,9 +338,11 @@ export function MonitorPage() {
           {lastUpdatedAt ? (
             <Text c="dimmed" size="sm">{t("monitor.lastUpdated")}: {new Date(lastUpdatedAt).toLocaleString()}</Text>
           ) : null}
-          <Button leftSection={<RefreshCw size={16} />} variant="default" onClick={() => void load()}>
-            {t("common.refresh")}
-          </Button>
+          <Tooltip label={t("common.refresh")} withArrow>
+            <ActionIcon variant="default" size="lg" onClick={() => void load()} aria-label={t("common.refresh")}>
+              <RefreshCw size={16} />
+            </ActionIcon>
+          </Tooltip>
         </Group>
       </Group>
 

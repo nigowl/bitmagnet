@@ -196,6 +196,14 @@ type DetailTorrent struct {
 
 type CoverResult struct {
 	FilePath string `json:"filePath"`
+	Pending  bool   `json:"pending"`
+}
+
+type GenerateCoverInput struct {
+	MediaID    string `json:"mediaId"`
+	Kind       string `json:"kind"`
+	Size       string `json:"size"`
+	SourcePath string `json:"sourcePath"`
 }
 
 type BackfillLocalizedInput struct {

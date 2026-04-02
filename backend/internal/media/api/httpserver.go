@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/gin-gonic/gin"
 	"github.com/nigowl/bitmagnet/internal/httpserver"
 	"github.com/nigowl/bitmagnet/internal/media"
-	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 )
 
@@ -96,8 +96,18 @@ func (b *builder) cover(c *gin.Context) {
 		return
 	}
 
+	if result.Pending {
+		c.Header("Cache-Control", "no-store, max-age=0")
+		c.Data(http.StatusOK, "image/svg+xml; charset=utf-8", []byte(pendingCoverSVG()))
+		return
+	}
+
 	c.Header("Cache-Control", "public, max-age=2592000, immutable")
 	c.File(result.FilePath)
+}
+
+func pendingCoverSVG() string {
+	return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 720" role="img" aria-label="Loading cover"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#1f2937"/><stop offset="50%" stop-color="#374151"/><stop offset="100%" stop-color="#1f2937"/></linearGradient></defs><rect width="480" height="720" fill="#111827"/><rect x="24" y="24" width="432" height="672" rx="18" fill="url(#g)"><animate attributeName="x" values="-160;24;640" dur="1.8s" repeatCount="indefinite"/></rect><rect x="72" y="500" width="336" height="12" rx="6" fill="#4b5563"/><rect x="112" y="526" width="256" height="12" rx="6" fill="#4b5563"/><text x="50%" y="575" text-anchor="middle" fill="#d1d5db" font-size="24" font-family="sans-serif">Loading cover...</text></svg>`
 }
 
 func parseInt(raw string, fallback int) int {

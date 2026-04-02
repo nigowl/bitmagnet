@@ -30,6 +30,8 @@ type PerformanceConfig struct {
 	BackfillCoverConcurrency       int
 	BackfillCoverCheckInterval     time.Duration
 	BackfillCoverTimeout           time.Duration
+	CleanupCompletedMaxRecords     int
+	CleanupCompletedMaxAgeDays     int
 }
 
 type HandlerConfig struct {
@@ -52,6 +54,8 @@ func NewDefaultPerformanceConfig() PerformanceConfig {
 		BackfillCoverConcurrency:       1,
 		BackfillCoverCheckInterval:     30 * time.Second,
 		BackfillCoverTimeout:           20 * time.Minute,
+		CleanupCompletedMaxRecords:     5000,
+		CleanupCompletedMaxAgeDays:     7,
 	}
 }
 
@@ -116,6 +120,12 @@ func LoadPerformanceConfig(ctx context.Context, db *gorm.DB, defaults Performanc
 	})
 	applyInt(runtimeconfig.KeyQueueBackfillCoverCacheTimeoutSeconds, 5, 7200, func(v int) {
 		result.BackfillCoverTimeout = time.Duration(v) * time.Second
+	})
+	applyInt(runtimeconfig.KeyQueueCleanupCompletedMaxRecords, 100, 1000000, func(v int) {
+		result.CleanupCompletedMaxRecords = v
+	})
+	applyInt(runtimeconfig.KeyQueueCleanupCompletedMaxAgeDays, 1, 3650, func(v int) {
+		result.CleanupCompletedMaxAgeDays = v
 	})
 
 	return result

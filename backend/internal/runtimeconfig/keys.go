@@ -39,6 +39,8 @@ const (
 	KeyQueueBackfillCoverCacheConcurrency            = "system.performance.queue.backfill_cover_cache.concurrency"
 	KeyQueueBackfillCoverCacheCheckIntervalSeconds   = "system.performance.queue.backfill_cover_cache.check_interval_seconds"
 	KeyQueueBackfillCoverCacheTimeoutSeconds         = "system.performance.queue.backfill_cover_cache.timeout_seconds"
+	KeyQueueCleanupCompletedMaxRecords               = "system.performance.queue.cleanup.completed.max_records"
+	KeyQueueCleanupCompletedMaxAgeDays               = "system.performance.queue.cleanup.completed.max_age_days"
 )
 
 func AdminEditableKeys() []string {
@@ -109,6 +111,8 @@ func PerformanceKeys() []string {
 		KeyQueueBackfillCoverCacheConcurrency,
 		KeyQueueBackfillCoverCacheCheckIntervalSeconds,
 		KeyQueueBackfillCoverCacheTimeoutSeconds,
+		KeyQueueCleanupCompletedMaxRecords,
+		KeyQueueCleanupCompletedMaxAgeDays,
 		KeyMediaAutoCacheCover,
 		KeyMediaAutoFetchBilingual,
 	}

@@ -2,10 +2,10 @@ package server
 
 import (
 	"context"
-	"time"
 
 	"github.com/nigowl/bitmagnet/internal/database/dao"
 	"github.com/nigowl/bitmagnet/internal/lazy"
+	"github.com/nigowl/bitmagnet/internal/queue"
 	"github.com/nigowl/bitmagnet/internal/queue/handler"
 	"github.com/nigowl/bitmagnet/internal/worker"
 	"go.uber.org/fx"
@@ -41,6 +41,11 @@ func New(p Params) Result {
 					if err != nil {
 						return err
 					}
+					perf := queue.LoadPerformanceConfig(
+						context.Background(),
+						query.QueueJob.WithContext(context.Background()).UnderlyingDB(),
+						queue.NewDefaultPerformanceConfig(),
+					)
 					handlers := make([]handler.Handler, 0, len(p.Handlers))
 					for _, lh := range p.Handlers {
 						h, err := lh.Get()
@@ -53,9 +58,11 @@ func New(p Params) Result {
 						stopped: stopped,
 						query:   query,
 						// pool:       pool,
-						handlers:   handlers,
-						gcInterval: time.Minute * 10,
-						logger:     p.Logger.Named("queue"),
+						handlers:                   handlers,
+						cleanupHour:                2,
+						cleanupCompletedMaxRecords: perf.CleanupCompletedMaxRecords,
+						cleanupCompletedMaxAgeDays: perf.CleanupCompletedMaxAgeDays,
+						logger:                     p.Logger.Named("queue"),
 					}
 					// todo: Fix!
 					//nolint:contextcheck

@@ -25,7 +25,7 @@ import {
   Title
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { CircleHelp, LogIn, Pencil, Plus, Save, Trash2 } from "lucide-react";
+import { CircleHelp, LogIn, Pencil, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { apiRequest } from "@/lib/api";
@@ -623,19 +623,31 @@ export function SettingsPage() {
             <Text c="dimmed">{t("settings.subtitle")}</Text>
           </Stack>
           <Group>
-            <Button
-              variant="default"
-              onClick={() => {
-                void loadSettings();
-                void loadRuntimeStatus();
-                void loadSubtitleTemplates();
-              }}
-            >
-              {t("common.refresh")}
-            </Button>
-            <Button leftSection={<Save size={14} />} loading={saving} onClick={() => void saveSettings()}>
-              {t("settings.save")}
-            </Button>
+            <Tooltip label={t("common.refresh")} withArrow>
+              <ActionIcon
+                variant="default"
+                size="lg"
+                onClick={() => {
+                  void loadSettings();
+                  void loadRuntimeStatus();
+                  void loadSubtitleTemplates();
+                }}
+                aria-label={t("common.refresh")}
+              >
+                <RefreshCw size={16} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label={t("settings.save")} withArrow>
+              <ActionIcon
+                variant="light"
+                size="lg"
+                loading={saving}
+                onClick={() => void saveSettings()}
+                aria-label={t("settings.save")}
+              >
+                <Save size={16} />
+              </ActionIcon>
+            </Tooltip>
           </Group>
         </Group>
       </Card>

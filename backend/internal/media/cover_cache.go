@@ -119,10 +119,7 @@ func (c *coverCache) writeAllVariants(mediaID string, kind coverKind, source ima
 }
 
 func (c *coverCache) loadSourceImage(ctx context.Context, sourcePath string) (image.Image, error) {
-	sourceURL := sourcePath
-	if !strings.HasPrefix(sourceURL, "http://") && !strings.HasPrefix(sourceURL, "https://") {
-		sourceURL = fmt.Sprintf("%s/original/%s", c.imageBaseURL, strings.TrimLeft(sourcePath, "/"))
-	}
+	sourceURL := c.sourceURL(sourcePath)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
@@ -131,7 +128,7 @@ func (c *coverCache) loadSourceImage(ctx context.Context, sourcePath string) (im
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("download source image: %w", err)
+		return nil, fmt.Errorf("download source image from %s: %w", sourceURL, err)
 	}
 	defer resp.Body.Close()
 
@@ -139,12 +136,12 @@ func (c *coverCache) loadSourceImage(ctx context.Context, sourcePath string) (im
 		return nil, ErrCoverNotFound
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("download source image failed: status %d", resp.StatusCode)
+		return nil, fmt.Errorf("download source image failed from %s: status %d", sourceURL, resp.StatusCode)
 	}
 
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
 	if err != nil {
-		return nil, fmt.Errorf("read source image: %w", err)
+		return nil, fmt.Errorf("read source image from %s: %w", sourceURL, err)
 	}
 	if len(payload) == 0 {
 		return nil, errors.New("empty source image")
@@ -152,10 +149,18 @@ func (c *coverCache) loadSourceImage(ctx context.Context, sourcePath string) (im
 
 	img, _, err := image.Decode(bytes.NewReader(payload))
 	if err != nil {
-		return nil, fmt.Errorf("decode source image: %w", err)
+		return nil, fmt.Errorf("decode source image from %s: %w", sourceURL, err)
 	}
 
 	return img, nil
+}
+
+func (c *coverCache) sourceURL(sourcePath string) string {
+	sourceURL := strings.TrimSpace(sourcePath)
+	if strings.HasPrefix(sourceURL, "http://") || strings.HasPrefix(sourceURL, "https://") {
+		return sourceURL
+	}
+	return fmt.Sprintf("%s/original/%s", c.imageBaseURL, strings.TrimLeft(sourceURL, "/"))
 }
 
 func (c *coverCache) variantPath(mediaID string, kind coverKind, size coverSize) string {

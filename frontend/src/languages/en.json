@@ -120,12 +120,13 @@
   },
   "maintenance": {
     "title": "Maintenance",
-    "subtitle": "Run maintenance tasks and watch progress in real time.",
+    "subtitle": "Submit maintenance tasks to the queue.",
+    "queueWorkerHint": "Tasks are enqueued first, and actual execution is handled by queue workers.",
     "taskType": "Task Type",
     "pendingCount": "Pending Count",
     "limit": "Processing Limit",
     "start": "Start Task",
-    "started": "Maintenance task started",
+    "started": "Task queued. Execution is handled by queue workers.",
     "currentTask": "Current Task",
     "taskId": "Task ID",
     "taskOptions": {
@@ -360,8 +361,18 @@
     "enqueueDone": "Queue task enqueued",
     "purge": "Purge Jobs",
     "purgeTitle": "Purge Queue Jobs",
-    "purgeHint": "Delete jobs that match current queue/status filters.",
+    "purgeHint": "Choose a task type and delete matching queue jobs.",
+    "purgeAllTypes": "All Task Types",
     "purgeDone": "Queue jobs purged",
+    "cleanupSettings": {
+      "button": "Cleanup Settings",
+      "title": "Queue Cleanup Settings",
+      "hint": "Completed and failed jobs are cleaned daily at 02:00 based on these limits.",
+      "maxRecords": "Max Completed Records",
+      "maxAgeDays": "Max Age (Days)",
+      "saved": "Queue cleanup settings saved",
+      "invalidInput": "Please enter valid cleanup settings"
+    },
     "timeline": "Queue Timeline",
     "queueSummaryTitle": "Queue Type Summary",
     "noJobs": "No queue jobs matched current filters",
@@ -375,7 +386,8 @@
       "title": "Job Details",
       "queueRaw": "Raw Queue Name",
       "nextRun": "Scheduled Run",
-      "payload": "Payload"
+      "payload": "Payload",
+      "error": "Error Details"
     },
     "queueValues": {
       "process_torrent": "Process Torrent",
@@ -523,7 +535,7 @@
     "search": "Search title, overview or year",
     "results": "Results",
     "noResults": "No media matched current filters",
-    "noPoster": "No Poster",
+    "noPoster": "No Cover",
     "clearFilters": "Clear Filters",
     "expandFilters": "Expand Filters",
     "collapseFilters": "Collapse Filters",
