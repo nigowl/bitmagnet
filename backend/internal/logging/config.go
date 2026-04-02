@@ -33,7 +33,7 @@ func NewDefaultConfig() Config {
 		JSON:        false,
 		FileRotator: FileRotatorConfig{
 			Enabled:    true,
-			Level:      "debug",
+			Level:      "info",
 			Path:       "logs",
 			BaseName:   "bitmagnet",
 			MaxAge:     time.Minute * 60,

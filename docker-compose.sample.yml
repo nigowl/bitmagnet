@@ -52,6 +52,8 @@ services:
       - POSTGRES_PASSWORD=postgres
       # 日志配置：等级（DEBUG/INFO/WARNING/ERROR/CRITICAL/ALERT/EMERGENCY）
       - LOG_LEVEL=INFO
+      # 日志配置：文件日志等级（建议与 LOG_LEVEL 保持一致）
+      - LOG_FILE_ROTATOR_LEVEL=INFO
       # 日志配置：单个日志文件滚动大小（字节，16 MiB = 16777216）
       - LOG_FILE_ROTATOR_MAX_SIZE=16777216
       # 日志配置：保留滚动日志文件数量

@@ -69,7 +69,9 @@ func New(params Params) Result {
 				zapcore.NewCore(
 					zapcore.NewJSONEncoder(jsonEncoderConfig),
 					rotator,
-					fileLevel,
+					zap.LevelEnablerFunc(func(level zapcore.Level) bool {
+						return level >= fileLevel && atomicLevel.Enabled(level)
+					}),
 				),
 				func(entry zapcore.Entry) bool {
 					return loggerCategory(entry.LoggerName) == categoryKey
