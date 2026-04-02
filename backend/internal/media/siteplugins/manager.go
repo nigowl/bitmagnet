@@ -47,6 +47,10 @@ type Manager struct {
 	cachedEnabled    map[string]bool
 }
 
+type runtimeConfigInvalidator interface {
+	InvalidateRuntimeSettingsCache()
+}
+
 func NewManager(options ManagerOptions, plugins ...Plugin) *Manager {
 	filtered := make([]managedPlugin, 0, len(plugins))
 	seen := make(map[string]struct{}, len(plugins))
@@ -97,6 +101,27 @@ func NewManager(options ManagerOptions, plugins ...Plugin) *Manager {
 		logger:         logger,
 		defaultEnabled: defaultEnabled,
 		configCacheTTL: cacheTTL,
+	}
+}
+
+func (m *Manager) InvalidateRuntimeSettingsCache() {
+	if m == nil {
+		return
+	}
+
+	m.configCacheMutex.Lock()
+	m.cacheLoaded = false
+	m.cachedAt = time.Time{}
+	m.cachedEnabled = nil
+	m.configCacheMutex.Unlock()
+
+	for _, item := range m.plugins {
+		if item.plugin == nil {
+			continue
+		}
+		if invalidator, ok := item.plugin.(runtimeConfigInvalidator); ok {
+			invalidator.InvalidateRuntimeSettingsCache()
+		}
 	}
 }
 

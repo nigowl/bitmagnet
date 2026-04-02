@@ -52,6 +52,18 @@ func New(config Config) *Plugin {
 	}
 }
 
+func (p *Plugin) InvalidateRuntimeSettingsCache() {
+	if p == nil {
+		return
+	}
+
+	p.configCacheMutex.Lock()
+	p.cacheLoaded = false
+	p.cachedAt = time.Time{}
+	p.cachedConfig = Config{}
+	p.configCacheMutex.Unlock()
+}
+
 func (p *Plugin) Key() string {
 	return model.SourceDouban
 }

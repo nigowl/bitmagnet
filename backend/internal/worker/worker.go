@@ -54,6 +54,7 @@ type Registry interface {
 	DisableAll()
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
+	Restart(ctx context.Context, names ...string) error
 	decorate(name string, fn DecorateFunction) error
 }
 
@@ -244,6 +245,52 @@ func (r *registry) Stop(ctx context.Context) error {
 			w.setStarted(false)
 			r.logger.Infow("stopped worker", "key", w.Key())
 		}
+	}
+
+	return nil
+}
+
+func (r *registry) Restart(ctx context.Context, names ...string) error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	if len(names) == 0 {
+		return nil
+	}
+
+	for _, name := range names {
+		w, ok := r.workers[name]
+		if !ok {
+			return fmt.Errorf("worker %s not found", name)
+		}
+
+		if w.Started() {
+			stopHook := w._hook().OnStop
+			if stopHook != nil {
+				if err := stopHook(ctx); err != nil {
+					r.logger.Errorw("error stopping worker", "key", w.Key(), "error", err)
+					return err
+				}
+			}
+			w.setStarted(false)
+			r.logger.Infow("restarted worker stop", "key", w.Key())
+		}
+
+		if !w.Enabled() {
+			r.logger.Infow("restarted worker skipped start: disabled", "key", w.Key())
+			continue
+		}
+
+		startHook := w._hook().OnStart
+		if startHook != nil {
+			if err := startHook(ctx); err != nil {
+				r.logger.Errorw("error starting worker", "key", w.Key(), "error", err)
+				return err
+			}
+		}
+
+		w.setStarted(true)
+		r.logger.Infow("restarted worker start", "key", w.Key())
 	}
 
 	return nil

@@ -1,7 +1,10 @@
 package search
 
 import (
+	"strings"
+
 	"github.com/nigowl/bitmagnet/internal/database/query"
+	"github.com/nigowl/bitmagnet/internal/queue"
 )
 
 const QueueJobQueueFacetKey = "queue"
@@ -22,12 +25,31 @@ type queueJobQueueFacet struct {
 	query.FacetConfig
 }
 
-var queueNames = []string{"process_torrent", "process_torrent_batch"}
+var defaultQueueNames = []string{
+	queue.QueueNameProcessTorrent,
+	queue.QueueNameProcessTorrentBatch,
+	queue.QueueNameRefreshMediaMeta,
+	queue.QueueNameBackfillCoverCache,
+}
 
-func (queueJobQueueFacet) Values(query.FacetContext) (map[string]string, error) {
+func (queueJobQueueFacet) Values(ctx query.FacetContext) (map[string]string, error) {
 	values := make(map[string]string)
-	for _, n := range queueNames {
+	for _, n := range defaultQueueNames {
 		values[n] = n
+	}
+
+	q := ctx.Query().QueueJob
+	jobs, err := q.WithContext(ctx.Context()).Distinct(q.Queue).Find()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, job := range jobs {
+		name := strings.TrimSpace(job.Queue)
+		if name == "" {
+			continue
+		}
+		values[name] = name
 	}
 
 	return values, nil

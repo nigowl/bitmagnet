@@ -69,6 +69,26 @@ docker compose up -d
 NEXT_PUBLIC_BITMAGNET_API_BASE_URL=http://localhost:3333
 ```
 
+## 后端日志环境变量（`.env`）
+
+可在项目根目录 `.env` 或 `backend/.env` 中配置以下变量：
+
+```bash
+# 日志等级（支持 DEBUG / INFO / WARNING / ERROR / CRITICAL / ALERT / EMERGENCY）
+BITMAGNET_LOG_LEVEL=INFO
+
+# 单个日志文件滚动大小（MiB）
+BITMAGNET_LOG_MAX_SIZE_MB=16
+
+# 保留滚动文件数量
+BITMAGNET_LOG_MAX_BACKUPS=10
+```
+
+兼容原生配置键：
+- `LOG_LEVEL`
+- `LOG_FILE_ROTATOR_MAX_SIZE`（字节）
+- `LOG_FILE_ROTATOR_MAX_BACKUPS`
+
 ## 封面缓存（后端）
 
 后端提供封面缓存与多尺寸切图，缓存目录默认为：

@@ -53,6 +53,7 @@ func New(p Params) Result {
 				runner:          w,
 				defaultWorkflow: p.ClassifierConfig.Workflow,
 				mediaService:    p.MediaService,
+				mediaWarmupSem:  make(chan struct{}, 1),
 				logger:          p.Logger,
 			}, nil
 		}),

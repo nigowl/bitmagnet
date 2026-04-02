@@ -3,13 +3,16 @@ package media
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nigowl/bitmagnet/internal/database/dao"
 	"github.com/nigowl/bitmagnet/internal/lazy"
 	"github.com/nigowl/bitmagnet/internal/media/siteplugins"
 	"github.com/nigowl/bitmagnet/internal/model"
+	"github.com/nigowl/bitmagnet/internal/runtimeconfig"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -71,6 +74,17 @@ func NewService(p Params) Service {
 				model.SourceDouban: p.Config.DoubanEnabled,
 			},
 		}, p.Plugins...),
+		runtime: mediaRuntimeSettings{
+			configCacheTTL: 15 * time.Second,
+			defaults: mediaRuntimeOptions{
+				autoCacheCover:     true,
+				autoFetchBilingual: true,
+			},
+			cached: mediaRuntimeOptions{
+				autoCacheCover:     true,
+				autoFetchBilingual: true,
+			},
+		},
 	}
 }
 
@@ -78,6 +92,38 @@ type service struct {
 	dao               lazy.Lazy[*dao.Query]
 	coverCache        *coverCache
 	sitePluginManager *siteplugins.Manager
+	runtime           mediaRuntimeSettings
+}
+
+func (s *service) InvalidateRuntimeSettingsCache() {
+	if s == nil {
+		return
+	}
+
+	s.runtime.mutex.Lock()
+	s.runtime.cacheLoaded = false
+	s.runtime.cachedAt = time.Time{}
+	s.runtime.cached = s.runtime.defaults
+	s.runtime.mutex.Unlock()
+
+	if s.sitePluginManager != nil {
+		s.sitePluginManager.InvalidateRuntimeSettingsCache()
+	}
+}
+
+type mediaRuntimeSettings struct {
+	configCacheTTL time.Duration
+	defaults       mediaRuntimeOptions
+
+	mutex       sync.RWMutex
+	cacheLoaded bool
+	cachedAt    time.Time
+	cached      mediaRuntimeOptions
+}
+
+type mediaRuntimeOptions struct {
+	autoCacheCover     bool
+	autoFetchBilingual bool
 }
 
 func (s *service) List(ctx context.Context, input ListInput) (ListResult, error) {
@@ -511,6 +557,11 @@ func (s *service) EnsureContentRefsReady(ctx context.Context, refs []model.Conte
 	}
 
 	db := q.TorrentContent.WithContext(ctx).UnderlyingDB()
+	runtimeOptions := s.loadRuntimeOptions(ctx, db)
+	if !runtimeOptions.autoFetchBilingual && !runtimeOptions.autoCacheCover {
+		return nil
+	}
+
 	mediaIDs := make([]string, 0, len(filteredRefs))
 	for _, ref := range filteredRefs {
 		mediaIDs = append(mediaIDs, model.MediaEntryID(ref.Type, ref.Source, ref.ID))
@@ -527,35 +578,96 @@ func (s *service) EnsureContentRefsReady(ctx context.Context, refs []model.Conte
 
 	var runErr error
 	for _, row := range rows {
-		enriched := s.sitePluginManager.Enrich(ctx, db, row)
-		if enrichErr := enrichStructuredMetadata(ctx, db, []string{enriched.ID}); enrichErr != nil && runErr == nil {
-			runErr = enrichErr
-		}
+		current := row
 
-		current := enriched
-		var refreshed model.MediaEntry
-		if reloadErr := db.WithContext(ctx).
-			Table(model.TableNameMediaEntry).
-			Where("id = ?", enriched.ID).
-			Take(&refreshed).Error; reloadErr == nil {
-			current = refreshed
-		}
+		if runtimeOptions.autoFetchBilingual {
+			enriched := s.sitePluginManager.Enrich(ctx, db, row)
+			if enrichErr := enrichStructuredMetadata(ctx, db, []string{enriched.ID}); enrichErr != nil && runErr == nil {
+				runErr = enrichErr
+			}
 
-		if strings.TrimSpace(current.PosterPath.String) != "" &&
-			s.entryNeedsCoverCacheKind(current.ID, coverKindPoster, current.PosterPath.String) {
-			if _, resolveErr := s.coverCache.resolvePath(ctx, current.ID, coverKindPoster, coverSizeMD, current.PosterPath.String); resolveErr != nil && runErr == nil {
-				runErr = resolveErr
+			var refreshed model.MediaEntry
+			if reloadErr := db.WithContext(ctx).
+				Table(model.TableNameMediaEntry).
+				Where("id = ?", enriched.ID).
+				Take(&refreshed).Error; reloadErr == nil {
+				current = refreshed
 			}
 		}
-		if strings.TrimSpace(current.BackdropPath.String) != "" &&
-			s.entryNeedsCoverCacheKind(current.ID, coverKindBackdrop, current.BackdropPath.String) {
-			if _, resolveErr := s.coverCache.resolvePath(ctx, current.ID, coverKindBackdrop, coverSizeMD, current.BackdropPath.String); resolveErr != nil && runErr == nil {
-				runErr = resolveErr
+
+		if runtimeOptions.autoCacheCover {
+			if strings.TrimSpace(current.PosterPath.String) != "" &&
+				s.entryNeedsCoverCacheKind(current.ID, coverKindPoster, current.PosterPath.String) {
+				if _, resolveErr := s.coverCache.resolvePath(ctx, current.ID, coverKindPoster, coverSizeMD, current.PosterPath.String); resolveErr != nil && runErr == nil {
+					runErr = resolveErr
+				}
+			}
+			if strings.TrimSpace(current.BackdropPath.String) != "" &&
+				s.entryNeedsCoverCacheKind(current.ID, coverKindBackdrop, current.BackdropPath.String) {
+				if _, resolveErr := s.coverCache.resolvePath(ctx, current.ID, coverKindBackdrop, coverSizeMD, current.BackdropPath.String); resolveErr != nil && runErr == nil {
+					runErr = resolveErr
+				}
 			}
 		}
 	}
 
 	return runErr
+}
+
+func (s *service) loadRuntimeOptions(ctx context.Context, db *gorm.DB) mediaRuntimeOptions {
+	if db == nil {
+		return s.runtime.defaults
+	}
+
+	now := time.Now()
+	s.runtime.mutex.RLock()
+	useCache := s.runtime.cacheLoaded && now.Sub(s.runtime.cachedAt) < s.runtime.configCacheTTL
+	cached := s.runtime.cached
+	defaults := s.runtime.defaults
+	s.runtime.mutex.RUnlock()
+	if useCache {
+		return cached
+	}
+
+	var rows []model.KeyValue
+	if err := db.WithContext(ctx).
+		Table(model.TableNameKeyValue).
+		Where("key IN ?", []string{
+			runtimeconfig.KeyMediaAutoCacheCover,
+			runtimeconfig.KeyMediaAutoFetchBilingual,
+		}).
+		Find(&rows).Error; err != nil {
+		return cached
+	}
+
+	parsed := defaults
+	for _, row := range rows {
+		rawKey := strings.TrimSpace(row.Key)
+		rawValue := strings.TrimSpace(row.Value)
+		if rawKey == "" {
+			continue
+		}
+
+		value, err := strconv.ParseBool(rawValue)
+		if err != nil {
+			continue
+		}
+
+		switch rawKey {
+		case runtimeconfig.KeyMediaAutoCacheCover:
+			parsed.autoCacheCover = value
+		case runtimeconfig.KeyMediaAutoFetchBilingual:
+			parsed.autoFetchBilingual = value
+		}
+	}
+
+	s.runtime.mutex.Lock()
+	s.runtime.cacheLoaded = true
+	s.runtime.cachedAt = now
+	s.runtime.cached = parsed
+	s.runtime.mutex.Unlock()
+
+	return parsed
 }
 
 func hasBilingualOverviewAndTitle(entry model.MediaEntry) bool {

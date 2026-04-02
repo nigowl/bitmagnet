@@ -230,6 +230,7 @@ type ComplexityRoot struct {
 	}
 
 	QueueMutation struct {
+		EnqueueMaintenanceTask        func(childComplexity int, input manager.EnqueueMaintenanceTaskRequest) int
 		EnqueueReprocessTorrentsBatch func(childComplexity int, input manager.EnqueueReprocessTorrentsBatchRequest) int
 		PurgeJobs                     func(childComplexity int, input manager.PurgeJobsRequest) int
 	}
@@ -426,6 +427,7 @@ type ComplexityRoot struct {
 	}
 
 	Worker struct {
+		Enabled func(childComplexity int) int
 		Key     func(childComplexity int) int
 		Started func(childComplexity int) int
 	}
@@ -1203,6 +1205,18 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.QueueMetricsQueryResult.Buckets(childComplexity), true
+
+	case "QueueMutation.enqueueMaintenanceTask":
+		if e.complexity.QueueMutation.EnqueueMaintenanceTask == nil {
+			break
+		}
+
+		args, err := ec.field_QueueMutation_enqueueMaintenanceTask_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.QueueMutation.EnqueueMaintenanceTask(childComplexity, args["input"].(manager.EnqueueMaintenanceTaskRequest)), true
 
 	case "QueueMutation.enqueueReprocessTorrentsBatch":
 		if e.complexity.QueueMutation.EnqueueReprocessTorrentsBatch == nil {
@@ -2116,6 +2130,13 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.VideoSourceAgg.Value(childComplexity), true
 
+	case "Worker.enabled":
+		if e.complexity.Worker.Enabled == nil {
+			break
+		}
+
+		return e.complexity.Worker.Enabled(childComplexity), true
+
 	case "Worker.key":
 		if e.complexity.Worker.Key == nil {
 			break
@@ -2156,6 +2177,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputContentTypeFacetInput,
 		ec.unmarshalInputGenreFacetInput,
 		ec.unmarshalInputLanguageFacetInput,
+		ec.unmarshalInputQueueEnqueueMaintenanceTaskInput,
 		ec.unmarshalInputQueueEnqueueReprocessTorrentsBatchInput,
 		ec.unmarshalInputQueueJobQueueFacetInput,
 		ec.unmarshalInputQueueJobStatusFacetInput,
@@ -2690,6 +2712,7 @@ type TorrentContentQuery {
 
 type Worker {
   key: String!
+  enabled: Boolean!
   started: Boolean!
 }
 
@@ -2819,11 +2842,18 @@ type QueueMutation {
   enqueueReprocessTorrentsBatch(
     input: QueueEnqueueReprocessTorrentsBatchInput
   ): Void
+  enqueueMaintenanceTask(input: QueueEnqueueMaintenanceTaskInput!): Void
 }
 
 input QueuePurgeJobsInput {
   queues: [String!]
   statuses: [QueueJobStatus!]
+}
+
+input QueueEnqueueMaintenanceTaskInput {
+  taskType: String!
+  limit: Int
+  purge: Boolean
 }
 `, BuiltIn: false},
 	{Name: "../../graphql/schema/scalars.graphqls", Input: `scalar Hash20
@@ -3074,6 +3104,34 @@ func (ec *executionContext) field_Query___type_argsName(
 	return zeroVal, nil
 }
 
+func (ec *executionContext) field_QueueMutation_enqueueMaintenanceTask_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := ec.field_QueueMutation_enqueueMaintenanceTask_argsInput(ctx, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+func (ec *executionContext) field_QueueMutation_enqueueMaintenanceTask_argsInput(
+	ctx context.Context,
+	rawArgs map[string]any,
+) (manager.EnqueueMaintenanceTaskRequest, error) {
+	if _, ok := rawArgs["input"]; !ok {
+		var zeroVal manager.EnqueueMaintenanceTaskRequest
+		return zeroVal, nil
+	}
+
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
+	if tmp, ok := rawArgs["input"]; ok {
+		return ec.unmarshalNQueueEnqueueMaintenanceTaskInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋqueueᚋmanagerᚐEnqueueMaintenanceTaskRequest(ctx, tmp)
+	}
+
+	var zeroVal manager.EnqueueMaintenanceTaskRequest
+	return zeroVal, nil
+}
+
 func (ec *executionContext) field_QueueMutation_enqueueReprocessTorrentsBatch_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -3095,7 +3153,7 @@ func (ec *executionContext) field_QueueMutation_enqueueReprocessTorrentsBatch_ar
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
 	if tmp, ok := rawArgs["input"]; ok {
-		return ec.unmarshalOQueueEnqueueReprocessTorrentsBatchInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋqueueᚋmanagerᚐEnqueueReprocessTorrentsBatchRequest(ctx, tmp)
+		return ec.unmarshalOQueueEnqueueReprocessTorrentsBatchInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋqueueᚋmanagerᚐEnqueueReprocessTorrentsBatchRequest(ctx, tmp)
 	}
 
 	var zeroVal manager.EnqueueReprocessTorrentsBatchRequest
@@ -3123,7 +3181,7 @@ func (ec *executionContext) field_QueueMutation_purgeJobs_argsInput(
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
 	if tmp, ok := rawArgs["input"]; ok {
-		return ec.unmarshalNQueuePurgeJobsInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋqueueᚋmanagerᚐPurgeJobsRequest(ctx, tmp)
+		return ec.unmarshalNQueuePurgeJobsInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋqueueᚋmanagerᚐPurgeJobsRequest(ctx, tmp)
 	}
 
 	var zeroVal manager.PurgeJobsRequest
@@ -3151,7 +3209,7 @@ func (ec *executionContext) field_QueueQuery_jobs_argsInput(
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
 	if tmp, ok := rawArgs["input"]; ok {
-		return ec.unmarshalNQueueJobsQueryInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐQueueJobsQueryInput(ctx, tmp)
+		return ec.unmarshalNQueueJobsQueryInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐQueueJobsQueryInput(ctx, tmp)
 	}
 
 	var zeroVal gqlmodel.QueueJobsQueryInput
@@ -3179,7 +3237,7 @@ func (ec *executionContext) field_QueueQuery_metrics_argsInput(
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
 	if tmp, ok := rawArgs["input"]; ok {
-		return ec.unmarshalNQueueMetricsQueryInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueMetricsQueryInput(ctx, tmp)
+		return ec.unmarshalNQueueMetricsQueryInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueMetricsQueryInput(ctx, tmp)
 	}
 
 	var zeroVal gen.QueueMetricsQueryInput
@@ -3207,7 +3265,7 @@ func (ec *executionContext) field_TorrentContentQuery_search_argsInput(
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
 	if tmp, ok := rawArgs["input"]; ok {
-		return ec.unmarshalNTorrentContentSearchQueryInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContentSearchQueryInput(ctx, tmp)
+		return ec.unmarshalNTorrentContentSearchQueryInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContentSearchQueryInput(ctx, tmp)
 	}
 
 	var zeroVal gqlmodel.TorrentContentSearchQueryInput
@@ -3240,7 +3298,7 @@ func (ec *executionContext) field_TorrentMutation_deleteTags_argsInfoHashes(
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("infoHashes"))
 	if tmp, ok := rawArgs["infoHashes"]; ok {
-		return ec.unmarshalOHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx, tmp)
+		return ec.unmarshalOHash202ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx, tmp)
 	}
 
 	var zeroVal []protocol.ID
@@ -3286,7 +3344,7 @@ func (ec *executionContext) field_TorrentMutation_delete_argsInfoHashes(
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("infoHashes"))
 	if tmp, ok := rawArgs["infoHashes"]; ok {
-		return ec.unmarshalNHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx, tmp)
+		return ec.unmarshalNHash202ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx, tmp)
 	}
 
 	var zeroVal []protocol.ID
@@ -3319,7 +3377,7 @@ func (ec *executionContext) field_TorrentMutation_putTags_argsInfoHashes(
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("infoHashes"))
 	if tmp, ok := rawArgs["infoHashes"]; ok {
-		return ec.unmarshalNHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx, tmp)
+		return ec.unmarshalNHash202ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx, tmp)
 	}
 
 	var zeroVal []protocol.ID
@@ -3365,7 +3423,7 @@ func (ec *executionContext) field_TorrentMutation_reprocess_argsInput(
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
 	if tmp, ok := rawArgs["input"]; ok {
-		return ec.unmarshalNTorrentReprocessInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentReprocessInput(ctx, tmp)
+		return ec.unmarshalNTorrentReprocessInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentReprocessInput(ctx, tmp)
 	}
 
 	var zeroVal gen.TorrentReprocessInput
@@ -3398,7 +3456,7 @@ func (ec *executionContext) field_TorrentMutation_setTags_argsInfoHashes(
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("infoHashes"))
 	if tmp, ok := rawArgs["infoHashes"]; ok {
-		return ec.unmarshalNHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx, tmp)
+		return ec.unmarshalNHash202ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx, tmp)
 	}
 
 	var zeroVal []protocol.ID
@@ -3444,7 +3502,7 @@ func (ec *executionContext) field_TorrentQuery_files_argsInput(
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
 	if tmp, ok := rawArgs["input"]; ok {
-		return ec.unmarshalNTorrentFilesQueryInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentFilesQueryInput(ctx, tmp)
+		return ec.unmarshalNTorrentFilesQueryInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentFilesQueryInput(ctx, tmp)
 	}
 
 	var zeroVal gqlmodel.TorrentFilesQueryInput
@@ -3472,7 +3530,7 @@ func (ec *executionContext) field_TorrentQuery_metrics_argsInput(
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
 	if tmp, ok := rawArgs["input"]; ok {
-		return ec.unmarshalNTorrentMetricsQueryInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentMetricsQueryInput(ctx, tmp)
+		return ec.unmarshalNTorrentMetricsQueryInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentMetricsQueryInput(ctx, tmp)
 	}
 
 	var zeroVal gen.TorrentMetricsQueryInput
@@ -3500,7 +3558,7 @@ func (ec *executionContext) field_TorrentQuery_suggestTags_argsInput(
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
 	if tmp, ok := rawArgs["input"]; ok {
-		return ec.unmarshalOSuggestTagsQueryInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐSuggestTagsQueryInput(ctx, tmp)
+		return ec.unmarshalOSuggestTagsQueryInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐSuggestTagsQueryInput(ctx, tmp)
 	}
 
 	var zeroVal *gen.SuggestTagsQueryInput
@@ -3655,7 +3713,7 @@ func (ec *executionContext) _Content_type(ctx context.Context, field graphql.Col
 	}
 	res := resTmp.(model.ContentType)
 	fc.Result = res
-	return ec.marshalNContentType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx, field.Selections, res)
+	return ec.marshalNContentType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Content_type(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3828,7 +3886,7 @@ func (ec *executionContext) _Content_releaseDate(ctx context.Context, field grap
 	}
 	res := resTmp.(model.Date)
 	fc.Result = res
-	return ec.marshalODate2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐDate(ctx, field.Selections, res)
+	return ec.marshalODate2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐDate(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Content_releaseDate(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3869,7 +3927,7 @@ func (ec *executionContext) _Content_releaseYear(ctx context.Context, field grap
 	}
 	res := resTmp.(model.Year)
 	fc.Result = res
-	return ec.marshalOYear2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx, field.Selections, res)
+	return ec.marshalOYear2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Content_releaseYear(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3910,7 +3968,7 @@ func (ec *executionContext) _Content_adult(ctx context.Context, field graphql.Co
 	}
 	res := resTmp.(model.NullBool)
 	fc.Result = res
-	return ec.marshalOBoolean2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, field.Selections, res)
+	return ec.marshalOBoolean2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Content_adult(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3951,7 +4009,7 @@ func (ec *executionContext) _Content_originalLanguage(ctx context.Context, field
 	}
 	res := resTmp.(*model.Language)
 	fc.Result = res
-	return ec.marshalOLanguageInfo2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx, field.Selections, res)
+	return ec.marshalOLanguageInfo2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Content_originalLanguage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3998,7 +4056,7 @@ func (ec *executionContext) _Content_originalTitle(ctx context.Context, field gr
 	}
 	res := resTmp.(model.NullString)
 	fc.Result = res
-	return ec.marshalOString2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
+	return ec.marshalOString2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Content_originalTitle(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4039,7 +4097,7 @@ func (ec *executionContext) _Content_overview(ctx context.Context, field graphql
 	}
 	res := resTmp.(model.NullString)
 	fc.Result = res
-	return ec.marshalOString2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
+	return ec.marshalOString2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Content_overview(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4080,7 +4138,7 @@ func (ec *executionContext) _Content_runtime(ctx context.Context, field graphql.
 	}
 	res := resTmp.(model.NullUint16)
 	fc.Result = res
-	return ec.marshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint16(ctx, field.Selections, res)
+	return ec.marshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint16(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Content_runtime(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4121,7 +4179,7 @@ func (ec *executionContext) _Content_popularity(ctx context.Context, field graph
 	}
 	res := resTmp.(model.NullFloat32)
 	fc.Result = res
-	return ec.marshalOFloat2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullFloat32(ctx, field.Selections, res)
+	return ec.marshalOFloat2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullFloat32(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Content_popularity(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4162,7 +4220,7 @@ func (ec *executionContext) _Content_voteAverage(ctx context.Context, field grap
 	}
 	res := resTmp.(model.NullFloat32)
 	fc.Result = res
-	return ec.marshalOFloat2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullFloat32(ctx, field.Selections, res)
+	return ec.marshalOFloat2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullFloat32(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Content_voteAverage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4203,7 +4261,7 @@ func (ec *executionContext) _Content_voteCount(ctx context.Context, field graphq
 	}
 	res := resTmp.(model.NullUint)
 	fc.Result = res
-	return ec.marshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, field.Selections, res)
+	return ec.marshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Content_voteCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4247,7 +4305,7 @@ func (ec *executionContext) _Content_attributes(ctx context.Context, field graph
 	}
 	res := resTmp.([]model.ContentAttribute)
 	fc.Result = res
-	return ec.marshalNContentAttribute2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentAttributeᚄ(ctx, field.Selections, res)
+	return ec.marshalNContentAttribute2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentAttributeᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Content_attributes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4305,7 +4363,7 @@ func (ec *executionContext) _Content_collections(ctx context.Context, field grap
 	}
 	res := resTmp.([]model.ContentCollection)
 	fc.Result = res
-	return ec.marshalNContentCollection2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentCollectionᚄ(ctx, field.Selections, res)
+	return ec.marshalNContentCollection2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentCollectionᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Content_collections(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4365,7 +4423,7 @@ func (ec *executionContext) _Content_metadataSource(ctx context.Context, field g
 	}
 	res := resTmp.(model.MetadataSource)
 	fc.Result = res
-	return ec.marshalNMetadataSource2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐMetadataSource(ctx, field.Selections, res)
+	return ec.marshalNMetadataSource2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐMetadataSource(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Content_metadataSource(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4415,7 +4473,7 @@ func (ec *executionContext) _Content_externalLinks(ctx context.Context, field gr
 	}
 	res := resTmp.([]model.ExternalLink)
 	fc.Result = res
-	return ec.marshalNExternalLink2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐExternalLinkᚄ(ctx, field.Selections, res)
+	return ec.marshalNExternalLink2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐExternalLinkᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Content_externalLinks(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4685,7 +4743,7 @@ func (ec *executionContext) _ContentAttribute_metadataSource(ctx context.Context
 	}
 	res := resTmp.(model.MetadataSource)
 	fc.Result = res
-	return ec.marshalNMetadataSource2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐMetadataSource(ctx, field.Selections, res)
+	return ec.marshalNMetadataSource2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐMetadataSource(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_ContentAttribute_metadataSource(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4999,7 +5057,7 @@ func (ec *executionContext) _ContentCollection_metadataSource(ctx context.Contex
 	}
 	res := resTmp.(model.MetadataSource)
 	fc.Result = res
-	return ec.marshalNMetadataSource2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐMetadataSource(ctx, field.Selections, res)
+	return ec.marshalNMetadataSource2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐMetadataSource(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_ContentCollection_metadataSource(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -5310,7 +5368,7 @@ func (ec *executionContext) _ContentTypeAgg_value(ctx context.Context, field gra
 	}
 	res := resTmp.(*model.ContentType)
 	fc.Result = res
-	return ec.marshalOContentType2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx, field.Selections, res)
+	return ec.marshalOContentType2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_ContentTypeAgg_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -5530,7 +5588,7 @@ func (ec *executionContext) _Episodes_seasons(ctx context.Context, field graphql
 	}
 	res := resTmp.([]model.Season)
 	fc.Result = res
-	return ec.marshalNSeason2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐSeasonᚄ(ctx, field.Selections, res)
+	return ec.marshalNSeason2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐSeasonᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Episodes_seasons(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -5580,7 +5638,7 @@ func (ec *executionContext) _ExternalLink_metadataSource(ctx context.Context, fi
 	}
 	res := resTmp.(model.MetadataSource)
 	fc.Result = res
-	return ec.marshalNMetadataSource2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐMetadataSource(ctx, field.Selections, res)
+	return ec.marshalNMetadataSource2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐMetadataSource(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_ExternalLink_metadataSource(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -5894,7 +5952,7 @@ func (ec *executionContext) _HealthCheck_status(ctx context.Context, field graph
 	}
 	res := resTmp.(gen.HealthStatus)
 	fc.Result = res
-	return ec.marshalNHealthStatus2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthStatus(ctx, field.Selections, res)
+	return ec.marshalNHealthStatus2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthStatus(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_HealthCheck_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6023,7 +6081,7 @@ func (ec *executionContext) _HealthQuery_status(ctx context.Context, field graph
 	}
 	res := resTmp.(gen.HealthStatus)
 	fc.Result = res
-	return ec.marshalNHealthStatus2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthStatus(ctx, field.Selections, res)
+	return ec.marshalNHealthStatus2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthStatus(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_HealthQuery_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6067,7 +6125,7 @@ func (ec *executionContext) _HealthQuery_checks(ctx context.Context, field graph
 	}
 	res := resTmp.([]gen.HealthCheck)
 	fc.Result = res
-	return ec.marshalNHealthCheck2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthCheckᚄ(ctx, field.Selections, res)
+	return ec.marshalNHealthCheck2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthCheckᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_HealthQuery_checks(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6121,7 +6179,7 @@ func (ec *executionContext) _LanguageAgg_value(ctx context.Context, field graphq
 	}
 	res := resTmp.(model.Language)
 	fc.Result = res
-	return ec.marshalNLanguage2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx, field.Selections, res)
+	return ec.marshalNLanguage2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_LanguageAgg_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6473,7 +6531,7 @@ func (ec *executionContext) _Mutation_torrent(ctx context.Context, field graphql
 	}
 	res := resTmp.(gqlmodel.TorrentMutation)
 	fc.Result = res
-	return ec.marshalNTorrentMutation2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentMutation(ctx, field.Selections, res)
+	return ec.marshalNTorrentMutation2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentMutation(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_torrent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6529,7 +6587,7 @@ func (ec *executionContext) _Mutation_queue(ctx context.Context, field graphql.C
 	}
 	res := resTmp.(gqlmodel.QueueMutation)
 	fc.Result = res
-	return ec.marshalNQueueMutation2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐQueueMutation(ctx, field.Selections, res)
+	return ec.marshalNQueueMutation2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐQueueMutation(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_queue(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6544,6 +6602,8 @@ func (ec *executionContext) fieldContext_Mutation_queue(_ context.Context, field
 				return ec.fieldContext_QueueMutation_purgeJobs(ctx, field)
 			case "enqueueReprocessTorrentsBatch":
 				return ec.fieldContext_QueueMutation_enqueueReprocessTorrentsBatch(ctx, field)
+			case "enqueueMaintenanceTask":
+				return ec.fieldContext_QueueMutation_enqueueMaintenanceTask(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type QueueMutation", field.Name)
 		},
@@ -6623,7 +6683,7 @@ func (ec *executionContext) _Query_workers(ctx context.Context, field graphql.Co
 	}
 	res := resTmp.(gen.WorkersQuery)
 	fc.Result = res
-	return ec.marshalNWorkersQuery2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐWorkersQuery(ctx, field.Selections, res)
+	return ec.marshalNWorkersQuery2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐWorkersQuery(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_workers(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6671,7 +6731,7 @@ func (ec *executionContext) _Query_health(ctx context.Context, field graphql.Col
 	}
 	res := resTmp.(gen.HealthQuery)
 	fc.Result = res
-	return ec.marshalNHealthQuery2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthQuery(ctx, field.Selections, res)
+	return ec.marshalNHealthQuery2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthQuery(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_health(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6721,7 +6781,7 @@ func (ec *executionContext) _Query_queue(ctx context.Context, field graphql.Coll
 	}
 	res := resTmp.(gqlmodel.QueueQuery)
 	fc.Result = res
-	return ec.marshalNQueueQuery2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐQueueQuery(ctx, field.Selections, res)
+	return ec.marshalNQueueQuery2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐQueueQuery(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_queue(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6771,7 +6831,7 @@ func (ec *executionContext) _Query_torrent(ctx context.Context, field graphql.Co
 	}
 	res := resTmp.(gqlmodel.TorrentQuery)
 	fc.Result = res
-	return ec.marshalNTorrentQuery2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentQuery(ctx, field.Selections, res)
+	return ec.marshalNTorrentQuery2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentQuery(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_torrent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6825,7 +6885,7 @@ func (ec *executionContext) _Query_torrentContent(ctx context.Context, field gra
 	}
 	res := resTmp.(gqlmodel.TorrentContentQuery)
 	fc.Result = res
-	return ec.marshalNTorrentContentQuery2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContentQuery(ctx, field.Selections, res)
+	return ec.marshalNTorrentContentQuery2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContentQuery(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_torrentContent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -7092,7 +7152,7 @@ func (ec *executionContext) _QueueJob_status(ctx context.Context, field graphql.
 	}
 	res := resTmp.(model.QueueJobStatus)
 	fc.Result = res
-	return ec.marshalNQueueJobStatus2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatus(ctx, field.Selections, res)
+	return ec.marshalNQueueJobStatus2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatus(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_QueueJob_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -7394,7 +7454,7 @@ func (ec *executionContext) _QueueJob_error(ctx context.Context, field graphql.C
 	}
 	res := resTmp.(model.NullString)
 	fc.Result = res
-	return ec.marshalOString2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
+	return ec.marshalOString2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_QueueJob_error(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -7614,7 +7674,7 @@ func (ec *executionContext) _QueueJobStatusAgg_value(ctx context.Context, field 
 	}
 	res := resTmp.(model.QueueJobStatus)
 	fc.Result = res
-	return ec.marshalNQueueJobStatus2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatus(ctx, field.Selections, res)
+	return ec.marshalNQueueJobStatus2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatus(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_QueueJobStatusAgg_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -7743,7 +7803,7 @@ func (ec *executionContext) _QueueJobsAggregations_queue(ctx context.Context, fi
 	}
 	res := resTmp.([]gen.QueueJobQueueAgg)
 	fc.Result = res
-	return ec.marshalOQueueJobQueueAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobQueueAggᚄ(ctx, field.Selections, res)
+	return ec.marshalOQueueJobQueueAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobQueueAggᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_QueueJobsAggregations_queue(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -7792,7 +7852,7 @@ func (ec *executionContext) _QueueJobsAggregations_status(ctx context.Context, f
 	}
 	res := resTmp.([]gen.QueueJobStatusAgg)
 	fc.Result = res
-	return ec.marshalOQueueJobStatusAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobStatusAggᚄ(ctx, field.Selections, res)
+	return ec.marshalOQueueJobStatusAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobStatusAggᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_QueueJobsAggregations_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -7929,7 +7989,7 @@ func (ec *executionContext) _QueueJobsQueryResult_items(ctx context.Context, fie
 	}
 	res := resTmp.([]model.QueueJob)
 	fc.Result = res
-	return ec.marshalNQueueJob2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJobᚄ(ctx, field.Selections, res)
+	return ec.marshalNQueueJob2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJobᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_QueueJobsQueryResult_items(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -7997,7 +8057,7 @@ func (ec *executionContext) _QueueJobsQueryResult_aggregations(ctx context.Conte
 	}
 	res := resTmp.(gen.QueueJobsAggregations)
 	fc.Result = res
-	return ec.marshalNQueueJobsAggregations2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsAggregations(ctx, field.Selections, res)
+	return ec.marshalNQueueJobsAggregations2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsAggregations(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_QueueJobsQueryResult_aggregations(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -8091,7 +8151,7 @@ func (ec *executionContext) _QueueMetricsBucket_status(ctx context.Context, fiel
 	}
 	res := resTmp.(model.QueueJobStatus)
 	fc.Result = res
-	return ec.marshalNQueueJobStatus2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatus(ctx, field.Selections, res)
+	return ec.marshalNQueueJobStatus2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatus(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_QueueMetricsBucket_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -8305,7 +8365,7 @@ func (ec *executionContext) _QueueMetricsQueryResult_buckets(ctx context.Context
 	}
 	res := resTmp.([]queuemetrics.Bucket)
 	fc.Result = res
-	return ec.marshalNQueueMetricsBucket2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmetricsᚋqueuemetricsᚐBucketᚄ(ctx, field.Selections, res)
+	return ec.marshalNQueueMetricsBucket2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmetricsᚋqueuemetricsᚐBucketᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_QueueMetricsQueryResult_buckets(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -8439,6 +8499,58 @@ func (ec *executionContext) fieldContext_QueueMutation_enqueueReprocessTorrentsB
 	return fc, nil
 }
 
+func (ec *executionContext) _QueueMutation_enqueueMaintenanceTask(ctx context.Context, field graphql.CollectedField, obj *gqlmodel.QueueMutation) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_QueueMutation_enqueueMaintenanceTask(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.EnqueueMaintenanceTask(ctx, fc.Args["input"].(manager.EnqueueMaintenanceTaskRequest))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*string)
+	fc.Result = res
+	return ec.marshalOVoid2ᚖstring(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_QueueMutation_enqueueMaintenanceTask(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QueueMutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Void does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_QueueMutation_enqueueMaintenanceTask_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _QueueQuery_jobs(ctx context.Context, field graphql.CollectedField, obj *gqlmodel.QueueQuery) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_QueueQuery_jobs(ctx, field)
 	if err != nil {
@@ -8467,7 +8579,7 @@ func (ec *executionContext) _QueueQuery_jobs(ctx context.Context, field graphql.
 	}
 	res := resTmp.(gqlmodel.QueueJobsQueryResult)
 	fc.Result = res
-	return ec.marshalNQueueJobsQueryResult2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐQueueJobsQueryResult(ctx, field.Selections, res)
+	return ec.marshalNQueueJobsQueryResult2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐQueueJobsQueryResult(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_QueueQuery_jobs(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -8532,7 +8644,7 @@ func (ec *executionContext) _QueueQuery_metrics(ctx context.Context, field graph
 	}
 	res := resTmp.(*gen.QueueMetricsQueryResult)
 	fc.Result = res
-	return ec.marshalNQueueMetricsQueryResult2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueMetricsQueryResult(ctx, field.Selections, res)
+	return ec.marshalNQueueMetricsQueryResult2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueMetricsQueryResult(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_QueueQuery_metrics(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -8588,7 +8700,7 @@ func (ec *executionContext) _ReleaseYearAgg_value(ctx context.Context, field gra
 	}
 	res := resTmp.(*model.Year)
 	fc.Result = res
-	return ec.marshalOYear2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx, field.Selections, res)
+	return ec.marshalOYear2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_ReleaseYearAgg_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -8937,7 +9049,7 @@ func (ec *executionContext) _Torrent_infoHash(ctx context.Context, field graphql
 	}
 	res := resTmp.(protocol.ID)
 	fc.Result = res
-	return ec.marshalNHash202githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx, field.Selections, res)
+	return ec.marshalNHash202githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Torrent_infoHash(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -9151,7 +9263,7 @@ func (ec *executionContext) _Torrent_extension(ctx context.Context, field graphq
 	}
 	res := resTmp.(model.NullString)
 	fc.Result = res
-	return ec.marshalOString2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
+	return ec.marshalOString2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Torrent_extension(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -9195,7 +9307,7 @@ func (ec *executionContext) _Torrent_filesStatus(ctx context.Context, field grap
 	}
 	res := resTmp.(model.FilesStatus)
 	fc.Result = res
-	return ec.marshalNFilesStatus2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFilesStatus(ctx, field.Selections, res)
+	return ec.marshalNFilesStatus2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFilesStatus(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Torrent_filesStatus(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -9236,7 +9348,7 @@ func (ec *executionContext) _Torrent_filesCount(ctx context.Context, field graph
 	}
 	res := resTmp.(model.NullUint)
 	fc.Result = res
-	return ec.marshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, field.Selections, res)
+	return ec.marshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Torrent_filesCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -9277,7 +9389,7 @@ func (ec *executionContext) _Torrent_fileType(ctx context.Context, field graphql
 	}
 	res := resTmp.(model.NullFileType)
 	fc.Result = res
-	return ec.marshalOFileType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullFileType(ctx, field.Selections, res)
+	return ec.marshalOFileType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullFileType(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Torrent_fileType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -9318,7 +9430,7 @@ func (ec *executionContext) _Torrent_fileTypes(ctx context.Context, field graphq
 	}
 	res := resTmp.([]model.FileType)
 	fc.Result = res
-	return ec.marshalOFileType2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFileTypeᚄ(ctx, field.Selections, res)
+	return ec.marshalOFileType2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFileTypeᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Torrent_fileTypes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -9359,7 +9471,7 @@ func (ec *executionContext) _Torrent_files(ctx context.Context, field graphql.Co
 	}
 	res := resTmp.([]model.TorrentFile)
 	fc.Result = res
-	return ec.marshalOTorrentFile2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐTorrentFileᚄ(ctx, field.Selections, res)
+	return ec.marshalOTorrentFile2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐTorrentFileᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Torrent_files(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -9421,7 +9533,7 @@ func (ec *executionContext) _Torrent_sources(ctx context.Context, field graphql.
 	}
 	res := resTmp.([]gqlmodel.TorrentSourceInfo)
 	fc.Result = res
-	return ec.marshalNTorrentSourceInfo2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentSourceInfoᚄ(ctx, field.Selections, res)
+	return ec.marshalNTorrentSourceInfo2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentSourceInfoᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Torrent_sources(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -9474,7 +9586,7 @@ func (ec *executionContext) _Torrent_seeders(ctx context.Context, field graphql.
 	}
 	res := resTmp.(model.NullUint)
 	fc.Result = res
-	return ec.marshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, field.Selections, res)
+	return ec.marshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Torrent_seeders(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -9515,7 +9627,7 @@ func (ec *executionContext) _Torrent_leechers(ctx context.Context, field graphql
 	}
 	res := resTmp.(model.NullUint)
 	fc.Result = res
-	return ec.marshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, field.Selections, res)
+	return ec.marshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Torrent_leechers(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -9779,7 +9891,7 @@ func (ec *executionContext) _TorrentContent_infoHash(ctx context.Context, field 
 	}
 	res := resTmp.(protocol.ID)
 	fc.Result = res
-	return ec.marshalNHash202githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx, field.Selections, res)
+	return ec.marshalNHash202githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContent_infoHash(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -9823,7 +9935,7 @@ func (ec *executionContext) _TorrentContent_torrent(ctx context.Context, field g
 	}
 	res := resTmp.(model.Torrent)
 	fc.Result = res
-	return ec.marshalNTorrent2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐTorrent(ctx, field.Selections, res)
+	return ec.marshalNTorrent2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐTorrent(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContent_torrent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -9902,7 +10014,7 @@ func (ec *executionContext) _TorrentContent_contentType(ctx context.Context, fie
 	}
 	res := resTmp.(model.NullContentType)
 	fc.Result = res
-	return ec.marshalOContentType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullContentType(ctx, field.Selections, res)
+	return ec.marshalOContentType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullContentType(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContent_contentType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -9943,7 +10055,7 @@ func (ec *executionContext) _TorrentContent_contentSource(ctx context.Context, f
 	}
 	res := resTmp.(model.NullString)
 	fc.Result = res
-	return ec.marshalOString2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
+	return ec.marshalOString2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContent_contentSource(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -9984,7 +10096,7 @@ func (ec *executionContext) _TorrentContent_contentId(ctx context.Context, field
 	}
 	res := resTmp.(model.NullString)
 	fc.Result = res
-	return ec.marshalOString2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
+	return ec.marshalOString2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContent_contentId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10025,7 +10137,7 @@ func (ec *executionContext) _TorrentContent_content(ctx context.Context, field g
 	}
 	res := resTmp.(*model.Content)
 	fc.Result = res
-	return ec.marshalOContent2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContent(ctx, field.Selections, res)
+	return ec.marshalOContent2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContent(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContent_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10152,7 +10264,7 @@ func (ec *executionContext) _TorrentContent_languages(ctx context.Context, field
 	}
 	res := resTmp.([]model.Language)
 	fc.Result = res
-	return ec.marshalOLanguageInfo2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐLanguageᚄ(ctx, field.Selections, res)
+	return ec.marshalOLanguageInfo2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐLanguageᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContent_languages(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10199,7 +10311,7 @@ func (ec *executionContext) _TorrentContent_episodes(ctx context.Context, field 
 	}
 	res := resTmp.(*gqlmodel.Episodes)
 	fc.Result = res
-	return ec.marshalOEpisodes2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐEpisodes(ctx, field.Selections, res)
+	return ec.marshalOEpisodes2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐEpisodes(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContent_episodes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10246,7 +10358,7 @@ func (ec *executionContext) _TorrentContent_videoResolution(ctx context.Context,
 	}
 	res := resTmp.(model.NullVideoResolution)
 	fc.Result = res
-	return ec.marshalOVideoResolution2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullVideoResolution(ctx, field.Selections, res)
+	return ec.marshalOVideoResolution2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullVideoResolution(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContent_videoResolution(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10287,7 +10399,7 @@ func (ec *executionContext) _TorrentContent_videoSource(ctx context.Context, fie
 	}
 	res := resTmp.(model.NullVideoSource)
 	fc.Result = res
-	return ec.marshalOVideoSource2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullVideoSource(ctx, field.Selections, res)
+	return ec.marshalOVideoSource2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullVideoSource(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContent_videoSource(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10328,7 +10440,7 @@ func (ec *executionContext) _TorrentContent_videoCodec(ctx context.Context, fiel
 	}
 	res := resTmp.(model.NullVideoCodec)
 	fc.Result = res
-	return ec.marshalOVideoCodec2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullVideoCodec(ctx, field.Selections, res)
+	return ec.marshalOVideoCodec2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullVideoCodec(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContent_videoCodec(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10369,7 +10481,7 @@ func (ec *executionContext) _TorrentContent_video3d(ctx context.Context, field g
 	}
 	res := resTmp.(model.NullVideo3D)
 	fc.Result = res
-	return ec.marshalOVideo3D2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullVideo3D(ctx, field.Selections, res)
+	return ec.marshalOVideo3D2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullVideo3D(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContent_video3d(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10410,7 +10522,7 @@ func (ec *executionContext) _TorrentContent_videoModifier(ctx context.Context, f
 	}
 	res := resTmp.(model.NullVideoModifier)
 	fc.Result = res
-	return ec.marshalOVideoModifier2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullVideoModifier(ctx, field.Selections, res)
+	return ec.marshalOVideoModifier2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullVideoModifier(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContent_videoModifier(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10451,7 +10563,7 @@ func (ec *executionContext) _TorrentContent_releaseGroup(ctx context.Context, fi
 	}
 	res := resTmp.(model.NullString)
 	fc.Result = res
-	return ec.marshalOString2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
+	return ec.marshalOString2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContent_releaseGroup(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10492,7 +10604,7 @@ func (ec *executionContext) _TorrentContent_seeders(ctx context.Context, field g
 	}
 	res := resTmp.(model.NullUint)
 	fc.Result = res
-	return ec.marshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, field.Selections, res)
+	return ec.marshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContent_seeders(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10533,7 +10645,7 @@ func (ec *executionContext) _TorrentContent_leechers(ctx context.Context, field 
 	}
 	res := resTmp.(model.NullUint)
 	fc.Result = res
-	return ec.marshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, field.Selections, res)
+	return ec.marshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContent_leechers(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10706,7 +10818,7 @@ func (ec *executionContext) _TorrentContentAggregations_contentType(ctx context.
 	}
 	res := resTmp.([]gen.ContentTypeAgg)
 	fc.Result = res
-	return ec.marshalOContentTypeAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentTypeAggᚄ(ctx, field.Selections, res)
+	return ec.marshalOContentTypeAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentTypeAggᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContentAggregations_contentType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10757,7 +10869,7 @@ func (ec *executionContext) _TorrentContentAggregations_contentSource(ctx contex
 	}
 	res := resTmp.([]gen.ContentSourceAgg)
 	fc.Result = res
-	return ec.marshalOContentSourceAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentSourceAggᚄ(ctx, field.Selections, res)
+	return ec.marshalOContentSourceAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentSourceAggᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContentAggregations_contentSource(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10808,7 +10920,7 @@ func (ec *executionContext) _TorrentContentAggregations_torrentSource(ctx contex
 	}
 	res := resTmp.([]gen.TorrentSourceAgg)
 	fc.Result = res
-	return ec.marshalOTorrentSourceAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentSourceAggᚄ(ctx, field.Selections, res)
+	return ec.marshalOTorrentSourceAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentSourceAggᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContentAggregations_torrentSource(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10859,7 +10971,7 @@ func (ec *executionContext) _TorrentContentAggregations_torrentTag(ctx context.C
 	}
 	res := resTmp.([]gen.TorrentTagAgg)
 	fc.Result = res
-	return ec.marshalOTorrentTagAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentTagAggᚄ(ctx, field.Selections, res)
+	return ec.marshalOTorrentTagAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentTagAggᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContentAggregations_torrentTag(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10910,7 +11022,7 @@ func (ec *executionContext) _TorrentContentAggregations_torrentFileType(ctx cont
 	}
 	res := resTmp.([]gen.TorrentFileTypeAgg)
 	fc.Result = res
-	return ec.marshalOTorrentFileTypeAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFileTypeAggᚄ(ctx, field.Selections, res)
+	return ec.marshalOTorrentFileTypeAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFileTypeAggᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContentAggregations_torrentFileType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -10961,7 +11073,7 @@ func (ec *executionContext) _TorrentContentAggregations_language(ctx context.Con
 	}
 	res := resTmp.([]gen.LanguageAgg)
 	fc.Result = res
-	return ec.marshalOLanguageAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐLanguageAggᚄ(ctx, field.Selections, res)
+	return ec.marshalOLanguageAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐLanguageAggᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContentAggregations_language(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -11012,7 +11124,7 @@ func (ec *executionContext) _TorrentContentAggregations_genre(ctx context.Contex
 	}
 	res := resTmp.([]gen.GenreAgg)
 	fc.Result = res
-	return ec.marshalOGenreAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐGenreAggᚄ(ctx, field.Selections, res)
+	return ec.marshalOGenreAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐGenreAggᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContentAggregations_genre(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -11063,7 +11175,7 @@ func (ec *executionContext) _TorrentContentAggregations_releaseYear(ctx context.
 	}
 	res := resTmp.([]gen.ReleaseYearAgg)
 	fc.Result = res
-	return ec.marshalOReleaseYearAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐReleaseYearAggᚄ(ctx, field.Selections, res)
+	return ec.marshalOReleaseYearAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐReleaseYearAggᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContentAggregations_releaseYear(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -11114,7 +11226,7 @@ func (ec *executionContext) _TorrentContentAggregations_videoResolution(ctx cont
 	}
 	res := resTmp.([]gen.VideoResolutionAgg)
 	fc.Result = res
-	return ec.marshalOVideoResolutionAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoResolutionAggᚄ(ctx, field.Selections, res)
+	return ec.marshalOVideoResolutionAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoResolutionAggᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContentAggregations_videoResolution(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -11165,7 +11277,7 @@ func (ec *executionContext) _TorrentContentAggregations_videoSource(ctx context.
 	}
 	res := resTmp.([]gen.VideoSourceAgg)
 	fc.Result = res
-	return ec.marshalOVideoSourceAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoSourceAggᚄ(ctx, field.Selections, res)
+	return ec.marshalOVideoSourceAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoSourceAggᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContentAggregations_videoSource(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -11219,7 +11331,7 @@ func (ec *executionContext) _TorrentContentQuery_search(ctx context.Context, fie
 	}
 	res := resTmp.(gqlmodel.TorrentContentSearchResult)
 	fc.Result = res
-	return ec.marshalNTorrentContentSearchResult2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContentSearchResult(ctx, field.Selections, res)
+	return ec.marshalNTorrentContentSearchResult2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContentSearchResult(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContentQuery_search(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -11415,7 +11527,7 @@ func (ec *executionContext) _TorrentContentSearchResult_items(ctx context.Contex
 	}
 	res := resTmp.([]gqlmodel.TorrentContent)
 	fc.Result = res
-	return ec.marshalNTorrentContent2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContentᚄ(ctx, field.Selections, res)
+	return ec.marshalNTorrentContent2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContentᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContentSearchResult_items(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -11503,7 +11615,7 @@ func (ec *executionContext) _TorrentContentSearchResult_aggregations(ctx context
 	}
 	res := resTmp.(gen.TorrentContentAggregations)
 	fc.Result = res
-	return ec.marshalNTorrentContentAggregations2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentAggregations(ctx, field.Selections, res)
+	return ec.marshalNTorrentContentAggregations2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentAggregations(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentContentSearchResult_aggregations(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -11569,7 +11681,7 @@ func (ec *executionContext) _TorrentFile_infoHash(ctx context.Context, field gra
 	}
 	res := resTmp.(protocol.ID)
 	fc.Result = res
-	return ec.marshalNHash202githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx, field.Selections, res)
+	return ec.marshalNHash202githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentFile_infoHash(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -11698,7 +11810,7 @@ func (ec *executionContext) _TorrentFile_extension(ctx context.Context, field gr
 	}
 	res := resTmp.(model.NullString)
 	fc.Result = res
-	return ec.marshalOString2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
+	return ec.marshalOString2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentFile_extension(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -11739,7 +11851,7 @@ func (ec *executionContext) _TorrentFile_fileType(ctx context.Context, field gra
 	}
 	res := resTmp.(model.NullFileType)
 	fc.Result = res
-	return ec.marshalOFileType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullFileType(ctx, field.Selections, res)
+	return ec.marshalOFileType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullFileType(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentFile_fileType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -11915,7 +12027,7 @@ func (ec *executionContext) _TorrentFileTypeAgg_value(ctx context.Context, field
 	}
 	res := resTmp.(model.FileType)
 	fc.Result = res
-	return ec.marshalNFileType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFileType(ctx, field.Selections, res)
+	return ec.marshalNFileType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFileType(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentFileTypeAgg_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -12176,7 +12288,7 @@ func (ec *executionContext) _TorrentFilesQueryResult_items(ctx context.Context, 
 	}
 	res := resTmp.([]model.TorrentFile)
 	fc.Result = res
-	return ec.marshalNTorrentFile2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐTorrentFileᚄ(ctx, field.Selections, res)
+	return ec.marshalNTorrentFile2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐTorrentFileᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentFilesQueryResult_items(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -12238,7 +12350,7 @@ func (ec *executionContext) _TorrentListSourcesResult_sources(ctx context.Contex
 	}
 	res := resTmp.([]model.TorrentSource)
 	fc.Result = res
-	return ec.marshalNTorrentSource2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐTorrentSourceᚄ(ctx, field.Selections, res)
+	return ec.marshalNTorrentSource2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐTorrentSourceᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentListSourcesResult_sources(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -12464,7 +12576,7 @@ func (ec *executionContext) _TorrentMetricsQueryResult_buckets(ctx context.Conte
 	}
 	res := resTmp.([]torrentmetrics.Bucket)
 	fc.Result = res
-	return ec.marshalNTorrentMetricsBucket2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmetricsᚋtorrentmetricsᚐBucketᚄ(ctx, field.Selections, res)
+	return ec.marshalNTorrentMetricsBucket2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmetricsᚋtorrentmetricsᚐBucketᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentMetricsQueryResult_buckets(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -12778,7 +12890,7 @@ func (ec *executionContext) _TorrentQuery_files(ctx context.Context, field graph
 	}
 	res := resTmp.(query.GenericResult[model.TorrentFile])
 	fc.Result = res
-	return ec.marshalNTorrentFilesQueryResult2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋdatabaseᚋqueryᚐGenericResult(ctx, field.Selections, res)
+	return ec.marshalNTorrentFilesQueryResult2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋdatabaseᚋqueryᚐGenericResult(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentQuery_files(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -12841,7 +12953,7 @@ func (ec *executionContext) _TorrentQuery_listSources(ctx context.Context, field
 	}
 	res := resTmp.(gen.TorrentListSourcesResult)
 	fc.Result = res
-	return ec.marshalNTorrentListSourcesResult2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentListSourcesResult(ctx, field.Selections, res)
+	return ec.marshalNTorrentListSourcesResult2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentListSourcesResult(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentQuery_listSources(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -12889,7 +13001,7 @@ func (ec *executionContext) _TorrentQuery_suggestTags(ctx context.Context, field
 	}
 	res := resTmp.(search.TorrentSuggestTagsResult)
 	fc.Result = res
-	return ec.marshalNTorrentSuggestTagsResult2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋdatabaseᚋsearchᚐTorrentSuggestTagsResult(ctx, field.Selections, res)
+	return ec.marshalNTorrentSuggestTagsResult2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋdatabaseᚋsearchᚐTorrentSuggestTagsResult(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentQuery_suggestTags(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -12948,7 +13060,7 @@ func (ec *executionContext) _TorrentQuery_metrics(ctx context.Context, field gra
 	}
 	res := resTmp.(*gen.TorrentMetricsQueryResult)
 	fc.Result = res
-	return ec.marshalNTorrentMetricsQueryResult2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentMetricsQueryResult(ctx, field.Selections, res)
+	return ec.marshalNTorrentMetricsQueryResult2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentMetricsQueryResult(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentQuery_metrics(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -13356,7 +13468,7 @@ func (ec *executionContext) _TorrentSourceInfo_importId(ctx context.Context, fie
 	}
 	res := resTmp.(model.NullString)
 	fc.Result = res
-	return ec.marshalOString2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
+	return ec.marshalOString2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentSourceInfo_importId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -13397,7 +13509,7 @@ func (ec *executionContext) _TorrentSourceInfo_seeders(ctx context.Context, fiel
 	}
 	res := resTmp.(model.NullUint)
 	fc.Result = res
-	return ec.marshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, field.Selections, res)
+	return ec.marshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentSourceInfo_seeders(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -13438,7 +13550,7 @@ func (ec *executionContext) _TorrentSourceInfo_leechers(ctx context.Context, fie
 	}
 	res := resTmp.(model.NullUint)
 	fc.Result = res
-	return ec.marshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, field.Selections, res)
+	return ec.marshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentSourceInfo_leechers(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -13482,7 +13594,7 @@ func (ec *executionContext) _TorrentSuggestTagsResult_suggestions(ctx context.Co
 	}
 	res := resTmp.([]search.SuggestedTag)
 	fc.Result = res
-	return ec.marshalNSuggestedTag2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋdatabaseᚋsearchᚐSuggestedTagᚄ(ctx, field.Selections, res)
+	return ec.marshalNSuggestedTag2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋdatabaseᚋsearchᚐSuggestedTagᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_TorrentSuggestTagsResult_suggestions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -13705,7 +13817,7 @@ func (ec *executionContext) _VideoResolutionAgg_value(ctx context.Context, field
 	}
 	res := resTmp.(*model.VideoResolution)
 	fc.Result = res
-	return ec.marshalOVideoResolution2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐVideoResolution(ctx, field.Selections, res)
+	return ec.marshalOVideoResolution2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐVideoResolution(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_VideoResolutionAgg_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -13878,7 +13990,7 @@ func (ec *executionContext) _VideoSourceAgg_value(ctx context.Context, field gra
 	}
 	res := resTmp.(*model.VideoSource)
 	fc.Result = res
-	return ec.marshalOVideoSource2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐVideoSource(ctx, field.Selections, res)
+	return ec.marshalOVideoSource2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐVideoSource(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_VideoSourceAgg_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -14070,6 +14182,50 @@ func (ec *executionContext) fieldContext_Worker_key(_ context.Context, field gra
 	return fc, nil
 }
 
+func (ec *executionContext) _Worker_enabled(ctx context.Context, field graphql.CollectedField, obj *gen.Worker) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Worker_enabled(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Enabled, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(bool)
+	fc.Result = res
+	return ec.marshalNBoolean2bool(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Worker_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Worker",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Worker_started(ctx context.Context, field graphql.CollectedField, obj *gen.Worker) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Worker_started(ctx, field)
 	if err != nil {
@@ -14142,7 +14298,7 @@ func (ec *executionContext) _WorkersListAllQueryResult_workers(ctx context.Conte
 	}
 	res := resTmp.([]gen.Worker)
 	fc.Result = res
-	return ec.marshalNWorker2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐWorkerᚄ(ctx, field.Selections, res)
+	return ec.marshalNWorker2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐWorkerᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_WorkersListAllQueryResult_workers(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -14155,6 +14311,8 @@ func (ec *executionContext) fieldContext_WorkersListAllQueryResult_workers(_ con
 			switch field.Name {
 			case "key":
 				return ec.fieldContext_Worker_key(ctx, field)
+			case "enabled":
+				return ec.fieldContext_Worker_enabled(ctx, field)
 			case "started":
 				return ec.fieldContext_Worker_started(ctx, field)
 			}
@@ -14192,7 +14350,7 @@ func (ec *executionContext) _WorkersQuery_listAll(ctx context.Context, field gra
 	}
 	res := resTmp.(gen.WorkersListAllQueryResult)
 	fc.Result = res
-	return ec.marshalNWorkersListAllQueryResult2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐWorkersListAllQueryResult(ctx, field.Selections, res)
+	return ec.marshalNWorkersListAllQueryResult2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐWorkersListAllQueryResult(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_WorkersQuery_listAll(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -16186,7 +16344,7 @@ func (ec *executionContext) unmarshalInputContentSourceFacetInput(ctx context.Co
 			it.Aggregate = graphql.OmittableOf(data)
 		case "logic":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("logic"))
-			data, err := ec.unmarshalOFacetLogic2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFacetLogic(ctx, v)
+			data, err := ec.unmarshalOFacetLogic2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFacetLogic(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -16227,7 +16385,7 @@ func (ec *executionContext) unmarshalInputContentTypeFacetInput(ctx context.Cont
 			it.Aggregate = graphql.OmittableOf(data)
 		case "filter":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filter"))
-			data, err := ec.unmarshalOContentType2ᚕᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx, v)
+			data, err := ec.unmarshalOContentType2ᚕᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -16261,7 +16419,7 @@ func (ec *executionContext) unmarshalInputGenreFacetInput(ctx context.Context, o
 			it.Aggregate = graphql.OmittableOf(data)
 		case "logic":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("logic"))
-			data, err := ec.unmarshalOFacetLogic2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFacetLogic(ctx, v)
+			data, err := ec.unmarshalOFacetLogic2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFacetLogic(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -16302,11 +16460,52 @@ func (ec *executionContext) unmarshalInputLanguageFacetInput(ctx context.Context
 			it.Aggregate = graphql.OmittableOf(data)
 		case "filter":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filter"))
-			data, err := ec.unmarshalOLanguage2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐLanguageᚄ(ctx, v)
+			data, err := ec.unmarshalOLanguage2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐLanguageᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Filter = graphql.OmittableOf(data)
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputQueueEnqueueMaintenanceTaskInput(ctx context.Context, obj any) (manager.EnqueueMaintenanceTaskRequest, error) {
+	var it manager.EnqueueMaintenanceTaskRequest
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"taskType", "limit", "purge"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "taskType":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("taskType"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TaskType = data
+		case "limit":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("limit"))
+			data, err := ec.unmarshalOInt2uint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Limit = data
+		case "purge":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("purge"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Purge = data
 		}
 	}
 
@@ -16350,7 +16549,7 @@ func (ec *executionContext) unmarshalInputQueueEnqueueReprocessTorrentsBatchInpu
 			it.ChunkSize = data
 		case "contentTypes":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("contentTypes"))
-			data, err := ec.unmarshalOContentType2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullContentType(ctx, v)
+			data, err := ec.unmarshalOContentType2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullContentType(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -16455,7 +16654,7 @@ func (ec *executionContext) unmarshalInputQueueJobStatusFacetInput(ctx context.C
 			it.Aggregate = graphql.OmittableOf(data)
 		case "filter":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filter"))
-			data, err := ec.unmarshalOQueueJobStatus2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatusᚄ(ctx, v)
+			data, err := ec.unmarshalOQueueJobStatus2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatusᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -16482,14 +16681,14 @@ func (ec *executionContext) unmarshalInputQueueJobsFacetsInput(ctx context.Conte
 		switch k {
 		case "status":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
-			data, err := ec.unmarshalOQueueJobStatusFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobStatusFacetInput(ctx, v)
+			data, err := ec.unmarshalOQueueJobStatusFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobStatusFacetInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Status = graphql.OmittableOf(data)
 		case "queue":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("queue"))
-			data, err := ec.unmarshalOQueueJobQueueFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobQueueFacetInput(ctx, v)
+			data, err := ec.unmarshalOQueueJobQueueFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobQueueFacetInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -16516,7 +16715,7 @@ func (ec *executionContext) unmarshalInputQueueJobsOrderByInput(ctx context.Cont
 		switch k {
 		case "field":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("field"))
-			data, err := ec.unmarshalNQueueJobsOrderByField2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsOrderByField(ctx, v)
+			data, err := ec.unmarshalNQueueJobsOrderByField2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsOrderByField(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -16557,56 +16756,56 @@ func (ec *executionContext) unmarshalInputQueueJobsQueryInput(ctx context.Contex
 			it.Queues = data
 		case "statuses":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statuses"))
-			data, err := ec.unmarshalOQueueJobStatus2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatusᚄ(ctx, v)
+			data, err := ec.unmarshalOQueueJobStatus2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatusᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Statuses = data
 		case "limit":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("limit"))
-			data, err := ec.unmarshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
+			data, err := ec.unmarshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Limit = data
 		case "page":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("page"))
-			data, err := ec.unmarshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
+			data, err := ec.unmarshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Page = data
 		case "offset":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("offset"))
-			data, err := ec.unmarshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
+			data, err := ec.unmarshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Offset = data
 		case "totalCount":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("totalCount"))
-			data, err := ec.unmarshalOBoolean2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, v)
+			data, err := ec.unmarshalOBoolean2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.TotalCount = data
 		case "hasNextPage":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasNextPage"))
-			data, err := ec.unmarshalOBoolean2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, v)
+			data, err := ec.unmarshalOBoolean2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.HasNextPage = data
 		case "facets":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("facets"))
-			data, err := ec.unmarshalOQueueJobsFacetsInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsFacetsInput(ctx, v)
+			data, err := ec.unmarshalOQueueJobsFacetsInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsFacetsInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Facets = data
 		case "orderBy":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("orderBy"))
-			data, err := ec.unmarshalOQueueJobsOrderByInput2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsOrderByInputᚄ(ctx, v)
+			data, err := ec.unmarshalOQueueJobsOrderByInput2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsOrderByInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -16633,14 +16832,14 @@ func (ec *executionContext) unmarshalInputQueueMetricsQueryInput(ctx context.Con
 		switch k {
 		case "bucketDuration":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("bucketDuration"))
-			data, err := ec.unmarshalNMetricsBucketDuration2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐMetricsBucketDuration(ctx, v)
+			data, err := ec.unmarshalNMetricsBucketDuration2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐMetricsBucketDuration(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.BucketDuration = data
 		case "statuses":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statuses"))
-			data, err := ec.unmarshalOQueueJobStatus2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatusᚄ(ctx, v)
+			data, err := ec.unmarshalOQueueJobStatus2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatusᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -16695,7 +16894,7 @@ func (ec *executionContext) unmarshalInputQueuePurgeJobsInput(ctx context.Contex
 			it.Queues = data
 		case "statuses":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statuses"))
-			data, err := ec.unmarshalOQueueJobStatus2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatusᚄ(ctx, v)
+			data, err := ec.unmarshalOQueueJobStatus2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatusᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -16729,7 +16928,7 @@ func (ec *executionContext) unmarshalInputReleaseYearFacetInput(ctx context.Cont
 			it.Aggregate = graphql.OmittableOf(data)
 		case "filter":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filter"))
-			data, err := ec.unmarshalOYear2ᚕᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx, v)
+			data, err := ec.unmarshalOYear2ᚕᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -16790,70 +16989,70 @@ func (ec *executionContext) unmarshalInputTorrentContentFacetsInput(ctx context.
 		switch k {
 		case "contentType":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("contentType"))
-			data, err := ec.unmarshalOContentTypeFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentTypeFacetInput(ctx, v)
+			data, err := ec.unmarshalOContentTypeFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentTypeFacetInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.ContentType = graphql.OmittableOf(data)
 		case "contentSource":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("contentSource"))
-			data, err := ec.unmarshalOContentSourceFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentSourceFacetInput(ctx, v)
+			data, err := ec.unmarshalOContentSourceFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentSourceFacetInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.ContentSource = graphql.OmittableOf(data)
 		case "torrentSource":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("torrentSource"))
-			data, err := ec.unmarshalOTorrentSourceFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentSourceFacetInput(ctx, v)
+			data, err := ec.unmarshalOTorrentSourceFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentSourceFacetInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.TorrentSource = graphql.OmittableOf(data)
 		case "torrentTag":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("torrentTag"))
-			data, err := ec.unmarshalOTorrentTagFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentTagFacetInput(ctx, v)
+			data, err := ec.unmarshalOTorrentTagFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentTagFacetInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.TorrentTag = graphql.OmittableOf(data)
 		case "torrentFileType":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("torrentFileType"))
-			data, err := ec.unmarshalOTorrentFileTypeFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFileTypeFacetInput(ctx, v)
+			data, err := ec.unmarshalOTorrentFileTypeFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFileTypeFacetInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.TorrentFileType = graphql.OmittableOf(data)
 		case "language":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("language"))
-			data, err := ec.unmarshalOLanguageFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐLanguageFacetInput(ctx, v)
+			data, err := ec.unmarshalOLanguageFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐLanguageFacetInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Language = graphql.OmittableOf(data)
 		case "genre":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("genre"))
-			data, err := ec.unmarshalOGenreFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐGenreFacetInput(ctx, v)
+			data, err := ec.unmarshalOGenreFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐGenreFacetInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Genre = graphql.OmittableOf(data)
 		case "releaseYear":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("releaseYear"))
-			data, err := ec.unmarshalOReleaseYearFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐReleaseYearFacetInput(ctx, v)
+			data, err := ec.unmarshalOReleaseYearFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐReleaseYearFacetInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.ReleaseYear = graphql.OmittableOf(data)
 		case "videoResolution":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("videoResolution"))
-			data, err := ec.unmarshalOVideoResolutionFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoResolutionFacetInput(ctx, v)
+			data, err := ec.unmarshalOVideoResolutionFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoResolutionFacetInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.VideoResolution = graphql.OmittableOf(data)
 		case "videoSource":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("videoSource"))
-			data, err := ec.unmarshalOVideoSourceFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoSourceFacetInput(ctx, v)
+			data, err := ec.unmarshalOVideoSourceFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoSourceFacetInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -16880,7 +17079,7 @@ func (ec *executionContext) unmarshalInputTorrentContentOrderByInput(ctx context
 		switch k {
 		case "field":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("field"))
-			data, err := ec.unmarshalNTorrentContentOrderByField2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentOrderByField(ctx, v)
+			data, err := ec.unmarshalNTorrentContentOrderByField2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentOrderByField(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -16914,77 +17113,77 @@ func (ec *executionContext) unmarshalInputTorrentContentSearchQueryInput(ctx con
 		switch k {
 		case "queryString":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("queryString"))
-			data, err := ec.unmarshalOString2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, v)
+			data, err := ec.unmarshalOString2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.QueryString = data
 		case "limit":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("limit"))
-			data, err := ec.unmarshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
+			data, err := ec.unmarshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Limit = data
 		case "page":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("page"))
-			data, err := ec.unmarshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
+			data, err := ec.unmarshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Page = data
 		case "offset":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("offset"))
-			data, err := ec.unmarshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
+			data, err := ec.unmarshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Offset = data
 		case "totalCount":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("totalCount"))
-			data, err := ec.unmarshalOBoolean2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, v)
+			data, err := ec.unmarshalOBoolean2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.TotalCount = data
 		case "hasNextPage":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasNextPage"))
-			data, err := ec.unmarshalOBoolean2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, v)
+			data, err := ec.unmarshalOBoolean2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.HasNextPage = data
 		case "infoHashes":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("infoHashes"))
-			data, err := ec.unmarshalOHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx, v)
+			data, err := ec.unmarshalOHash202ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.InfoHashes = graphql.OmittableOf(data)
 		case "facets":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("facets"))
-			data, err := ec.unmarshalOTorrentContentFacetsInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentFacetsInput(ctx, v)
+			data, err := ec.unmarshalOTorrentContentFacetsInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentFacetsInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Facets = data
 		case "orderBy":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("orderBy"))
-			data, err := ec.unmarshalOTorrentContentOrderByInput2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentOrderByInputᚄ(ctx, v)
+			data, err := ec.unmarshalOTorrentContentOrderByInput2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentOrderByInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.OrderBy = data
 		case "cached":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("cached"))
-			data, err := ec.unmarshalOBoolean2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, v)
+			data, err := ec.unmarshalOBoolean2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Cached = data
 		case "aggregationBudget":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("aggregationBudget"))
-			data, err := ec.unmarshalOFloat2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullFloat64(ctx, v)
+			data, err := ec.unmarshalOFloat2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullFloat64(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -17018,14 +17217,14 @@ func (ec *executionContext) unmarshalInputTorrentFileTypeFacetInput(ctx context.
 			it.Aggregate = graphql.OmittableOf(data)
 		case "logic":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("logic"))
-			data, err := ec.unmarshalOFacetLogic2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFacetLogic(ctx, v)
+			data, err := ec.unmarshalOFacetLogic2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFacetLogic(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Logic = graphql.OmittableOf(data)
 		case "filter":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filter"))
-			data, err := ec.unmarshalOFileType2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFileTypeᚄ(ctx, v)
+			data, err := ec.unmarshalOFileType2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFileTypeᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -17052,7 +17251,7 @@ func (ec *executionContext) unmarshalInputTorrentFilesOrderByInput(ctx context.C
 		switch k {
 		case "field":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("field"))
-			data, err := ec.unmarshalNTorrentFilesOrderByField2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFilesOrderByField(ctx, v)
+			data, err := ec.unmarshalNTorrentFilesOrderByField2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFilesOrderByField(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -17086,56 +17285,56 @@ func (ec *executionContext) unmarshalInputTorrentFilesQueryInput(ctx context.Con
 		switch k {
 		case "limit":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("limit"))
-			data, err := ec.unmarshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
+			data, err := ec.unmarshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Limit = data
 		case "page":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("page"))
-			data, err := ec.unmarshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
+			data, err := ec.unmarshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Page = data
 		case "offset":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("offset"))
-			data, err := ec.unmarshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
+			data, err := ec.unmarshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Offset = data
 		case "totalCount":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("totalCount"))
-			data, err := ec.unmarshalOBoolean2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, v)
+			data, err := ec.unmarshalOBoolean2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.TotalCount = data
 		case "hasNextPage":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasNextPage"))
-			data, err := ec.unmarshalOBoolean2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, v)
+			data, err := ec.unmarshalOBoolean2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.HasNextPage = data
 		case "infoHashes":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("infoHashes"))
-			data, err := ec.unmarshalOHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx, v)
+			data, err := ec.unmarshalOHash202ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.InfoHashes = data
 		case "orderBy":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("orderBy"))
-			data, err := ec.unmarshalOTorrentFilesOrderByInput2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFilesOrderByInputᚄ(ctx, v)
+			data, err := ec.unmarshalOTorrentFilesOrderByInput2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFilesOrderByInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.OrderBy = data
 		case "cached":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("cached"))
-			data, err := ec.unmarshalOBoolean2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, v)
+			data, err := ec.unmarshalOBoolean2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -17162,7 +17361,7 @@ func (ec *executionContext) unmarshalInputTorrentMetricsQueryInput(ctx context.C
 		switch k {
 		case "bucketDuration":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("bucketDuration"))
-			data, err := ec.unmarshalNMetricsBucketDuration2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐMetricsBucketDuration(ctx, v)
+			data, err := ec.unmarshalNMetricsBucketDuration2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐMetricsBucketDuration(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -17210,7 +17409,7 @@ func (ec *executionContext) unmarshalInputTorrentReprocessInput(ctx context.Cont
 		switch k {
 		case "infoHashes":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("infoHashes"))
-			data, err := ec.unmarshalNHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx, v)
+			data, err := ec.unmarshalNHash202ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -17272,7 +17471,7 @@ func (ec *executionContext) unmarshalInputTorrentSourceFacetInput(ctx context.Co
 			it.Aggregate = graphql.OmittableOf(data)
 		case "logic":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("logic"))
-			data, err := ec.unmarshalOFacetLogic2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFacetLogic(ctx, v)
+			data, err := ec.unmarshalOFacetLogic2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFacetLogic(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -17313,7 +17512,7 @@ func (ec *executionContext) unmarshalInputTorrentTagFacetInput(ctx context.Conte
 			it.Aggregate = graphql.OmittableOf(data)
 		case "logic":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("logic"))
-			data, err := ec.unmarshalOFacetLogic2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFacetLogic(ctx, v)
+			data, err := ec.unmarshalOFacetLogic2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFacetLogic(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -17354,7 +17553,7 @@ func (ec *executionContext) unmarshalInputVideoResolutionFacetInput(ctx context.
 			it.Aggregate = graphql.OmittableOf(data)
 		case "filter":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filter"))
-			data, err := ec.unmarshalOVideoResolution2ᚕᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐVideoResolution(ctx, v)
+			data, err := ec.unmarshalOVideoResolution2ᚕᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐVideoResolution(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -17388,7 +17587,7 @@ func (ec *executionContext) unmarshalInputVideoSourceFacetInput(ctx context.Cont
 			it.Aggregate = graphql.OmittableOf(data)
 		case "filter":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filter"))
-			data, err := ec.unmarshalOVideoSource2ᚕᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐVideoSource(ctx, v)
+			data, err := ec.unmarshalOVideoSource2ᚕᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐVideoSource(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -18849,6 +19048,39 @@ func (ec *executionContext) _QueueMutation(ctx context.Context, sel ast.Selectio
 					}
 				}()
 				res = ec._QueueMutation_enqueueReprocessTorrentsBatch(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "enqueueMaintenanceTask":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._QueueMutation_enqueueMaintenanceTask(ctx, field, obj)
 				return res
 			}
 
@@ -20581,6 +20813,11 @@ func (ec *executionContext) _Worker(ctx context.Context, sel ast.SelectionSet, o
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "enabled":
+			out.Values[i] = ec._Worker_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "started":
 			out.Values[i] = ec._Worker_started(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -21037,11 +21274,11 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
-func (ec *executionContext) marshalNContentAttribute2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentAttribute(ctx context.Context, sel ast.SelectionSet, v model.ContentAttribute) graphql.Marshaler {
+func (ec *executionContext) marshalNContentAttribute2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentAttribute(ctx context.Context, sel ast.SelectionSet, v model.ContentAttribute) graphql.Marshaler {
 	return ec._ContentAttribute(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNContentAttribute2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentAttributeᚄ(ctx context.Context, sel ast.SelectionSet, v []model.ContentAttribute) graphql.Marshaler {
+func (ec *executionContext) marshalNContentAttribute2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentAttributeᚄ(ctx context.Context, sel ast.SelectionSet, v []model.ContentAttribute) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -21065,7 +21302,7 @@ func (ec *executionContext) marshalNContentAttribute2ᚕgithubᚗcomᚋbitmagnet
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNContentAttribute2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentAttribute(ctx, sel, v[i])
+			ret[i] = ec.marshalNContentAttribute2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentAttribute(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -21085,11 +21322,11 @@ func (ec *executionContext) marshalNContentAttribute2ᚕgithubᚗcomᚋbitmagnet
 	return ret
 }
 
-func (ec *executionContext) marshalNContentCollection2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentCollection(ctx context.Context, sel ast.SelectionSet, v model.ContentCollection) graphql.Marshaler {
+func (ec *executionContext) marshalNContentCollection2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentCollection(ctx context.Context, sel ast.SelectionSet, v model.ContentCollection) graphql.Marshaler {
 	return ec._ContentCollection(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNContentCollection2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentCollectionᚄ(ctx context.Context, sel ast.SelectionSet, v []model.ContentCollection) graphql.Marshaler {
+func (ec *executionContext) marshalNContentCollection2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentCollectionᚄ(ctx context.Context, sel ast.SelectionSet, v []model.ContentCollection) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -21113,7 +21350,7 @@ func (ec *executionContext) marshalNContentCollection2ᚕgithubᚗcomᚋbitmagne
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNContentCollection2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentCollection(ctx, sel, v[i])
+			ret[i] = ec.marshalNContentCollection2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentCollection(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -21133,17 +21370,17 @@ func (ec *executionContext) marshalNContentCollection2ᚕgithubᚗcomᚋbitmagne
 	return ret
 }
 
-func (ec *executionContext) marshalNContentSourceAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentSourceAgg(ctx context.Context, sel ast.SelectionSet, v gen.ContentSourceAgg) graphql.Marshaler {
+func (ec *executionContext) marshalNContentSourceAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentSourceAgg(ctx context.Context, sel ast.SelectionSet, v gen.ContentSourceAgg) graphql.Marshaler {
 	return ec._ContentSourceAgg(ctx, sel, &v)
 }
 
-func (ec *executionContext) unmarshalNContentType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx context.Context, v any) (model.ContentType, error) {
+func (ec *executionContext) unmarshalNContentType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx context.Context, v any) (model.ContentType, error) {
 	tmp, err := graphql.UnmarshalString(v)
 	res := model.ContentType(tmp)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNContentType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx context.Context, sel ast.SelectionSet, v model.ContentType) graphql.Marshaler {
+func (ec *executionContext) marshalNContentType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx context.Context, sel ast.SelectionSet, v model.ContentType) graphql.Marshaler {
 	res := graphql.MarshalString(string(v))
 	if res == graphql.Null {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -21153,7 +21390,7 @@ func (ec *executionContext) marshalNContentType2githubᚗcomᚋbitmagnetᚑioᚋ
 	return res
 }
 
-func (ec *executionContext) marshalNContentTypeAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentTypeAgg(ctx context.Context, sel ast.SelectionSet, v gen.ContentTypeAgg) graphql.Marshaler {
+func (ec *executionContext) marshalNContentTypeAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentTypeAgg(ctx context.Context, sel ast.SelectionSet, v gen.ContentTypeAgg) graphql.Marshaler {
 	return ec._ContentTypeAgg(ctx, sel, &v)
 }
 
@@ -21172,11 +21409,11 @@ func (ec *executionContext) marshalNDateTime2timeᚐTime(ctx context.Context, se
 	return res
 }
 
-func (ec *executionContext) marshalNExternalLink2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐExternalLink(ctx context.Context, sel ast.SelectionSet, v model.ExternalLink) graphql.Marshaler {
+func (ec *executionContext) marshalNExternalLink2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐExternalLink(ctx context.Context, sel ast.SelectionSet, v model.ExternalLink) graphql.Marshaler {
 	return ec._ExternalLink(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNExternalLink2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐExternalLinkᚄ(ctx context.Context, sel ast.SelectionSet, v []model.ExternalLink) graphql.Marshaler {
+func (ec *executionContext) marshalNExternalLink2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐExternalLinkᚄ(ctx context.Context, sel ast.SelectionSet, v []model.ExternalLink) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -21200,7 +21437,7 @@ func (ec *executionContext) marshalNExternalLink2ᚕgithubᚗcomᚋbitmagnetᚑi
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNExternalLink2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐExternalLink(ctx, sel, v[i])
+			ret[i] = ec.marshalNExternalLink2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐExternalLink(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -21220,13 +21457,13 @@ func (ec *executionContext) marshalNExternalLink2ᚕgithubᚗcomᚋbitmagnetᚑi
 	return ret
 }
 
-func (ec *executionContext) unmarshalNFileType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFileType(ctx context.Context, v any) (model.FileType, error) {
+func (ec *executionContext) unmarshalNFileType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFileType(ctx context.Context, v any) (model.FileType, error) {
 	tmp, err := graphql.UnmarshalString(v)
 	res := model.FileType(tmp)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNFileType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFileType(ctx context.Context, sel ast.SelectionSet, v model.FileType) graphql.Marshaler {
+func (ec *executionContext) marshalNFileType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFileType(ctx context.Context, sel ast.SelectionSet, v model.FileType) graphql.Marshaler {
 	res := graphql.MarshalString(string(v))
 	if res == graphql.Null {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -21236,13 +21473,13 @@ func (ec *executionContext) marshalNFileType2githubᚗcomᚋbitmagnetᚑioᚋbit
 	return res
 }
 
-func (ec *executionContext) unmarshalNFilesStatus2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFilesStatus(ctx context.Context, v any) (model.FilesStatus, error) {
+func (ec *executionContext) unmarshalNFilesStatus2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFilesStatus(ctx context.Context, v any) (model.FilesStatus, error) {
 	tmp, err := graphql.UnmarshalString(v)
 	res := model.FilesStatus(tmp)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNFilesStatus2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFilesStatus(ctx context.Context, sel ast.SelectionSet, v model.FilesStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNFilesStatus2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFilesStatus(ctx context.Context, sel ast.SelectionSet, v model.FilesStatus) graphql.Marshaler {
 	res := graphql.MarshalString(string(v))
 	if res == graphql.Null {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -21252,21 +21489,21 @@ func (ec *executionContext) marshalNFilesStatus2githubᚗcomᚋbitmagnetᚑioᚋ
 	return res
 }
 
-func (ec *executionContext) marshalNGenreAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐGenreAgg(ctx context.Context, sel ast.SelectionSet, v gen.GenreAgg) graphql.Marshaler {
+func (ec *executionContext) marshalNGenreAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐGenreAgg(ctx context.Context, sel ast.SelectionSet, v gen.GenreAgg) graphql.Marshaler {
 	return ec._GenreAgg(ctx, sel, &v)
 }
 
-func (ec *executionContext) unmarshalNHash202githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx context.Context, v any) (protocol.ID, error) {
+func (ec *executionContext) unmarshalNHash202githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx context.Context, v any) (protocol.ID, error) {
 	var res protocol.ID
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNHash202githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx context.Context, sel ast.SelectionSet, v protocol.ID) graphql.Marshaler {
+func (ec *executionContext) marshalNHash202githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx context.Context, sel ast.SelectionSet, v protocol.ID) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx context.Context, v any) ([]protocol.ID, error) {
+func (ec *executionContext) unmarshalNHash202ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx context.Context, v any) ([]protocol.ID, error) {
 	var vSlice []any
 	if v != nil {
 		vSlice = graphql.CoerceList(v)
@@ -21275,7 +21512,7 @@ func (ec *executionContext) unmarshalNHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋ
 	res := make([]protocol.ID, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNHash202githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNHash202githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -21283,10 +21520,10 @@ func (ec *executionContext) unmarshalNHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋ
 	return res, nil
 }
 
-func (ec *executionContext) marshalNHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx context.Context, sel ast.SelectionSet, v []protocol.ID) graphql.Marshaler {
+func (ec *executionContext) marshalNHash202ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx context.Context, sel ast.SelectionSet, v []protocol.ID) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	for i := range v {
-		ret[i] = ec.marshalNHash202githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx, sel, v[i])
+		ret[i] = ec.marshalNHash202githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx, sel, v[i])
 	}
 
 	for _, e := range ret {
@@ -21298,11 +21535,11 @@ func (ec *executionContext) marshalNHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋbi
 	return ret
 }
 
-func (ec *executionContext) marshalNHealthCheck2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthCheck(ctx context.Context, sel ast.SelectionSet, v gen.HealthCheck) graphql.Marshaler {
+func (ec *executionContext) marshalNHealthCheck2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthCheck(ctx context.Context, sel ast.SelectionSet, v gen.HealthCheck) graphql.Marshaler {
 	return ec._HealthCheck(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNHealthCheck2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthCheckᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.HealthCheck) graphql.Marshaler {
+func (ec *executionContext) marshalNHealthCheck2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthCheckᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.HealthCheck) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -21326,7 +21563,7 @@ func (ec *executionContext) marshalNHealthCheck2ᚕgithubᚗcomᚋbitmagnetᚑio
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNHealthCheck2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthCheck(ctx, sel, v[i])
+			ret[i] = ec.marshalNHealthCheck2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthCheck(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -21346,17 +21583,17 @@ func (ec *executionContext) marshalNHealthCheck2ᚕgithubᚗcomᚋbitmagnetᚑio
 	return ret
 }
 
-func (ec *executionContext) marshalNHealthQuery2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthQuery(ctx context.Context, sel ast.SelectionSet, v gen.HealthQuery) graphql.Marshaler {
+func (ec *executionContext) marshalNHealthQuery2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthQuery(ctx context.Context, sel ast.SelectionSet, v gen.HealthQuery) graphql.Marshaler {
 	return ec._HealthQuery(ctx, sel, &v)
 }
 
-func (ec *executionContext) unmarshalNHealthStatus2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthStatus(ctx context.Context, v any) (gen.HealthStatus, error) {
+func (ec *executionContext) unmarshalNHealthStatus2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthStatus(ctx context.Context, v any) (gen.HealthStatus, error) {
 	var res gen.HealthStatus
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNHealthStatus2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthStatus(ctx context.Context, sel ast.SelectionSet, v gen.HealthStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNHealthStatus2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐHealthStatus(ctx context.Context, sel ast.SelectionSet, v gen.HealthStatus) graphql.Marshaler {
 	return v
 }
 
@@ -21405,13 +21642,13 @@ func (ec *executionContext) marshalNInt2uint(ctx context.Context, sel ast.Select
 	return res
 }
 
-func (ec *executionContext) unmarshalNLanguage2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx context.Context, v any) (model.Language, error) {
+func (ec *executionContext) unmarshalNLanguage2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx context.Context, v any) (model.Language, error) {
 	tmp, err := graphql.UnmarshalString(v)
 	res := model.Language(tmp)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNLanguage2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx context.Context, sel ast.SelectionSet, v model.Language) graphql.Marshaler {
+func (ec *executionContext) marshalNLanguage2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx context.Context, sel ast.SelectionSet, v model.Language) graphql.Marshaler {
 	res := graphql.MarshalString(string(v))
 	if res == graphql.Null {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -21421,33 +21658,38 @@ func (ec *executionContext) marshalNLanguage2githubᚗcomᚋbitmagnetᚑioᚋbit
 	return res
 }
 
-func (ec *executionContext) marshalNLanguageAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐLanguageAgg(ctx context.Context, sel ast.SelectionSet, v gen.LanguageAgg) graphql.Marshaler {
+func (ec *executionContext) marshalNLanguageAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐLanguageAgg(ctx context.Context, sel ast.SelectionSet, v gen.LanguageAgg) graphql.Marshaler {
 	return ec._LanguageAgg(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNLanguageInfo2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx context.Context, sel ast.SelectionSet, v model.Language) graphql.Marshaler {
+func (ec *executionContext) marshalNLanguageInfo2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx context.Context, sel ast.SelectionSet, v model.Language) graphql.Marshaler {
 	return ec._LanguageInfo(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNMetadataSource2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐMetadataSource(ctx context.Context, sel ast.SelectionSet, v model.MetadataSource) graphql.Marshaler {
+func (ec *executionContext) marshalNMetadataSource2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐMetadataSource(ctx context.Context, sel ast.SelectionSet, v model.MetadataSource) graphql.Marshaler {
 	return ec._MetadataSource(ctx, sel, &v)
 }
 
-func (ec *executionContext) unmarshalNMetricsBucketDuration2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐMetricsBucketDuration(ctx context.Context, v any) (gen.MetricsBucketDuration, error) {
+func (ec *executionContext) unmarshalNMetricsBucketDuration2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐMetricsBucketDuration(ctx context.Context, v any) (gen.MetricsBucketDuration, error) {
 	var res gen.MetricsBucketDuration
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNMetricsBucketDuration2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐMetricsBucketDuration(ctx context.Context, sel ast.SelectionSet, v gen.MetricsBucketDuration) graphql.Marshaler {
+func (ec *executionContext) marshalNMetricsBucketDuration2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐMetricsBucketDuration(ctx context.Context, sel ast.SelectionSet, v gen.MetricsBucketDuration) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) marshalNQueueJob2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJob(ctx context.Context, sel ast.SelectionSet, v model.QueueJob) graphql.Marshaler {
+func (ec *executionContext) unmarshalNQueueEnqueueMaintenanceTaskInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋqueueᚋmanagerᚐEnqueueMaintenanceTaskRequest(ctx context.Context, v any) (manager.EnqueueMaintenanceTaskRequest, error) {
+	res, err := ec.unmarshalInputQueueEnqueueMaintenanceTaskInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNQueueJob2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJob(ctx context.Context, sel ast.SelectionSet, v model.QueueJob) graphql.Marshaler {
 	return ec._QueueJob(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNQueueJob2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJobᚄ(ctx context.Context, sel ast.SelectionSet, v []model.QueueJob) graphql.Marshaler {
+func (ec *executionContext) marshalNQueueJob2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJobᚄ(ctx context.Context, sel ast.SelectionSet, v []model.QueueJob) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -21471,7 +21713,7 @@ func (ec *executionContext) marshalNQueueJob2ᚕgithubᚗcomᚋbitmagnetᚑioᚋ
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNQueueJob2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJob(ctx, sel, v[i])
+			ret[i] = ec.marshalNQueueJob2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJob(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -21491,17 +21733,17 @@ func (ec *executionContext) marshalNQueueJob2ᚕgithubᚗcomᚋbitmagnetᚑioᚋ
 	return ret
 }
 
-func (ec *executionContext) marshalNQueueJobQueueAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobQueueAgg(ctx context.Context, sel ast.SelectionSet, v gen.QueueJobQueueAgg) graphql.Marshaler {
+func (ec *executionContext) marshalNQueueJobQueueAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobQueueAgg(ctx context.Context, sel ast.SelectionSet, v gen.QueueJobQueueAgg) graphql.Marshaler {
 	return ec._QueueJobQueueAgg(ctx, sel, &v)
 }
 
-func (ec *executionContext) unmarshalNQueueJobStatus2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatus(ctx context.Context, v any) (model.QueueJobStatus, error) {
+func (ec *executionContext) unmarshalNQueueJobStatus2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatus(ctx context.Context, v any) (model.QueueJobStatus, error) {
 	tmp, err := graphql.UnmarshalString(v)
 	res := model.QueueJobStatus(tmp)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNQueueJobStatus2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatus(ctx context.Context, sel ast.SelectionSet, v model.QueueJobStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNQueueJobStatus2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatus(ctx context.Context, sel ast.SelectionSet, v model.QueueJobStatus) graphql.Marshaler {
 	res := graphql.MarshalString(string(v))
 	if res == graphql.Null {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -21511,43 +21753,43 @@ func (ec *executionContext) marshalNQueueJobStatus2githubᚗcomᚋbitmagnetᚑio
 	return res
 }
 
-func (ec *executionContext) marshalNQueueJobStatusAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobStatusAgg(ctx context.Context, sel ast.SelectionSet, v gen.QueueJobStatusAgg) graphql.Marshaler {
+func (ec *executionContext) marshalNQueueJobStatusAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobStatusAgg(ctx context.Context, sel ast.SelectionSet, v gen.QueueJobStatusAgg) graphql.Marshaler {
 	return ec._QueueJobStatusAgg(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNQueueJobsAggregations2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsAggregations(ctx context.Context, sel ast.SelectionSet, v gen.QueueJobsAggregations) graphql.Marshaler {
+func (ec *executionContext) marshalNQueueJobsAggregations2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsAggregations(ctx context.Context, sel ast.SelectionSet, v gen.QueueJobsAggregations) graphql.Marshaler {
 	return ec._QueueJobsAggregations(ctx, sel, &v)
 }
 
-func (ec *executionContext) unmarshalNQueueJobsOrderByField2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsOrderByField(ctx context.Context, v any) (gen.QueueJobsOrderByField, error) {
+func (ec *executionContext) unmarshalNQueueJobsOrderByField2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsOrderByField(ctx context.Context, v any) (gen.QueueJobsOrderByField, error) {
 	var res gen.QueueJobsOrderByField
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNQueueJobsOrderByField2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsOrderByField(ctx context.Context, sel ast.SelectionSet, v gen.QueueJobsOrderByField) graphql.Marshaler {
+func (ec *executionContext) marshalNQueueJobsOrderByField2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsOrderByField(ctx context.Context, sel ast.SelectionSet, v gen.QueueJobsOrderByField) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNQueueJobsOrderByInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsOrderByInput(ctx context.Context, v any) (gen.QueueJobsOrderByInput, error) {
+func (ec *executionContext) unmarshalNQueueJobsOrderByInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsOrderByInput(ctx context.Context, v any) (gen.QueueJobsOrderByInput, error) {
 	res, err := ec.unmarshalInputQueueJobsOrderByInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNQueueJobsQueryInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐQueueJobsQueryInput(ctx context.Context, v any) (gqlmodel.QueueJobsQueryInput, error) {
+func (ec *executionContext) unmarshalNQueueJobsQueryInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐQueueJobsQueryInput(ctx context.Context, v any) (gqlmodel.QueueJobsQueryInput, error) {
 	res, err := ec.unmarshalInputQueueJobsQueryInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNQueueJobsQueryResult2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐQueueJobsQueryResult(ctx context.Context, sel ast.SelectionSet, v gqlmodel.QueueJobsQueryResult) graphql.Marshaler {
+func (ec *executionContext) marshalNQueueJobsQueryResult2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐQueueJobsQueryResult(ctx context.Context, sel ast.SelectionSet, v gqlmodel.QueueJobsQueryResult) graphql.Marshaler {
 	return ec._QueueJobsQueryResult(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNQueueMetricsBucket2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmetricsᚋqueuemetricsᚐBucket(ctx context.Context, sel ast.SelectionSet, v queuemetrics.Bucket) graphql.Marshaler {
+func (ec *executionContext) marshalNQueueMetricsBucket2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmetricsᚋqueuemetricsᚐBucket(ctx context.Context, sel ast.SelectionSet, v queuemetrics.Bucket) graphql.Marshaler {
 	return ec._QueueMetricsBucket(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNQueueMetricsBucket2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmetricsᚋqueuemetricsᚐBucketᚄ(ctx context.Context, sel ast.SelectionSet, v []queuemetrics.Bucket) graphql.Marshaler {
+func (ec *executionContext) marshalNQueueMetricsBucket2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmetricsᚋqueuemetricsᚐBucketᚄ(ctx context.Context, sel ast.SelectionSet, v []queuemetrics.Bucket) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -21571,7 +21813,7 @@ func (ec *executionContext) marshalNQueueMetricsBucket2ᚕgithubᚗcomᚋbitmagn
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNQueueMetricsBucket2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmetricsᚋqueuemetricsᚐBucket(ctx, sel, v[i])
+			ret[i] = ec.marshalNQueueMetricsBucket2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmetricsᚋqueuemetricsᚐBucket(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -21591,12 +21833,12 @@ func (ec *executionContext) marshalNQueueMetricsBucket2ᚕgithubᚗcomᚋbitmagn
 	return ret
 }
 
-func (ec *executionContext) unmarshalNQueueMetricsQueryInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueMetricsQueryInput(ctx context.Context, v any) (gen.QueueMetricsQueryInput, error) {
+func (ec *executionContext) unmarshalNQueueMetricsQueryInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueMetricsQueryInput(ctx context.Context, v any) (gen.QueueMetricsQueryInput, error) {
 	res, err := ec.unmarshalInputQueueMetricsQueryInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNQueueMetricsQueryResult2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueMetricsQueryResult(ctx context.Context, sel ast.SelectionSet, v *gen.QueueMetricsQueryResult) graphql.Marshaler {
+func (ec *executionContext) marshalNQueueMetricsQueryResult2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueMetricsQueryResult(ctx context.Context, sel ast.SelectionSet, v *gen.QueueMetricsQueryResult) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -21606,28 +21848,28 @@ func (ec *executionContext) marshalNQueueMetricsQueryResult2ᚖgithubᚗcomᚋbi
 	return ec._QueueMetricsQueryResult(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNQueueMutation2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐQueueMutation(ctx context.Context, sel ast.SelectionSet, v gqlmodel.QueueMutation) graphql.Marshaler {
+func (ec *executionContext) marshalNQueueMutation2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐQueueMutation(ctx context.Context, sel ast.SelectionSet, v gqlmodel.QueueMutation) graphql.Marshaler {
 	return ec._QueueMutation(ctx, sel, &v)
 }
 
-func (ec *executionContext) unmarshalNQueuePurgeJobsInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋqueueᚋmanagerᚐPurgeJobsRequest(ctx context.Context, v any) (manager.PurgeJobsRequest, error) {
+func (ec *executionContext) unmarshalNQueuePurgeJobsInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋqueueᚋmanagerᚐPurgeJobsRequest(ctx context.Context, v any) (manager.PurgeJobsRequest, error) {
 	res, err := ec.unmarshalInputQueuePurgeJobsInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNQueueQuery2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐQueueQuery(ctx context.Context, sel ast.SelectionSet, v gqlmodel.QueueQuery) graphql.Marshaler {
+func (ec *executionContext) marshalNQueueQuery2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐQueueQuery(ctx context.Context, sel ast.SelectionSet, v gqlmodel.QueueQuery) graphql.Marshaler {
 	return ec._QueueQuery(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNReleaseYearAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐReleaseYearAgg(ctx context.Context, sel ast.SelectionSet, v gen.ReleaseYearAgg) graphql.Marshaler {
+func (ec *executionContext) marshalNReleaseYearAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐReleaseYearAgg(ctx context.Context, sel ast.SelectionSet, v gen.ReleaseYearAgg) graphql.Marshaler {
 	return ec._ReleaseYearAgg(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNSeason2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐSeason(ctx context.Context, sel ast.SelectionSet, v model.Season) graphql.Marshaler {
+func (ec *executionContext) marshalNSeason2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐSeason(ctx context.Context, sel ast.SelectionSet, v model.Season) graphql.Marshaler {
 	return ec._Season(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNSeason2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐSeasonᚄ(ctx context.Context, sel ast.SelectionSet, v []model.Season) graphql.Marshaler {
+func (ec *executionContext) marshalNSeason2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐSeasonᚄ(ctx context.Context, sel ast.SelectionSet, v []model.Season) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -21651,7 +21893,7 @@ func (ec *executionContext) marshalNSeason2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbi
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNSeason2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐSeason(ctx, sel, v[i])
+			ret[i] = ec.marshalNSeason2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐSeason(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -21718,11 +21960,11 @@ func (ec *executionContext) marshalNString2ᚕstringᚄ(ctx context.Context, sel
 	return ret
 }
 
-func (ec *executionContext) marshalNSuggestedTag2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋdatabaseᚋsearchᚐSuggestedTag(ctx context.Context, sel ast.SelectionSet, v search.SuggestedTag) graphql.Marshaler {
+func (ec *executionContext) marshalNSuggestedTag2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋdatabaseᚋsearchᚐSuggestedTag(ctx context.Context, sel ast.SelectionSet, v search.SuggestedTag) graphql.Marshaler {
 	return ec._SuggestedTag(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNSuggestedTag2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋdatabaseᚋsearchᚐSuggestedTagᚄ(ctx context.Context, sel ast.SelectionSet, v []search.SuggestedTag) graphql.Marshaler {
+func (ec *executionContext) marshalNSuggestedTag2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋdatabaseᚋsearchᚐSuggestedTagᚄ(ctx context.Context, sel ast.SelectionSet, v []search.SuggestedTag) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -21746,7 +21988,7 @@ func (ec *executionContext) marshalNSuggestedTag2ᚕgithubᚗcomᚋbitmagnetᚑi
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNSuggestedTag2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋdatabaseᚋsearchᚐSuggestedTag(ctx, sel, v[i])
+			ret[i] = ec.marshalNSuggestedTag2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋdatabaseᚋsearchᚐSuggestedTag(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -21766,15 +22008,15 @@ func (ec *executionContext) marshalNSuggestedTag2ᚕgithubᚗcomᚋbitmagnetᚑi
 	return ret
 }
 
-func (ec *executionContext) marshalNTorrent2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐTorrent(ctx context.Context, sel ast.SelectionSet, v model.Torrent) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrent2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐTorrent(ctx context.Context, sel ast.SelectionSet, v model.Torrent) graphql.Marshaler {
 	return ec._Torrent(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTorrentContent2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContent(ctx context.Context, sel ast.SelectionSet, v gqlmodel.TorrentContent) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentContent2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContent(ctx context.Context, sel ast.SelectionSet, v gqlmodel.TorrentContent) graphql.Marshaler {
 	return ec._TorrentContent(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTorrentContent2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContentᚄ(ctx context.Context, sel ast.SelectionSet, v []gqlmodel.TorrentContent) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentContent2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContentᚄ(ctx context.Context, sel ast.SelectionSet, v []gqlmodel.TorrentContent) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -21798,7 +22040,7 @@ func (ec *executionContext) marshalNTorrentContent2ᚕgithubᚗcomᚋbitmagnet�
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTorrentContent2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContent(ctx, sel, v[i])
+			ret[i] = ec.marshalNTorrentContent2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContent(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -21818,43 +22060,43 @@ func (ec *executionContext) marshalNTorrentContent2ᚕgithubᚗcomᚋbitmagnet�
 	return ret
 }
 
-func (ec *executionContext) marshalNTorrentContentAggregations2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentAggregations(ctx context.Context, sel ast.SelectionSet, v gen.TorrentContentAggregations) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentContentAggregations2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentAggregations(ctx context.Context, sel ast.SelectionSet, v gen.TorrentContentAggregations) graphql.Marshaler {
 	return ec._TorrentContentAggregations(ctx, sel, &v)
 }
 
-func (ec *executionContext) unmarshalNTorrentContentOrderByField2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentOrderByField(ctx context.Context, v any) (gen.TorrentContentOrderByField, error) {
+func (ec *executionContext) unmarshalNTorrentContentOrderByField2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentOrderByField(ctx context.Context, v any) (gen.TorrentContentOrderByField, error) {
 	var res gen.TorrentContentOrderByField
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNTorrentContentOrderByField2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentOrderByField(ctx context.Context, sel ast.SelectionSet, v gen.TorrentContentOrderByField) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentContentOrderByField2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentOrderByField(ctx context.Context, sel ast.SelectionSet, v gen.TorrentContentOrderByField) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNTorrentContentOrderByInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentOrderByInput(ctx context.Context, v any) (gen.TorrentContentOrderByInput, error) {
+func (ec *executionContext) unmarshalNTorrentContentOrderByInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentOrderByInput(ctx context.Context, v any) (gen.TorrentContentOrderByInput, error) {
 	res, err := ec.unmarshalInputTorrentContentOrderByInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNTorrentContentQuery2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContentQuery(ctx context.Context, sel ast.SelectionSet, v gqlmodel.TorrentContentQuery) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentContentQuery2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContentQuery(ctx context.Context, sel ast.SelectionSet, v gqlmodel.TorrentContentQuery) graphql.Marshaler {
 	return ec._TorrentContentQuery(ctx, sel, &v)
 }
 
-func (ec *executionContext) unmarshalNTorrentContentSearchQueryInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContentSearchQueryInput(ctx context.Context, v any) (gqlmodel.TorrentContentSearchQueryInput, error) {
+func (ec *executionContext) unmarshalNTorrentContentSearchQueryInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContentSearchQueryInput(ctx context.Context, v any) (gqlmodel.TorrentContentSearchQueryInput, error) {
 	res, err := ec.unmarshalInputTorrentContentSearchQueryInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNTorrentContentSearchResult2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContentSearchResult(ctx context.Context, sel ast.SelectionSet, v gqlmodel.TorrentContentSearchResult) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentContentSearchResult2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentContentSearchResult(ctx context.Context, sel ast.SelectionSet, v gqlmodel.TorrentContentSearchResult) graphql.Marshaler {
 	return ec._TorrentContentSearchResult(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTorrentFile2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐTorrentFile(ctx context.Context, sel ast.SelectionSet, v model.TorrentFile) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentFile2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐTorrentFile(ctx context.Context, sel ast.SelectionSet, v model.TorrentFile) graphql.Marshaler {
 	return ec._TorrentFile(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTorrentFile2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐTorrentFileᚄ(ctx context.Context, sel ast.SelectionSet, v []model.TorrentFile) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentFile2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐTorrentFileᚄ(ctx context.Context, sel ast.SelectionSet, v []model.TorrentFile) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -21878,7 +22120,7 @@ func (ec *executionContext) marshalNTorrentFile2ᚕgithubᚗcomᚋbitmagnetᚑio
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTorrentFile2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐTorrentFile(ctx, sel, v[i])
+			ret[i] = ec.marshalNTorrentFile2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐTorrentFile(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -21898,43 +22140,43 @@ func (ec *executionContext) marshalNTorrentFile2ᚕgithubᚗcomᚋbitmagnetᚑio
 	return ret
 }
 
-func (ec *executionContext) marshalNTorrentFileTypeAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFileTypeAgg(ctx context.Context, sel ast.SelectionSet, v gen.TorrentFileTypeAgg) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentFileTypeAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFileTypeAgg(ctx context.Context, sel ast.SelectionSet, v gen.TorrentFileTypeAgg) graphql.Marshaler {
 	return ec._TorrentFileTypeAgg(ctx, sel, &v)
 }
 
-func (ec *executionContext) unmarshalNTorrentFilesOrderByField2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFilesOrderByField(ctx context.Context, v any) (gen.TorrentFilesOrderByField, error) {
+func (ec *executionContext) unmarshalNTorrentFilesOrderByField2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFilesOrderByField(ctx context.Context, v any) (gen.TorrentFilesOrderByField, error) {
 	var res gen.TorrentFilesOrderByField
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNTorrentFilesOrderByField2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFilesOrderByField(ctx context.Context, sel ast.SelectionSet, v gen.TorrentFilesOrderByField) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentFilesOrderByField2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFilesOrderByField(ctx context.Context, sel ast.SelectionSet, v gen.TorrentFilesOrderByField) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNTorrentFilesOrderByInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFilesOrderByInput(ctx context.Context, v any) (gen.TorrentFilesOrderByInput, error) {
+func (ec *executionContext) unmarshalNTorrentFilesOrderByInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFilesOrderByInput(ctx context.Context, v any) (gen.TorrentFilesOrderByInput, error) {
 	res, err := ec.unmarshalInputTorrentFilesOrderByInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNTorrentFilesQueryInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentFilesQueryInput(ctx context.Context, v any) (gqlmodel.TorrentFilesQueryInput, error) {
+func (ec *executionContext) unmarshalNTorrentFilesQueryInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentFilesQueryInput(ctx context.Context, v any) (gqlmodel.TorrentFilesQueryInput, error) {
 	res, err := ec.unmarshalInputTorrentFilesQueryInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNTorrentFilesQueryResult2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋdatabaseᚋqueryᚐGenericResult(ctx context.Context, sel ast.SelectionSet, v query.GenericResult[model.TorrentFile]) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentFilesQueryResult2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋdatabaseᚋqueryᚐGenericResult(ctx context.Context, sel ast.SelectionSet, v query.GenericResult[model.TorrentFile]) graphql.Marshaler {
 	return ec._TorrentFilesQueryResult(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTorrentListSourcesResult2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentListSourcesResult(ctx context.Context, sel ast.SelectionSet, v gen.TorrentListSourcesResult) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentListSourcesResult2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentListSourcesResult(ctx context.Context, sel ast.SelectionSet, v gen.TorrentListSourcesResult) graphql.Marshaler {
 	return ec._TorrentListSourcesResult(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTorrentMetricsBucket2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmetricsᚋtorrentmetricsᚐBucket(ctx context.Context, sel ast.SelectionSet, v torrentmetrics.Bucket) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentMetricsBucket2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmetricsᚋtorrentmetricsᚐBucket(ctx context.Context, sel ast.SelectionSet, v torrentmetrics.Bucket) graphql.Marshaler {
 	return ec._TorrentMetricsBucket(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTorrentMetricsBucket2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmetricsᚋtorrentmetricsᚐBucketᚄ(ctx context.Context, sel ast.SelectionSet, v []torrentmetrics.Bucket) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentMetricsBucket2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmetricsᚋtorrentmetricsᚐBucketᚄ(ctx context.Context, sel ast.SelectionSet, v []torrentmetrics.Bucket) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -21958,7 +22200,7 @@ func (ec *executionContext) marshalNTorrentMetricsBucket2ᚕgithubᚗcomᚋbitma
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTorrentMetricsBucket2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmetricsᚋtorrentmetricsᚐBucket(ctx, sel, v[i])
+			ret[i] = ec.marshalNTorrentMetricsBucket2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmetricsᚋtorrentmetricsᚐBucket(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -21978,12 +22220,12 @@ func (ec *executionContext) marshalNTorrentMetricsBucket2ᚕgithubᚗcomᚋbitma
 	return ret
 }
 
-func (ec *executionContext) unmarshalNTorrentMetricsQueryInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentMetricsQueryInput(ctx context.Context, v any) (gen.TorrentMetricsQueryInput, error) {
+func (ec *executionContext) unmarshalNTorrentMetricsQueryInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentMetricsQueryInput(ctx context.Context, v any) (gen.TorrentMetricsQueryInput, error) {
 	res, err := ec.unmarshalInputTorrentMetricsQueryInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNTorrentMetricsQueryResult2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentMetricsQueryResult(ctx context.Context, sel ast.SelectionSet, v *gen.TorrentMetricsQueryResult) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentMetricsQueryResult2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentMetricsQueryResult(ctx context.Context, sel ast.SelectionSet, v *gen.TorrentMetricsQueryResult) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -21993,24 +22235,24 @@ func (ec *executionContext) marshalNTorrentMetricsQueryResult2ᚖgithubᚗcomᚋ
 	return ec._TorrentMetricsQueryResult(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNTorrentMutation2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentMutation(ctx context.Context, sel ast.SelectionSet, v gqlmodel.TorrentMutation) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentMutation2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentMutation(ctx context.Context, sel ast.SelectionSet, v gqlmodel.TorrentMutation) graphql.Marshaler {
 	return ec._TorrentMutation(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTorrentQuery2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentQuery(ctx context.Context, sel ast.SelectionSet, v gqlmodel.TorrentQuery) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentQuery2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentQuery(ctx context.Context, sel ast.SelectionSet, v gqlmodel.TorrentQuery) graphql.Marshaler {
 	return ec._TorrentQuery(ctx, sel, &v)
 }
 
-func (ec *executionContext) unmarshalNTorrentReprocessInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentReprocessInput(ctx context.Context, v any) (gen.TorrentReprocessInput, error) {
+func (ec *executionContext) unmarshalNTorrentReprocessInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentReprocessInput(ctx context.Context, v any) (gen.TorrentReprocessInput, error) {
 	res, err := ec.unmarshalInputTorrentReprocessInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNTorrentSource2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐTorrentSource(ctx context.Context, sel ast.SelectionSet, v model.TorrentSource) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentSource2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐTorrentSource(ctx context.Context, sel ast.SelectionSet, v model.TorrentSource) graphql.Marshaler {
 	return ec._TorrentSource(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTorrentSource2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐTorrentSourceᚄ(ctx context.Context, sel ast.SelectionSet, v []model.TorrentSource) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentSource2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐTorrentSourceᚄ(ctx context.Context, sel ast.SelectionSet, v []model.TorrentSource) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -22034,7 +22276,7 @@ func (ec *executionContext) marshalNTorrentSource2ᚕgithubᚗcomᚋbitmagnetᚑ
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTorrentSource2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐTorrentSource(ctx, sel, v[i])
+			ret[i] = ec.marshalNTorrentSource2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐTorrentSource(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -22054,15 +22296,15 @@ func (ec *executionContext) marshalNTorrentSource2ᚕgithubᚗcomᚋbitmagnetᚑ
 	return ret
 }
 
-func (ec *executionContext) marshalNTorrentSourceAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentSourceAgg(ctx context.Context, sel ast.SelectionSet, v gen.TorrentSourceAgg) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentSourceAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentSourceAgg(ctx context.Context, sel ast.SelectionSet, v gen.TorrentSourceAgg) graphql.Marshaler {
 	return ec._TorrentSourceAgg(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTorrentSourceInfo2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentSourceInfo(ctx context.Context, sel ast.SelectionSet, v gqlmodel.TorrentSourceInfo) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentSourceInfo2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentSourceInfo(ctx context.Context, sel ast.SelectionSet, v gqlmodel.TorrentSourceInfo) graphql.Marshaler {
 	return ec._TorrentSourceInfo(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTorrentSourceInfo2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentSourceInfoᚄ(ctx context.Context, sel ast.SelectionSet, v []gqlmodel.TorrentSourceInfo) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentSourceInfo2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentSourceInfoᚄ(ctx context.Context, sel ast.SelectionSet, v []gqlmodel.TorrentSourceInfo) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -22086,7 +22328,7 @@ func (ec *executionContext) marshalNTorrentSourceInfo2ᚕgithubᚗcomᚋbitmagne
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTorrentSourceInfo2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentSourceInfo(ctx, sel, v[i])
+			ret[i] = ec.marshalNTorrentSourceInfo2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐTorrentSourceInfo(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -22106,27 +22348,27 @@ func (ec *executionContext) marshalNTorrentSourceInfo2ᚕgithubᚗcomᚋbitmagne
 	return ret
 }
 
-func (ec *executionContext) marshalNTorrentSuggestTagsResult2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋdatabaseᚋsearchᚐTorrentSuggestTagsResult(ctx context.Context, sel ast.SelectionSet, v search.TorrentSuggestTagsResult) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentSuggestTagsResult2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋdatabaseᚋsearchᚐTorrentSuggestTagsResult(ctx context.Context, sel ast.SelectionSet, v search.TorrentSuggestTagsResult) graphql.Marshaler {
 	return ec._TorrentSuggestTagsResult(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTorrentTagAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentTagAgg(ctx context.Context, sel ast.SelectionSet, v gen.TorrentTagAgg) graphql.Marshaler {
+func (ec *executionContext) marshalNTorrentTagAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentTagAgg(ctx context.Context, sel ast.SelectionSet, v gen.TorrentTagAgg) graphql.Marshaler {
 	return ec._TorrentTagAgg(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNVideoResolutionAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoResolutionAgg(ctx context.Context, sel ast.SelectionSet, v gen.VideoResolutionAgg) graphql.Marshaler {
+func (ec *executionContext) marshalNVideoResolutionAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoResolutionAgg(ctx context.Context, sel ast.SelectionSet, v gen.VideoResolutionAgg) graphql.Marshaler {
 	return ec._VideoResolutionAgg(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNVideoSourceAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoSourceAgg(ctx context.Context, sel ast.SelectionSet, v gen.VideoSourceAgg) graphql.Marshaler {
+func (ec *executionContext) marshalNVideoSourceAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoSourceAgg(ctx context.Context, sel ast.SelectionSet, v gen.VideoSourceAgg) graphql.Marshaler {
 	return ec._VideoSourceAgg(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNWorker2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐWorker(ctx context.Context, sel ast.SelectionSet, v gen.Worker) graphql.Marshaler {
+func (ec *executionContext) marshalNWorker2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐWorker(ctx context.Context, sel ast.SelectionSet, v gen.Worker) graphql.Marshaler {
 	return ec._Worker(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNWorker2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐWorkerᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.Worker) graphql.Marshaler {
+func (ec *executionContext) marshalNWorker2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐWorkerᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.Worker) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -22150,7 +22392,7 @@ func (ec *executionContext) marshalNWorker2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbi
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNWorker2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐWorker(ctx, sel, v[i])
+			ret[i] = ec.marshalNWorker2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐWorker(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -22170,11 +22412,11 @@ func (ec *executionContext) marshalNWorker2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbi
 	return ret
 }
 
-func (ec *executionContext) marshalNWorkersListAllQueryResult2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐWorkersListAllQueryResult(ctx context.Context, sel ast.SelectionSet, v gen.WorkersListAllQueryResult) graphql.Marshaler {
+func (ec *executionContext) marshalNWorkersListAllQueryResult2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐWorkersListAllQueryResult(ctx context.Context, sel ast.SelectionSet, v gen.WorkersListAllQueryResult) graphql.Marshaler {
 	return ec._WorkersListAllQueryResult(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNWorkersQuery2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐWorkersQuery(ctx context.Context, sel ast.SelectionSet, v gen.WorkersQuery) graphql.Marshaler {
+func (ec *executionContext) marshalNWorkersQuery2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐWorkersQuery(ctx context.Context, sel ast.SelectionSet, v gen.WorkersQuery) graphql.Marshaler {
 	return ec._WorkersQuery(ctx, sel, &v)
 }
 
@@ -22441,13 +22683,13 @@ func (ec *executionContext) marshalOBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
-func (ec *executionContext) unmarshalOBoolean2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx context.Context, v any) (model.NullBool, error) {
+func (ec *executionContext) unmarshalOBoolean2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx context.Context, v any) (model.NullBool, error) {
 	var res model.NullBool
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOBoolean2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx context.Context, sel ast.SelectionSet, v model.NullBool) graphql.Marshaler {
+func (ec *executionContext) marshalOBoolean2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullBool(ctx context.Context, sel ast.SelectionSet, v model.NullBool) graphql.Marshaler {
 	return v
 }
 
@@ -22467,14 +22709,14 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	return res
 }
 
-func (ec *executionContext) marshalOContent2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContent(ctx context.Context, sel ast.SelectionSet, v *model.Content) graphql.Marshaler {
+func (ec *executionContext) marshalOContent2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContent(ctx context.Context, sel ast.SelectionSet, v *model.Content) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._Content(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalOContentSourceAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentSourceAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.ContentSourceAgg) graphql.Marshaler {
+func (ec *executionContext) marshalOContentSourceAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentSourceAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.ContentSourceAgg) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -22501,7 +22743,7 @@ func (ec *executionContext) marshalOContentSourceAgg2ᚕgithubᚗcomᚋbitmagnet
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNContentSourceAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentSourceAgg(ctx, sel, v[i])
+			ret[i] = ec.marshalNContentSourceAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentSourceAgg(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -22521,7 +22763,7 @@ func (ec *executionContext) marshalOContentSourceAgg2ᚕgithubᚗcomᚋbitmagnet
 	return ret
 }
 
-func (ec *executionContext) unmarshalOContentSourceFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentSourceFacetInput(ctx context.Context, v any) (*gen.ContentSourceFacetInput, error) {
+func (ec *executionContext) unmarshalOContentSourceFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentSourceFacetInput(ctx context.Context, v any) (*gen.ContentSourceFacetInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -22529,17 +22771,17 @@ func (ec *executionContext) unmarshalOContentSourceFacetInput2ᚖgithubᚗcomᚋ
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOContentType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullContentType(ctx context.Context, v any) (model.NullContentType, error) {
+func (ec *executionContext) unmarshalOContentType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullContentType(ctx context.Context, v any) (model.NullContentType, error) {
 	var res model.NullContentType
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOContentType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullContentType(ctx context.Context, sel ast.SelectionSet, v model.NullContentType) graphql.Marshaler {
+func (ec *executionContext) marshalOContentType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullContentType(ctx context.Context, sel ast.SelectionSet, v model.NullContentType) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalOContentType2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullContentType(ctx context.Context, v any) ([]model.NullContentType, error) {
+func (ec *executionContext) unmarshalOContentType2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullContentType(ctx context.Context, v any) ([]model.NullContentType, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -22551,7 +22793,7 @@ func (ec *executionContext) unmarshalOContentType2ᚕgithubᚗcomᚋbitmagnetᚑ
 	res := make([]model.NullContentType, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalOContentType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullContentType(ctx, vSlice[i])
+		res[i], err = ec.unmarshalOContentType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullContentType(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -22559,7 +22801,7 @@ func (ec *executionContext) unmarshalOContentType2ᚕgithubᚗcomᚋbitmagnetᚑ
 	return res, nil
 }
 
-func (ec *executionContext) marshalOContentType2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullContentType(ctx context.Context, sel ast.SelectionSet, v []model.NullContentType) graphql.Marshaler {
+func (ec *executionContext) marshalOContentType2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullContentType(ctx context.Context, sel ast.SelectionSet, v []model.NullContentType) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -22586,7 +22828,7 @@ func (ec *executionContext) marshalOContentType2ᚕgithubᚗcomᚋbitmagnetᚑio
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalOContentType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullContentType(ctx, sel, v[i])
+			ret[i] = ec.marshalOContentType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullContentType(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -22600,7 +22842,7 @@ func (ec *executionContext) marshalOContentType2ᚕgithubᚗcomᚋbitmagnetᚑio
 	return ret
 }
 
-func (ec *executionContext) unmarshalOContentType2ᚕᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx context.Context, v any) ([]*model.ContentType, error) {
+func (ec *executionContext) unmarshalOContentType2ᚕᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx context.Context, v any) ([]*model.ContentType, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -22612,7 +22854,7 @@ func (ec *executionContext) unmarshalOContentType2ᚕᚖgithubᚗcomᚋbitmagnet
 	res := make([]*model.ContentType, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalOContentType2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx, vSlice[i])
+		res[i], err = ec.unmarshalOContentType2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -22620,7 +22862,7 @@ func (ec *executionContext) unmarshalOContentType2ᚕᚖgithubᚗcomᚋbitmagnet
 	return res, nil
 }
 
-func (ec *executionContext) marshalOContentType2ᚕᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx context.Context, sel ast.SelectionSet, v []*model.ContentType) graphql.Marshaler {
+func (ec *executionContext) marshalOContentType2ᚕᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx context.Context, sel ast.SelectionSet, v []*model.ContentType) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -22647,7 +22889,7 @@ func (ec *executionContext) marshalOContentType2ᚕᚖgithubᚗcomᚋbitmagnet�
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalOContentType2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx, sel, v[i])
+			ret[i] = ec.marshalOContentType2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -22661,7 +22903,7 @@ func (ec *executionContext) marshalOContentType2ᚕᚖgithubᚗcomᚋbitmagnet�
 	return ret
 }
 
-func (ec *executionContext) unmarshalOContentType2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx context.Context, v any) (*model.ContentType, error) {
+func (ec *executionContext) unmarshalOContentType2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx context.Context, v any) (*model.ContentType, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -22670,7 +22912,7 @@ func (ec *executionContext) unmarshalOContentType2ᚖgithubᚗcomᚋbitmagnetᚑ
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOContentType2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx context.Context, sel ast.SelectionSet, v *model.ContentType) graphql.Marshaler {
+func (ec *executionContext) marshalOContentType2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐContentType(ctx context.Context, sel ast.SelectionSet, v *model.ContentType) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -22678,7 +22920,7 @@ func (ec *executionContext) marshalOContentType2ᚖgithubᚗcomᚋbitmagnetᚑio
 	return res
 }
 
-func (ec *executionContext) marshalOContentTypeAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentTypeAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.ContentTypeAgg) graphql.Marshaler {
+func (ec *executionContext) marshalOContentTypeAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentTypeAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.ContentTypeAgg) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -22705,7 +22947,7 @@ func (ec *executionContext) marshalOContentTypeAgg2ᚕgithubᚗcomᚋbitmagnet�
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNContentTypeAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentTypeAgg(ctx, sel, v[i])
+			ret[i] = ec.marshalNContentTypeAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentTypeAgg(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -22725,7 +22967,7 @@ func (ec *executionContext) marshalOContentTypeAgg2ᚕgithubᚗcomᚋbitmagnet�
 	return ret
 }
 
-func (ec *executionContext) unmarshalOContentTypeFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentTypeFacetInput(ctx context.Context, v any) (*gen.ContentTypeFacetInput, error) {
+func (ec *executionContext) unmarshalOContentTypeFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐContentTypeFacetInput(ctx context.Context, v any) (*gen.ContentTypeFacetInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -22733,13 +22975,13 @@ func (ec *executionContext) unmarshalOContentTypeFacetInput2ᚖgithubᚗcomᚋbi
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalODate2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐDate(ctx context.Context, v any) (model.Date, error) {
+func (ec *executionContext) unmarshalODate2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐDate(ctx context.Context, v any) (model.Date, error) {
 	var res model.Date
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalODate2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐDate(ctx context.Context, sel ast.SelectionSet, v model.Date) graphql.Marshaler {
+func (ec *executionContext) marshalODate2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐDate(ctx context.Context, sel ast.SelectionSet, v model.Date) graphql.Marshaler {
 	return v
 }
 
@@ -22785,14 +23027,14 @@ func (ec *executionContext) marshalODuration2ᚖtimeᚐDuration(ctx context.Cont
 	return res
 }
 
-func (ec *executionContext) marshalOEpisodes2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐEpisodes(ctx context.Context, sel ast.SelectionSet, v *gqlmodel.Episodes) graphql.Marshaler {
+func (ec *executionContext) marshalOEpisodes2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚐEpisodes(ctx context.Context, sel ast.SelectionSet, v *gqlmodel.Episodes) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._Episodes(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalOFacetLogic2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFacetLogic(ctx context.Context, v any) (*model.FacetLogic, error) {
+func (ec *executionContext) unmarshalOFacetLogic2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFacetLogic(ctx context.Context, v any) (*model.FacetLogic, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -22801,7 +23043,7 @@ func (ec *executionContext) unmarshalOFacetLogic2ᚖgithubᚗcomᚋbitmagnetᚑi
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOFacetLogic2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFacetLogic(ctx context.Context, sel ast.SelectionSet, v *model.FacetLogic) graphql.Marshaler {
+func (ec *executionContext) marshalOFacetLogic2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFacetLogic(ctx context.Context, sel ast.SelectionSet, v *model.FacetLogic) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -22809,17 +23051,17 @@ func (ec *executionContext) marshalOFacetLogic2ᚖgithubᚗcomᚋbitmagnetᚑio�
 	return res
 }
 
-func (ec *executionContext) unmarshalOFileType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullFileType(ctx context.Context, v any) (model.NullFileType, error) {
+func (ec *executionContext) unmarshalOFileType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullFileType(ctx context.Context, v any) (model.NullFileType, error) {
 	var res model.NullFileType
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOFileType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullFileType(ctx context.Context, sel ast.SelectionSet, v model.NullFileType) graphql.Marshaler {
+func (ec *executionContext) marshalOFileType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullFileType(ctx context.Context, sel ast.SelectionSet, v model.NullFileType) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalOFileType2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFileTypeᚄ(ctx context.Context, v any) ([]model.FileType, error) {
+func (ec *executionContext) unmarshalOFileType2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFileTypeᚄ(ctx context.Context, v any) ([]model.FileType, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -22831,7 +23073,7 @@ func (ec *executionContext) unmarshalOFileType2ᚕgithubᚗcomᚋbitmagnetᚑio�
 	res := make([]model.FileType, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNFileType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFileType(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNFileType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFileType(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -22839,7 +23081,7 @@ func (ec *executionContext) unmarshalOFileType2ᚕgithubᚗcomᚋbitmagnetᚑio�
 	return res, nil
 }
 
-func (ec *executionContext) marshalOFileType2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFileTypeᚄ(ctx context.Context, sel ast.SelectionSet, v []model.FileType) graphql.Marshaler {
+func (ec *executionContext) marshalOFileType2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFileTypeᚄ(ctx context.Context, sel ast.SelectionSet, v []model.FileType) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -22866,7 +23108,7 @@ func (ec *executionContext) marshalOFileType2ᚕgithubᚗcomᚋbitmagnetᚑioᚋ
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNFileType2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐFileType(ctx, sel, v[i])
+			ret[i] = ec.marshalNFileType2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐFileType(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -22886,27 +23128,27 @@ func (ec *executionContext) marshalOFileType2ᚕgithubᚗcomᚋbitmagnetᚑioᚋ
 	return ret
 }
 
-func (ec *executionContext) unmarshalOFloat2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullFloat32(ctx context.Context, v any) (model.NullFloat32, error) {
+func (ec *executionContext) unmarshalOFloat2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullFloat32(ctx context.Context, v any) (model.NullFloat32, error) {
 	var res model.NullFloat32
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOFloat2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullFloat32(ctx context.Context, sel ast.SelectionSet, v model.NullFloat32) graphql.Marshaler {
+func (ec *executionContext) marshalOFloat2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullFloat32(ctx context.Context, sel ast.SelectionSet, v model.NullFloat32) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalOFloat2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullFloat64(ctx context.Context, v any) (model.NullFloat64, error) {
+func (ec *executionContext) unmarshalOFloat2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullFloat64(ctx context.Context, v any) (model.NullFloat64, error) {
 	var res model.NullFloat64
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOFloat2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullFloat64(ctx context.Context, sel ast.SelectionSet, v model.NullFloat64) graphql.Marshaler {
+func (ec *executionContext) marshalOFloat2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullFloat64(ctx context.Context, sel ast.SelectionSet, v model.NullFloat64) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) marshalOGenreAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐGenreAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.GenreAgg) graphql.Marshaler {
+func (ec *executionContext) marshalOGenreAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐGenreAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.GenreAgg) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -22933,7 +23175,7 @@ func (ec *executionContext) marshalOGenreAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋ
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNGenreAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐGenreAgg(ctx, sel, v[i])
+			ret[i] = ec.marshalNGenreAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐGenreAgg(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -22953,7 +23195,7 @@ func (ec *executionContext) marshalOGenreAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋ
 	return ret
 }
 
-func (ec *executionContext) unmarshalOGenreFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐGenreFacetInput(ctx context.Context, v any) (*gen.GenreFacetInput, error) {
+func (ec *executionContext) unmarshalOGenreFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐGenreFacetInput(ctx context.Context, v any) (*gen.GenreFacetInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -22961,7 +23203,7 @@ func (ec *executionContext) unmarshalOGenreFacetInput2ᚖgithubᚗcomᚋbitmagne
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx context.Context, v any) ([]protocol.ID, error) {
+func (ec *executionContext) unmarshalOHash202ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx context.Context, v any) ([]protocol.ID, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -22973,7 +23215,7 @@ func (ec *executionContext) unmarshalOHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋ
 	res := make([]protocol.ID, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNHash202githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNHash202githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -22981,13 +23223,13 @@ func (ec *executionContext) unmarshalOHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋ
 	return res, nil
 }
 
-func (ec *executionContext) marshalOHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx context.Context, sel ast.SelectionSet, v []protocol.ID) graphql.Marshaler {
+func (ec *executionContext) marshalOHash202ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐIDᚄ(ctx context.Context, sel ast.SelectionSet, v []protocol.ID) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	ret := make(graphql.Array, len(v))
 	for i := range v {
-		ret[i] = ec.marshalNHash202githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx, sel, v[i])
+		ret[i] = ec.marshalNHash202githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋprotocolᚐID(ctx, sel, v[i])
 	}
 
 	for _, e := range ret {
@@ -22999,23 +23241,23 @@ func (ec *executionContext) marshalOHash202ᚕgithubᚗcomᚋbitmagnetᚑioᚋbi
 	return ret
 }
 
-func (ec *executionContext) unmarshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx context.Context, v any) (model.NullUint, error) {
+func (ec *executionContext) unmarshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx context.Context, v any) (model.NullUint, error) {
 	var res model.NullUint
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx context.Context, sel ast.SelectionSet, v model.NullUint) graphql.Marshaler {
+func (ec *executionContext) marshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint(ctx context.Context, sel ast.SelectionSet, v model.NullUint) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint16(ctx context.Context, v any) (model.NullUint16, error) {
+func (ec *executionContext) unmarshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint16(ctx context.Context, v any) (model.NullUint16, error) {
 	var res model.NullUint16
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOInt2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullUint16(ctx context.Context, sel ast.SelectionSet, v model.NullUint16) graphql.Marshaler {
+func (ec *executionContext) marshalOInt2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullUint16(ctx context.Context, sel ast.SelectionSet, v model.NullUint16) graphql.Marshaler {
 	return v
 }
 
@@ -23067,7 +23309,7 @@ func (ec *executionContext) marshalOInt2ᚕintᚄ(ctx context.Context, sel ast.S
 	return ret
 }
 
-func (ec *executionContext) unmarshalOLanguage2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐLanguageᚄ(ctx context.Context, v any) ([]model.Language, error) {
+func (ec *executionContext) unmarshalOLanguage2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐLanguageᚄ(ctx context.Context, v any) ([]model.Language, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23079,7 +23321,7 @@ func (ec *executionContext) unmarshalOLanguage2ᚕgithubᚗcomᚋbitmagnetᚑio�
 	res := make([]model.Language, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNLanguage2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNLanguage2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -23087,7 +23329,7 @@ func (ec *executionContext) unmarshalOLanguage2ᚕgithubᚗcomᚋbitmagnetᚑio�
 	return res, nil
 }
 
-func (ec *executionContext) marshalOLanguage2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐLanguageᚄ(ctx context.Context, sel ast.SelectionSet, v []model.Language) graphql.Marshaler {
+func (ec *executionContext) marshalOLanguage2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐLanguageᚄ(ctx context.Context, sel ast.SelectionSet, v []model.Language) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -23114,7 +23356,7 @@ func (ec *executionContext) marshalOLanguage2ᚕgithubᚗcomᚋbitmagnetᚑioᚋ
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNLanguage2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx, sel, v[i])
+			ret[i] = ec.marshalNLanguage2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -23134,7 +23376,7 @@ func (ec *executionContext) marshalOLanguage2ᚕgithubᚗcomᚋbitmagnetᚑioᚋ
 	return ret
 }
 
-func (ec *executionContext) marshalOLanguageAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐLanguageAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.LanguageAgg) graphql.Marshaler {
+func (ec *executionContext) marshalOLanguageAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐLanguageAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.LanguageAgg) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -23161,7 +23403,7 @@ func (ec *executionContext) marshalOLanguageAgg2ᚕgithubᚗcomᚋbitmagnetᚑio
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNLanguageAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐLanguageAgg(ctx, sel, v[i])
+			ret[i] = ec.marshalNLanguageAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐLanguageAgg(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -23181,7 +23423,7 @@ func (ec *executionContext) marshalOLanguageAgg2ᚕgithubᚗcomᚋbitmagnetᚑio
 	return ret
 }
 
-func (ec *executionContext) unmarshalOLanguageFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐLanguageFacetInput(ctx context.Context, v any) (*gen.LanguageFacetInput, error) {
+func (ec *executionContext) unmarshalOLanguageFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐLanguageFacetInput(ctx context.Context, v any) (*gen.LanguageFacetInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23189,7 +23431,7 @@ func (ec *executionContext) unmarshalOLanguageFacetInput2ᚖgithubᚗcomᚋbitma
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOLanguageInfo2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐLanguageᚄ(ctx context.Context, sel ast.SelectionSet, v []model.Language) graphql.Marshaler {
+func (ec *executionContext) marshalOLanguageInfo2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐLanguageᚄ(ctx context.Context, sel ast.SelectionSet, v []model.Language) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -23216,7 +23458,7 @@ func (ec *executionContext) marshalOLanguageInfo2ᚕgithubᚗcomᚋbitmagnetᚑi
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNLanguageInfo2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx, sel, v[i])
+			ret[i] = ec.marshalNLanguageInfo2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -23236,19 +23478,19 @@ func (ec *executionContext) marshalOLanguageInfo2ᚕgithubᚗcomᚋbitmagnetᚑi
 	return ret
 }
 
-func (ec *executionContext) marshalOLanguageInfo2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx context.Context, sel ast.SelectionSet, v *model.Language) graphql.Marshaler {
+func (ec *executionContext) marshalOLanguageInfo2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐLanguage(ctx context.Context, sel ast.SelectionSet, v *model.Language) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._LanguageInfo(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalOQueueEnqueueReprocessTorrentsBatchInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋqueueᚋmanagerᚐEnqueueReprocessTorrentsBatchRequest(ctx context.Context, v any) (manager.EnqueueReprocessTorrentsBatchRequest, error) {
+func (ec *executionContext) unmarshalOQueueEnqueueReprocessTorrentsBatchInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋqueueᚋmanagerᚐEnqueueReprocessTorrentsBatchRequest(ctx context.Context, v any) (manager.EnqueueReprocessTorrentsBatchRequest, error) {
 	res, err := ec.unmarshalInputQueueEnqueueReprocessTorrentsBatchInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOQueueEnqueueReprocessTorrentsBatchInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋqueueᚋmanagerᚐEnqueueReprocessTorrentsBatchRequest(ctx context.Context, v any) (*manager.EnqueueReprocessTorrentsBatchRequest, error) {
+func (ec *executionContext) unmarshalOQueueEnqueueReprocessTorrentsBatchInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋqueueᚋmanagerᚐEnqueueReprocessTorrentsBatchRequest(ctx context.Context, v any) (*manager.EnqueueReprocessTorrentsBatchRequest, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23256,7 +23498,7 @@ func (ec *executionContext) unmarshalOQueueEnqueueReprocessTorrentsBatchInput2�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOQueueJobQueueAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobQueueAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.QueueJobQueueAgg) graphql.Marshaler {
+func (ec *executionContext) marshalOQueueJobQueueAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobQueueAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.QueueJobQueueAgg) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -23283,7 +23525,7 @@ func (ec *executionContext) marshalOQueueJobQueueAgg2ᚕgithubᚗcomᚋbitmagnet
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNQueueJobQueueAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobQueueAgg(ctx, sel, v[i])
+			ret[i] = ec.marshalNQueueJobQueueAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobQueueAgg(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -23303,7 +23545,7 @@ func (ec *executionContext) marshalOQueueJobQueueAgg2ᚕgithubᚗcomᚋbitmagnet
 	return ret
 }
 
-func (ec *executionContext) unmarshalOQueueJobQueueFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobQueueFacetInput(ctx context.Context, v any) (*gen.QueueJobQueueFacetInput, error) {
+func (ec *executionContext) unmarshalOQueueJobQueueFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobQueueFacetInput(ctx context.Context, v any) (*gen.QueueJobQueueFacetInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23311,7 +23553,7 @@ func (ec *executionContext) unmarshalOQueueJobQueueFacetInput2ᚖgithubᚗcomᚋ
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOQueueJobStatus2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatusᚄ(ctx context.Context, v any) ([]model.QueueJobStatus, error) {
+func (ec *executionContext) unmarshalOQueueJobStatus2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatusᚄ(ctx context.Context, v any) ([]model.QueueJobStatus, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23323,7 +23565,7 @@ func (ec *executionContext) unmarshalOQueueJobStatus2ᚕgithubᚗcomᚋbitmagnet
 	res := make([]model.QueueJobStatus, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNQueueJobStatus2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatus(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNQueueJobStatus2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatus(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -23331,7 +23573,7 @@ func (ec *executionContext) unmarshalOQueueJobStatus2ᚕgithubᚗcomᚋbitmagnet
 	return res, nil
 }
 
-func (ec *executionContext) marshalOQueueJobStatus2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []model.QueueJobStatus) graphql.Marshaler {
+func (ec *executionContext) marshalOQueueJobStatus2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []model.QueueJobStatus) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -23358,7 +23600,7 @@ func (ec *executionContext) marshalOQueueJobStatus2ᚕgithubᚗcomᚋbitmagnet�
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNQueueJobStatus2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatus(ctx, sel, v[i])
+			ret[i] = ec.marshalNQueueJobStatus2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐQueueJobStatus(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -23378,7 +23620,7 @@ func (ec *executionContext) marshalOQueueJobStatus2ᚕgithubᚗcomᚋbitmagnet�
 	return ret
 }
 
-func (ec *executionContext) marshalOQueueJobStatusAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobStatusAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.QueueJobStatusAgg) graphql.Marshaler {
+func (ec *executionContext) marshalOQueueJobStatusAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobStatusAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.QueueJobStatusAgg) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -23405,7 +23647,7 @@ func (ec *executionContext) marshalOQueueJobStatusAgg2ᚕgithubᚗcomᚋbitmagne
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNQueueJobStatusAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobStatusAgg(ctx, sel, v[i])
+			ret[i] = ec.marshalNQueueJobStatusAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobStatusAgg(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -23425,7 +23667,7 @@ func (ec *executionContext) marshalOQueueJobStatusAgg2ᚕgithubᚗcomᚋbitmagne
 	return ret
 }
 
-func (ec *executionContext) unmarshalOQueueJobStatusFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobStatusFacetInput(ctx context.Context, v any) (*gen.QueueJobStatusFacetInput, error) {
+func (ec *executionContext) unmarshalOQueueJobStatusFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobStatusFacetInput(ctx context.Context, v any) (*gen.QueueJobStatusFacetInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23433,7 +23675,7 @@ func (ec *executionContext) unmarshalOQueueJobStatusFacetInput2ᚖgithubᚗcom�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOQueueJobsFacetsInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsFacetsInput(ctx context.Context, v any) (*gen.QueueJobsFacetsInput, error) {
+func (ec *executionContext) unmarshalOQueueJobsFacetsInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsFacetsInput(ctx context.Context, v any) (*gen.QueueJobsFacetsInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23441,7 +23683,7 @@ func (ec *executionContext) unmarshalOQueueJobsFacetsInput2ᚖgithubᚗcomᚋbit
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOQueueJobsOrderByInput2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsOrderByInputᚄ(ctx context.Context, v any) ([]gen.QueueJobsOrderByInput, error) {
+func (ec *executionContext) unmarshalOQueueJobsOrderByInput2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsOrderByInputᚄ(ctx context.Context, v any) ([]gen.QueueJobsOrderByInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23453,7 +23695,7 @@ func (ec *executionContext) unmarshalOQueueJobsOrderByInput2ᚕgithubᚗcomᚋbi
 	res := make([]gen.QueueJobsOrderByInput, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNQueueJobsOrderByInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsOrderByInput(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNQueueJobsOrderByInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐQueueJobsOrderByInput(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -23461,7 +23703,7 @@ func (ec *executionContext) unmarshalOQueueJobsOrderByInput2ᚕgithubᚗcomᚋbi
 	return res, nil
 }
 
-func (ec *executionContext) marshalOReleaseYearAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐReleaseYearAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.ReleaseYearAgg) graphql.Marshaler {
+func (ec *executionContext) marshalOReleaseYearAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐReleaseYearAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.ReleaseYearAgg) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -23488,7 +23730,7 @@ func (ec *executionContext) marshalOReleaseYearAgg2ᚕgithubᚗcomᚋbitmagnet�
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNReleaseYearAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐReleaseYearAgg(ctx, sel, v[i])
+			ret[i] = ec.marshalNReleaseYearAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐReleaseYearAgg(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -23508,7 +23750,7 @@ func (ec *executionContext) marshalOReleaseYearAgg2ᚕgithubᚗcomᚋbitmagnet�
 	return ret
 }
 
-func (ec *executionContext) unmarshalOReleaseYearFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐReleaseYearFacetInput(ctx context.Context, v any) (*gen.ReleaseYearFacetInput, error) {
+func (ec *executionContext) unmarshalOReleaseYearFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐReleaseYearFacetInput(ctx context.Context, v any) (*gen.ReleaseYearFacetInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23516,13 +23758,13 @@ func (ec *executionContext) unmarshalOReleaseYearFacetInput2ᚖgithubᚗcomᚋbi
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOString2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx context.Context, v any) (model.NullString, error) {
+func (ec *executionContext) unmarshalOString2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx context.Context, v any) (model.NullString, error) {
 	var res model.NullString
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOString2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx context.Context, sel ast.SelectionSet, v model.NullString) graphql.Marshaler {
+func (ec *executionContext) marshalOString2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullString(ctx context.Context, sel ast.SelectionSet, v model.NullString) graphql.Marshaler {
 	return v
 }
 
@@ -23590,7 +23832,7 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	return res
 }
 
-func (ec *executionContext) unmarshalOSuggestTagsQueryInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐSuggestTagsQueryInput(ctx context.Context, v any) (*gen.SuggestTagsQueryInput, error) {
+func (ec *executionContext) unmarshalOSuggestTagsQueryInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐSuggestTagsQueryInput(ctx context.Context, v any) (*gen.SuggestTagsQueryInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23598,7 +23840,7 @@ func (ec *executionContext) unmarshalOSuggestTagsQueryInput2ᚖgithubᚗcomᚋbi
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOTorrentContentFacetsInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentFacetsInput(ctx context.Context, v any) (*gen.TorrentContentFacetsInput, error) {
+func (ec *executionContext) unmarshalOTorrentContentFacetsInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentFacetsInput(ctx context.Context, v any) (*gen.TorrentContentFacetsInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23606,7 +23848,7 @@ func (ec *executionContext) unmarshalOTorrentContentFacetsInput2ᚖgithubᚗcom�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOTorrentContentOrderByInput2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentOrderByInputᚄ(ctx context.Context, v any) ([]gen.TorrentContentOrderByInput, error) {
+func (ec *executionContext) unmarshalOTorrentContentOrderByInput2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentOrderByInputᚄ(ctx context.Context, v any) ([]gen.TorrentContentOrderByInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23618,7 +23860,7 @@ func (ec *executionContext) unmarshalOTorrentContentOrderByInput2ᚕgithubᚗcom
 	res := make([]gen.TorrentContentOrderByInput, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNTorrentContentOrderByInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentOrderByInput(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNTorrentContentOrderByInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentContentOrderByInput(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -23626,7 +23868,7 @@ func (ec *executionContext) unmarshalOTorrentContentOrderByInput2ᚕgithubᚗcom
 	return res, nil
 }
 
-func (ec *executionContext) marshalOTorrentFile2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐTorrentFileᚄ(ctx context.Context, sel ast.SelectionSet, v []model.TorrentFile) graphql.Marshaler {
+func (ec *executionContext) marshalOTorrentFile2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐTorrentFileᚄ(ctx context.Context, sel ast.SelectionSet, v []model.TorrentFile) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -23653,7 +23895,7 @@ func (ec *executionContext) marshalOTorrentFile2ᚕgithubᚗcomᚋbitmagnetᚑio
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTorrentFile2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐTorrentFile(ctx, sel, v[i])
+			ret[i] = ec.marshalNTorrentFile2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐTorrentFile(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -23673,7 +23915,7 @@ func (ec *executionContext) marshalOTorrentFile2ᚕgithubᚗcomᚋbitmagnetᚑio
 	return ret
 }
 
-func (ec *executionContext) marshalOTorrentFileTypeAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFileTypeAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.TorrentFileTypeAgg) graphql.Marshaler {
+func (ec *executionContext) marshalOTorrentFileTypeAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFileTypeAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.TorrentFileTypeAgg) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -23700,7 +23942,7 @@ func (ec *executionContext) marshalOTorrentFileTypeAgg2ᚕgithubᚗcomᚋbitmagn
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTorrentFileTypeAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFileTypeAgg(ctx, sel, v[i])
+			ret[i] = ec.marshalNTorrentFileTypeAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFileTypeAgg(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -23720,7 +23962,7 @@ func (ec *executionContext) marshalOTorrentFileTypeAgg2ᚕgithubᚗcomᚋbitmagn
 	return ret
 }
 
-func (ec *executionContext) unmarshalOTorrentFileTypeFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFileTypeFacetInput(ctx context.Context, v any) (*gen.TorrentFileTypeFacetInput, error) {
+func (ec *executionContext) unmarshalOTorrentFileTypeFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFileTypeFacetInput(ctx context.Context, v any) (*gen.TorrentFileTypeFacetInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23728,7 +23970,7 @@ func (ec *executionContext) unmarshalOTorrentFileTypeFacetInput2ᚖgithubᚗcom�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOTorrentFilesOrderByInput2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFilesOrderByInputᚄ(ctx context.Context, v any) ([]gen.TorrentFilesOrderByInput, error) {
+func (ec *executionContext) unmarshalOTorrentFilesOrderByInput2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFilesOrderByInputᚄ(ctx context.Context, v any) ([]gen.TorrentFilesOrderByInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23740,7 +23982,7 @@ func (ec *executionContext) unmarshalOTorrentFilesOrderByInput2ᚕgithubᚗcom�
 	res := make([]gen.TorrentFilesOrderByInput, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNTorrentFilesOrderByInput2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFilesOrderByInput(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNTorrentFilesOrderByInput2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentFilesOrderByInput(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -23748,7 +23990,7 @@ func (ec *executionContext) unmarshalOTorrentFilesOrderByInput2ᚕgithubᚗcom�
 	return res, nil
 }
 
-func (ec *executionContext) marshalOTorrentSourceAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentSourceAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.TorrentSourceAgg) graphql.Marshaler {
+func (ec *executionContext) marshalOTorrentSourceAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentSourceAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.TorrentSourceAgg) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -23775,7 +24017,7 @@ func (ec *executionContext) marshalOTorrentSourceAgg2ᚕgithubᚗcomᚋbitmagnet
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTorrentSourceAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentSourceAgg(ctx, sel, v[i])
+			ret[i] = ec.marshalNTorrentSourceAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentSourceAgg(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -23795,7 +24037,7 @@ func (ec *executionContext) marshalOTorrentSourceAgg2ᚕgithubᚗcomᚋbitmagnet
 	return ret
 }
 
-func (ec *executionContext) unmarshalOTorrentSourceFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentSourceFacetInput(ctx context.Context, v any) (*gen.TorrentSourceFacetInput, error) {
+func (ec *executionContext) unmarshalOTorrentSourceFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentSourceFacetInput(ctx context.Context, v any) (*gen.TorrentSourceFacetInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23803,7 +24045,7 @@ func (ec *executionContext) unmarshalOTorrentSourceFacetInput2ᚖgithubᚗcomᚋ
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOTorrentTagAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentTagAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.TorrentTagAgg) graphql.Marshaler {
+func (ec *executionContext) marshalOTorrentTagAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentTagAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.TorrentTagAgg) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -23830,7 +24072,7 @@ func (ec *executionContext) marshalOTorrentTagAgg2ᚕgithubᚗcomᚋbitmagnetᚑ
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTorrentTagAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentTagAgg(ctx, sel, v[i])
+			ret[i] = ec.marshalNTorrentTagAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentTagAgg(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -23850,7 +24092,7 @@ func (ec *executionContext) marshalOTorrentTagAgg2ᚕgithubᚗcomᚋbitmagnetᚑ
 	return ret
 }
 
-func (ec *executionContext) unmarshalOTorrentTagFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentTagFacetInput(ctx context.Context, v any) (*gen.TorrentTagFacetInput, error) {
+func (ec *executionContext) unmarshalOTorrentTagFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐTorrentTagFacetInput(ctx context.Context, v any) (*gen.TorrentTagFacetInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23858,47 +24100,47 @@ func (ec *executionContext) unmarshalOTorrentTagFacetInput2ᚖgithubᚗcomᚋbit
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOVideo3D2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullVideo3D(ctx context.Context, v any) (model.NullVideo3D, error) {
+func (ec *executionContext) unmarshalOVideo3D2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullVideo3D(ctx context.Context, v any) (model.NullVideo3D, error) {
 	var res model.NullVideo3D
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOVideo3D2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullVideo3D(ctx context.Context, sel ast.SelectionSet, v model.NullVideo3D) graphql.Marshaler {
+func (ec *executionContext) marshalOVideo3D2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullVideo3D(ctx context.Context, sel ast.SelectionSet, v model.NullVideo3D) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalOVideoCodec2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullVideoCodec(ctx context.Context, v any) (model.NullVideoCodec, error) {
+func (ec *executionContext) unmarshalOVideoCodec2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullVideoCodec(ctx context.Context, v any) (model.NullVideoCodec, error) {
 	var res model.NullVideoCodec
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOVideoCodec2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullVideoCodec(ctx context.Context, sel ast.SelectionSet, v model.NullVideoCodec) graphql.Marshaler {
+func (ec *executionContext) marshalOVideoCodec2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullVideoCodec(ctx context.Context, sel ast.SelectionSet, v model.NullVideoCodec) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalOVideoModifier2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullVideoModifier(ctx context.Context, v any) (model.NullVideoModifier, error) {
+func (ec *executionContext) unmarshalOVideoModifier2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullVideoModifier(ctx context.Context, v any) (model.NullVideoModifier, error) {
 	var res model.NullVideoModifier
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOVideoModifier2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullVideoModifier(ctx context.Context, sel ast.SelectionSet, v model.NullVideoModifier) graphql.Marshaler {
+func (ec *executionContext) marshalOVideoModifier2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullVideoModifier(ctx context.Context, sel ast.SelectionSet, v model.NullVideoModifier) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalOVideoResolution2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullVideoResolution(ctx context.Context, v any) (model.NullVideoResolution, error) {
+func (ec *executionContext) unmarshalOVideoResolution2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullVideoResolution(ctx context.Context, v any) (model.NullVideoResolution, error) {
 	var res model.NullVideoResolution
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOVideoResolution2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullVideoResolution(ctx context.Context, sel ast.SelectionSet, v model.NullVideoResolution) graphql.Marshaler {
+func (ec *executionContext) marshalOVideoResolution2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullVideoResolution(ctx context.Context, sel ast.SelectionSet, v model.NullVideoResolution) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalOVideoResolution2ᚕᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐVideoResolution(ctx context.Context, v any) ([]*model.VideoResolution, error) {
+func (ec *executionContext) unmarshalOVideoResolution2ᚕᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐVideoResolution(ctx context.Context, v any) ([]*model.VideoResolution, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23910,7 +24152,7 @@ func (ec *executionContext) unmarshalOVideoResolution2ᚕᚖgithubᚗcomᚋbitma
 	res := make([]*model.VideoResolution, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalOVideoResolution2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐVideoResolution(ctx, vSlice[i])
+		res[i], err = ec.unmarshalOVideoResolution2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐVideoResolution(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -23918,7 +24160,7 @@ func (ec *executionContext) unmarshalOVideoResolution2ᚕᚖgithubᚗcomᚋbitma
 	return res, nil
 }
 
-func (ec *executionContext) marshalOVideoResolution2ᚕᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐVideoResolution(ctx context.Context, sel ast.SelectionSet, v []*model.VideoResolution) graphql.Marshaler {
+func (ec *executionContext) marshalOVideoResolution2ᚕᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐVideoResolution(ctx context.Context, sel ast.SelectionSet, v []*model.VideoResolution) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -23945,7 +24187,7 @@ func (ec *executionContext) marshalOVideoResolution2ᚕᚖgithubᚗcomᚋbitmagn
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalOVideoResolution2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐVideoResolution(ctx, sel, v[i])
+			ret[i] = ec.marshalOVideoResolution2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐVideoResolution(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -23959,7 +24201,7 @@ func (ec *executionContext) marshalOVideoResolution2ᚕᚖgithubᚗcomᚋbitmagn
 	return ret
 }
 
-func (ec *executionContext) unmarshalOVideoResolution2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐVideoResolution(ctx context.Context, v any) (*model.VideoResolution, error) {
+func (ec *executionContext) unmarshalOVideoResolution2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐVideoResolution(ctx context.Context, v any) (*model.VideoResolution, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -23968,7 +24210,7 @@ func (ec *executionContext) unmarshalOVideoResolution2ᚖgithubᚗcomᚋbitmagne
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOVideoResolution2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐVideoResolution(ctx context.Context, sel ast.SelectionSet, v *model.VideoResolution) graphql.Marshaler {
+func (ec *executionContext) marshalOVideoResolution2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐVideoResolution(ctx context.Context, sel ast.SelectionSet, v *model.VideoResolution) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -23976,7 +24218,7 @@ func (ec *executionContext) marshalOVideoResolution2ᚖgithubᚗcomᚋbitmagnet�
 	return res
 }
 
-func (ec *executionContext) marshalOVideoResolutionAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoResolutionAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.VideoResolutionAgg) graphql.Marshaler {
+func (ec *executionContext) marshalOVideoResolutionAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoResolutionAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.VideoResolutionAgg) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -24003,7 +24245,7 @@ func (ec *executionContext) marshalOVideoResolutionAgg2ᚕgithubᚗcomᚋbitmagn
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNVideoResolutionAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoResolutionAgg(ctx, sel, v[i])
+			ret[i] = ec.marshalNVideoResolutionAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoResolutionAgg(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -24023,7 +24265,7 @@ func (ec *executionContext) marshalOVideoResolutionAgg2ᚕgithubᚗcomᚋbitmagn
 	return ret
 }
 
-func (ec *executionContext) unmarshalOVideoResolutionFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoResolutionFacetInput(ctx context.Context, v any) (*gen.VideoResolutionFacetInput, error) {
+func (ec *executionContext) unmarshalOVideoResolutionFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoResolutionFacetInput(ctx context.Context, v any) (*gen.VideoResolutionFacetInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -24031,17 +24273,17 @@ func (ec *executionContext) unmarshalOVideoResolutionFacetInput2ᚖgithubᚗcom�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOVideoSource2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullVideoSource(ctx context.Context, v any) (model.NullVideoSource, error) {
+func (ec *executionContext) unmarshalOVideoSource2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullVideoSource(ctx context.Context, v any) (model.NullVideoSource, error) {
 	var res model.NullVideoSource
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOVideoSource2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐNullVideoSource(ctx context.Context, sel ast.SelectionSet, v model.NullVideoSource) graphql.Marshaler {
+func (ec *executionContext) marshalOVideoSource2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐNullVideoSource(ctx context.Context, sel ast.SelectionSet, v model.NullVideoSource) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalOVideoSource2ᚕᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐVideoSource(ctx context.Context, v any) ([]*model.VideoSource, error) {
+func (ec *executionContext) unmarshalOVideoSource2ᚕᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐVideoSource(ctx context.Context, v any) ([]*model.VideoSource, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -24053,7 +24295,7 @@ func (ec *executionContext) unmarshalOVideoSource2ᚕᚖgithubᚗcomᚋbitmagnet
 	res := make([]*model.VideoSource, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalOVideoSource2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐVideoSource(ctx, vSlice[i])
+		res[i], err = ec.unmarshalOVideoSource2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐVideoSource(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -24061,7 +24303,7 @@ func (ec *executionContext) unmarshalOVideoSource2ᚕᚖgithubᚗcomᚋbitmagnet
 	return res, nil
 }
 
-func (ec *executionContext) marshalOVideoSource2ᚕᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐVideoSource(ctx context.Context, sel ast.SelectionSet, v []*model.VideoSource) graphql.Marshaler {
+func (ec *executionContext) marshalOVideoSource2ᚕᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐVideoSource(ctx context.Context, sel ast.SelectionSet, v []*model.VideoSource) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -24088,7 +24330,7 @@ func (ec *executionContext) marshalOVideoSource2ᚕᚖgithubᚗcomᚋbitmagnet�
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalOVideoSource2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐVideoSource(ctx, sel, v[i])
+			ret[i] = ec.marshalOVideoSource2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐVideoSource(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -24102,7 +24344,7 @@ func (ec *executionContext) marshalOVideoSource2ᚕᚖgithubᚗcomᚋbitmagnet�
 	return ret
 }
 
-func (ec *executionContext) unmarshalOVideoSource2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐVideoSource(ctx context.Context, v any) (*model.VideoSource, error) {
+func (ec *executionContext) unmarshalOVideoSource2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐVideoSource(ctx context.Context, v any) (*model.VideoSource, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -24111,7 +24353,7 @@ func (ec *executionContext) unmarshalOVideoSource2ᚖgithubᚗcomᚋbitmagnetᚑ
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOVideoSource2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐVideoSource(ctx context.Context, sel ast.SelectionSet, v *model.VideoSource) graphql.Marshaler {
+func (ec *executionContext) marshalOVideoSource2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐVideoSource(ctx context.Context, sel ast.SelectionSet, v *model.VideoSource) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -24119,7 +24361,7 @@ func (ec *executionContext) marshalOVideoSource2ᚖgithubᚗcomᚋbitmagnetᚑio
 	return res
 }
 
-func (ec *executionContext) marshalOVideoSourceAgg2ᚕgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoSourceAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.VideoSourceAgg) graphql.Marshaler {
+func (ec *executionContext) marshalOVideoSourceAgg2ᚕgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoSourceAggᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.VideoSourceAgg) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -24146,7 +24388,7 @@ func (ec *executionContext) marshalOVideoSourceAgg2ᚕgithubᚗcomᚋbitmagnet�
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNVideoSourceAgg2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoSourceAgg(ctx, sel, v[i])
+			ret[i] = ec.marshalNVideoSourceAgg2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoSourceAgg(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -24166,7 +24408,7 @@ func (ec *executionContext) marshalOVideoSourceAgg2ᚕgithubᚗcomᚋbitmagnet�
 	return ret
 }
 
-func (ec *executionContext) unmarshalOVideoSourceFacetInput2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoSourceFacetInput(ctx context.Context, v any) (*gen.VideoSourceFacetInput, error) {
+func (ec *executionContext) unmarshalOVideoSourceFacetInput2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋgqlᚋgqlmodelᚋgenᚐVideoSourceFacetInput(ctx context.Context, v any) (*gen.VideoSourceFacetInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -24190,17 +24432,17 @@ func (ec *executionContext) marshalOVoid2ᚖstring(ctx context.Context, sel ast.
 	return res
 }
 
-func (ec *executionContext) unmarshalOYear2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx context.Context, v any) (model.Year, error) {
+func (ec *executionContext) unmarshalOYear2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx context.Context, v any) (model.Year, error) {
 	var res model.Year
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOYear2githubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx context.Context, sel ast.SelectionSet, v model.Year) graphql.Marshaler {
+func (ec *executionContext) marshalOYear2githubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx context.Context, sel ast.SelectionSet, v model.Year) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalOYear2ᚕᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx context.Context, v any) ([]*model.Year, error) {
+func (ec *executionContext) unmarshalOYear2ᚕᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx context.Context, v any) ([]*model.Year, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -24212,7 +24454,7 @@ func (ec *executionContext) unmarshalOYear2ᚕᚖgithubᚗcomᚋbitmagnetᚑio�
 	res := make([]*model.Year, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalOYear2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx, vSlice[i])
+		res[i], err = ec.unmarshalOYear2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -24220,19 +24462,19 @@ func (ec *executionContext) unmarshalOYear2ᚕᚖgithubᚗcomᚋbitmagnetᚑio�
 	return res, nil
 }
 
-func (ec *executionContext) marshalOYear2ᚕᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx context.Context, sel ast.SelectionSet, v []*model.Year) graphql.Marshaler {
+func (ec *executionContext) marshalOYear2ᚕᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx context.Context, sel ast.SelectionSet, v []*model.Year) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	ret := make(graphql.Array, len(v))
 	for i := range v {
-		ret[i] = ec.marshalOYear2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx, sel, v[i])
+		ret[i] = ec.marshalOYear2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx, sel, v[i])
 	}
 
 	return ret
 }
 
-func (ec *executionContext) unmarshalOYear2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx context.Context, v any) (*model.Year, error) {
+func (ec *executionContext) unmarshalOYear2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx context.Context, v any) (*model.Year, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -24241,7 +24483,7 @@ func (ec *executionContext) unmarshalOYear2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbi
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOYear2ᚖgithubᚗcomᚋbitmagnetᚑioᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx context.Context, sel ast.SelectionSet, v *model.Year) graphql.Marshaler {
+func (ec *executionContext) marshalOYear2ᚖgithubᚗcomᚋnigowlᚋbitmagnetᚋinternalᚋmodelᚐYear(ctx context.Context, sel ast.SelectionSet, v *model.Year) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

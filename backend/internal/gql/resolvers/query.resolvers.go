@@ -32,6 +32,7 @@ func (r *queryResolver) Workers(ctx context.Context) (gen.WorkersQuery, error) {
 	for _, w := range r.Resolver.Workers.Workers() {
 		workers = append(workers, gen.Worker{
 			Key:     w.Key(),
+			Enabled: w.Enabled(),
 			Started: w.Started(),
 		})
 	}

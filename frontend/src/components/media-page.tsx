@@ -182,7 +182,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const advancedFiltersRef = useRef<HTMLDivElement | null>(null);
   const [advancedFiltersHeight, setAdvancedFiltersHeight] = useState(0);
-  const pageSize = 30;
+  const pageSize = 32;
 
   const quality = normalizeSimpleValue(searchParams.get("quality"), "all");
   const year = normalizeSimpleValue(searchParams.get("year"), "all");

@@ -10,11 +10,11 @@ import (
 	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nigowl/bitmagnet/internal/database/dao"
 	"github.com/nigowl/bitmagnet/internal/model"
 	"github.com/nigowl/bitmagnet/internal/queue"
 	"github.com/nigowl/bitmagnet/internal/queue/handler"
-	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
 	"gorm.io/gen"
@@ -209,6 +209,7 @@ func (h *serverHandler) handleJob(
 			h.query.QueueJob.Status.Eq(string(model.QueueJobStatusRetry)),
 			h.query.QueueJob.Priority,
 			h.query.QueueJob.RunAfter,
+			h.query.QueueJob.CreatedAt,
 		).Clauses(clause.Locking{
 			Strength: "UPDATE",
 			Options:  "SKIP LOCKED",

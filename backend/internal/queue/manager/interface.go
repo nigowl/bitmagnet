@@ -26,7 +26,14 @@ type EnqueueReprocessTorrentsBatchRequest struct {
 	LocalSearchDisabled bool
 }
 
+type EnqueueMaintenanceTaskRequest struct {
+	TaskType string
+	Limit    uint
+	Purge    bool
+}
+
 type Manager interface {
 	PurgeJobs(context.Context, PurgeJobsRequest) error
 	EnqueueReprocessTorrentsBatch(context.Context, EnqueueReprocessTorrentsBatchRequest) error
+	EnqueueMaintenanceTask(context.Context, EnqueueMaintenanceTaskRequest) error
 }

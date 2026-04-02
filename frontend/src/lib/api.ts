@@ -34,7 +34,7 @@ export async function graphqlRequest<T>(query: string, variables?: Record<string
     `${apiBaseURL}/graphql`,
     { query, variables },
     {
-      timeout: 15000,
+      timeout: 30000,
       headers: token ? { Authorization: `Bearer ${token}` } : undefined
     }
   );
@@ -57,7 +57,7 @@ export async function apiRequest<T>(path: string, options?: { method?: "GET" | "
       url: `${apiBaseURL}${path}`,
       method: options?.method || "GET",
       data: options?.data,
-      timeout: 15000,
+      timeout: 30000,
       headers: token ? { Authorization: `Bearer ${token}` } : undefined
     });
     return response.data;

@@ -40,6 +40,7 @@ func (b *builder) Key() string {
 
 func (b *builder) Apply(e *gin.Engine) error {
 	e.GET("/api/admin/settings", b.authMiddleware(), b.requireAdmin(), b.getSettings)
+	e.GET("/api/admin/settings/runtime-status", b.authMiddleware(), b.requireAdmin(), b.getRuntimeStatus)
 	e.PUT("/api/admin/settings", b.authMiddleware(), b.requireAdmin(), b.updateSettings)
 	e.GET("/api/admin/settings/subtitle-templates", b.authMiddleware(), b.requireAdmin(), b.listSubtitleTemplates)
 	e.POST("/api/admin/settings/subtitle-templates", b.authMiddleware(), b.requireAdmin(), b.createSubtitleTemplate)
@@ -51,6 +52,15 @@ func (b *builder) Apply(e *gin.Engine) error {
 	e.GET("/api/admin/maintenance/stats", b.authMiddleware(), b.requireAdmin(), b.getMaintenanceStats)
 	e.GET("/api/admin/maintenance/tasks/:taskId", b.authMiddleware(), b.requireAdmin(), b.getMaintenanceTask)
 	return nil
+}
+
+func (b *builder) getRuntimeStatus(c *gin.Context) {
+	status, err := b.service.GetRuntimeStatus(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": status})
 }
 
 func (b *builder) authMiddleware() gin.HandlerFunc {

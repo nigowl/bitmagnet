@@ -9,9 +9,9 @@ import (
 	"sort"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/nigowl/bitmagnet/internal/httpserver/ginzap"
 	"github.com/nigowl/bitmagnet/internal/worker"
-	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -49,8 +49,12 @@ func New(p Params) Result {
 						}
 					}
 					s = &http.Server{
-						Addr:    p.Config.LocalAddress,
-						Handler: g.Handler(),
+						Addr:              p.Config.LocalAddress,
+						Handler:           g.Handler(),
+						ReadHeaderTimeout: 5 * time.Second,
+						ReadTimeout:       30 * time.Second,
+						WriteTimeout:      30 * time.Second,
+						IdleTimeout:       60 * time.Second,
 					}
 					ln, listenErr := net.Listen("tcp", s.Addr)
 					if listenErr != nil {

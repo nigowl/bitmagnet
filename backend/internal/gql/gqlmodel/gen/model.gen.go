@@ -273,6 +273,7 @@ type VideoSourceFacetInput struct {
 
 type Worker struct {
 	Key     string `json:"key"`
+	Enabled bool   `json:"enabled"`
 	Started bool   `json:"started"`
 }
 

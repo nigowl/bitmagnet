@@ -24,6 +24,10 @@ type Config struct {
 	RescrapeThreshold time.Duration
 	// StatusLogInterval controls how often crawler pipeline status is written to logs.
 	StatusLogInterval time.Duration
+	// GetOldestNodesInterval controls how often crawler scans routing table for old nodes.
+	GetOldestNodesInterval time.Duration
+	// OldPeerThreshold controls minimum age for peers selected as "old nodes".
+	OldPeerThreshold time.Duration
 }
 
 func NewDefaultConfig() Config {
@@ -35,6 +39,8 @@ func NewDefaultConfig() Config {
 		SavePieces:                   false,
 		RescrapeThreshold:            time.Hour * 24 * 30,
 		StatusLogInterval:            45 * time.Second,
+		GetOldestNodesInterval:       10 * time.Second,
+		OldPeerThreshold:             15 * time.Minute,
 	}
 }
 

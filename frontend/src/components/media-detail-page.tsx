@@ -243,7 +243,6 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
   const qualityTags = (item.qualityTags ?? []).map((tag) => formatQualityTag(tag)).filter(Boolean);
   const languageNames = (item.languages ?? []).map((language) => language.name).filter(Boolean);
   const factGroups = extractMediaFacts({ collections: item.collections ?? [], attributes: item.attributes ?? [] });
-  const heroFactGroups = factGroups.filter((group) => ["country", "network", "studio", "awards"].includes(group.key));
   const externalLinks = buildMediaExternalLinks({
     contentType: item.contentType,
     contentSource: item.contentSource,
@@ -429,21 +428,6 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
                     <Badge key={language} variant="outline">{language}</Badge>
                   ))}
                 </Group>
-              ) : null}
-
-              {heroFactGroups.length > 0 ? (
-                <div className="media-facts-inline">
-                  {heroFactGroups.map((group) => (
-                    <div key={group.key} className="media-facts-inline-group">
-                      <Text size="sm" fw={700}>{t(`media.detail.${group.key}`)}</Text>
-                      <Group gap={6} wrap="wrap">
-                        {group.values.slice(0, 6).map((value) => (
-                          <Badge key={`${group.key}:${value}`} variant="dot" color="gray">{value}</Badge>
-                        ))}
-                      </Group>
-                    </div>
-                  ))}
-                </div>
               ) : null}
             </Stack>
           </Group>

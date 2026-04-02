@@ -34,6 +34,7 @@ import {
   LogOut,
   MoonStar,
   Radar,
+  ScrollText,
   Settings,
   SunMedium,
   Tv,
@@ -53,6 +54,7 @@ type NavItem = {
 
 const adminItems = [
   { href: "/monitor", labelKey: "nav.monitor", icon: HeartPulse },
+  { href: "/logs", labelKey: "nav.logs", icon: ScrollText },
   { href: "/queue", labelKey: "nav.queue", icon: Radar },
   { href: "/settings", labelKey: "nav.settings", icon: Settings },
   { href: "/maintenance", labelKey: "nav.maintenance", icon: Wrench }

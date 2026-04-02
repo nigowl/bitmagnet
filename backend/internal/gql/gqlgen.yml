@@ -177,6 +177,9 @@ models:
   QueueEnqueueReprocessTorrentsBatchInput:
     model:
       - github.com/nigowl/bitmagnet/internal/queue/manager.EnqueueReprocessTorrentsBatchRequest
+  QueueEnqueueMaintenanceTaskInput:
+    model:
+      - github.com/nigowl/bitmagnet/internal/queue/manager.EnqueueMaintenanceTaskRequest
   TorrentMetricsBucket:
     model:
       - github.com/nigowl/bitmagnet/internal/metrics/torrentmetrics.Bucket

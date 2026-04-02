@@ -97,9 +97,16 @@ type QueueMutation {
   enqueueReprocessTorrentsBatch(
     input: QueueEnqueueReprocessTorrentsBatchInput
   ): Void
+  enqueueMaintenanceTask(input: QueueEnqueueMaintenanceTaskInput!): Void
 }
 
 input QueuePurgeJobsInput {
   queues: [String!]
   statuses: [QueueJobStatus!]
+}
+
+input QueueEnqueueMaintenanceTaskInput {
+  taskType: String!
+  limit: Int
+  purge: Boolean
 }

@@ -13,6 +13,7 @@ query Health {
     listAll {
       workers {
         key
+        enabled
         started
       }
     }
@@ -316,6 +317,14 @@ export const QUEUE_ENQUEUE_REPROCESS_BATCH_MUTATION = `
 mutation QueueEnqueueReprocessTorrentsBatch($input: QueueEnqueueReprocessTorrentsBatchInput!) {
   queue {
     enqueueReprocessTorrentsBatch(input: $input)
+  }
+}
+`;
+
+export const QUEUE_ENQUEUE_MAINTENANCE_TASK_MUTATION = `
+mutation QueueEnqueueMaintenanceTask($input: QueueEnqueueMaintenanceTaskInput!) {
+  queue {
+    enqueueMaintenanceTask(input: $input)
   }
 }
 `;

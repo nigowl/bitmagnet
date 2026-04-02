@@ -15,6 +15,8 @@ func New() fx.Option {
 		sitepluginsfx.New(),
 		fx.Provide(
 			media.NewService,
+			media.NewRefreshMetadataQueueHandler,
+			media.NewBackfillCoverQueueHandler,
 			mediaapi.NewHTTPServer,
 		),
 	)

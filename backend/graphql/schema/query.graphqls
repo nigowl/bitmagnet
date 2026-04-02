@@ -38,6 +38,7 @@ type TorrentContentQuery {
 
 type Worker {
   key: String!
+  enabled: Boolean!
   started: Boolean!
 }
 

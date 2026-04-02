@@ -62,7 +62,6 @@ func New(params Params) Result {
 			fx.Hook{
 				OnStart: func(context.Context) error {
 					active.Set(true)
-					scalingFactor := int(params.Config.ScalingFactor)
 					cl, err := params.Client.Get()
 					if err != nil {
 						return err
@@ -71,6 +70,12 @@ func New(params Params) Result {
 					if err != nil {
 						return err
 					}
+					cfg := loadRuntimeConfig(
+						context.Background(),
+						query.QueueJob.WithContext(context.Background()).UnderlyingDB(),
+						params.Config,
+					)
+					scalingFactor := int(cfg.ScalingFactor)
 					blockingManager, err := params.BlockingManager.Get()
 					if err != nil {
 						return err
@@ -80,10 +85,10 @@ func New(params Params) Result {
 						client:                       cl,
 						metainfoRequester:            params.MetainfoRequester,
 						banningChecker:               params.BanningChecker,
-						bootstrapNodes:               params.Config.BootstrapNodes,
-						reseedBootstrapNodesInterval: params.Config.ReseedBootstrapNodesInterval,
-						getOldestNodesInterval:       time.Second * 10,
-						oldPeerThreshold:             time.Minute * 15,
+						bootstrapNodes:               cfg.BootstrapNodes,
+						reseedBootstrapNodesInterval: cfg.ReseedBootstrapNodesInterval,
+						getOldestNodesInterval:       cfg.GetOldestNodesInterval,
+						oldPeerThreshold:             cfg.OldPeerThreshold,
 						discoveredNodes:              params.DiscoveredNodes,
 						nodesForPing: concurrency.NewBufferedConcurrentChannel[ktable.Node](
 							scalingFactor, scalingFactor),
@@ -113,10 +118,10 @@ func New(params Params) Result {
 							1000,
 							time.Minute,
 						),
-						saveFilesThreshold: params.Config.SaveFilesThreshold,
-						savePieces:         params.Config.SavePieces,
-						rescrapeThreshold:  params.Config.RescrapeThreshold,
-						statusLogInterval:  params.Config.StatusLogInterval,
+						saveFilesThreshold: cfg.SaveFilesThreshold,
+						savePieces:         cfg.SavePieces,
+						rescrapeThreshold:  cfg.RescrapeThreshold,
+						statusLogInterval:  cfg.StatusLogInterval,
 						dao:                query,
 						ignoreHashes: &ignoreHashes{
 							bloom: boom.NewStableBloomFilter(10_000_000, 2, 0.001),

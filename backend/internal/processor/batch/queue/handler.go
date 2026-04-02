@@ -3,7 +3,6 @@ package queue
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/nigowl/bitmagnet/internal/database/dao"
 	"github.com/nigowl/bitmagnet/internal/lazy"
@@ -11,6 +10,7 @@ import (
 	"github.com/nigowl/bitmagnet/internal/processor"
 	"github.com/nigowl/bitmagnet/internal/processor/batch"
 	"github.com/nigowl/bitmagnet/internal/protocol"
+	"github.com/nigowl/bitmagnet/internal/queue"
 	"github.com/nigowl/bitmagnet/internal/queue/handler"
 	"go.uber.org/fx"
 	"gorm.io/gen"
@@ -33,6 +33,12 @@ func New(p Params) Result {
 			if err != nil {
 				return handler.Handler{}, err
 			}
+			perf := queue.LoadPerformanceConfig(
+				context.Background(),
+				d.QueueJob.WithContext(context.Background()).UnderlyingDB(),
+				queue.NewDefaultPerformanceConfig(),
+			)
+			handlerConfig := perf.HandlerConfig(queue.QueueNameProcessTorrentBatch)
 			return handler.New(
 				batch.MessageName,
 				func(ctx context.Context, job model.QueueJob) (err error) {
@@ -151,8 +157,9 @@ func New(p Params) Result {
 					}
 					return nil
 				},
-				handler.JobTimeout(time.Second*60*10),
-				handler.Concurrency(1),
+				handler.JobTimeout(handlerConfig.JobTimeout),
+				handler.Concurrency(handlerConfig.Concurrency),
+				handler.CheckInterval(handlerConfig.CheckInterval),
 			), nil
 		}),
 	}

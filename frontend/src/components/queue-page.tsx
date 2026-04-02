@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Badge,
   Button,
@@ -18,16 +18,18 @@ import {
   Stack,
   Table,
   Text,
+  Tooltip,
   Title,
   useMantineColorScheme
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { CalendarSync, Filter, LogIn, RotateCcw, Trash2 } from "lucide-react";
+import { CalendarSync, DatabaseBackup, Filter, ImageDown, LogIn, RotateCcw, Sparkles, Trash2 } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { graphqlRequest } from "@/lib/api";
 import {
+  QUEUE_ENQUEUE_MAINTENANCE_TASK_MUTATION,
   QUEUE_ENQUEUE_REPROCESS_BATCH_MUTATION,
   QUEUE_JOBS_QUERY,
   QUEUE_METRICS_QUERY,
@@ -38,6 +40,13 @@ import { useI18n } from "@/languages/provider";
 
 const ECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 const allFilterOption = "__all__";
+
+const knownQueueNames = [
+  "process_torrent",
+  "process_torrent_batch",
+  "refresh_media_metadata",
+  "backfill_cover_cache"
+] as const;
 
 type QueueJob = {
   id: string;
@@ -93,6 +102,7 @@ export function QueuePage() {
   const [statuses, setStatuses] = useState<string[]>([allFilterOption]);
   const [result, setResult] = useState<QueueJobsResponse["queue"]["jobs"] | null>(null);
   const [metricsBuckets, setMetricsBuckets] = useState<QueueMetricsResponse["queue"]["metrics"]["buckets"]>([]);
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const { t } = useI18n();
 
   const renderStatusLabel = useCallback(
@@ -103,6 +113,33 @@ export function QueuePage() {
     },
     [t]
   );
+
+  const normalizeQueueLabel = useCallback(
+    (queueName: string, fallbackLabel?: string) => {
+      const key = `queue.queueValues.${queueName}`;
+      const translated = t(key);
+      if (translated !== key) {
+        return translated;
+      }
+      if (fallbackLabel) {
+        return fallbackLabel;
+      }
+      return queueName.replaceAll("_", " ");
+    },
+    [t]
+  );
+
+  const formatPayload = useCallback((payload: string) => {
+    const text = (payload || "").trim();
+    if (!text) {
+      return "-";
+    }
+    try {
+      return JSON.stringify(JSON.parse(text), null, 2);
+    } catch {
+      return text;
+    }
+  }, []);
 
   const orderFieldLabels: Record<(typeof queueOrderFields)[number], string> = useMemo(
     () => ({
@@ -132,6 +169,23 @@ export function QueuePage() {
       new Map((result?.aggregations.status || []).map((item) => [item.value, item.count])),
     [result?.aggregations.status]
   );
+
+  const queueAggregationItems = useMemo(() => {
+    const aggregated = result?.aggregations.queue || [];
+    const items = aggregated.map((item) => ({
+      value: item.value,
+      label: normalizeQueueLabel(item.value, item.label),
+      count: item.count
+    }));
+    const knownMissing = knownQueueNames
+      .filter((name) => !aggregated.some((item) => item.value === name))
+      .map((name) => ({
+        value: name,
+        label: normalizeQueueLabel(name),
+        count: 0
+      }));
+    return [...items, ...knownMissing];
+  }, [normalizeQueueLabel, result?.aggregations.queue]);
 
   const metricsOption = useMemo(() => {
     const chartTextColor = colorScheme === "dark" ? "#d8e1f0" : "#546072";
@@ -233,6 +287,14 @@ export function QueuePage() {
     void load();
   }, [isAdmin, load]);
 
+  useEffect(() => {
+    if (!expandedJobId) return;
+    const exists = (result?.items || []).some((item) => item.id === expandedJobId);
+    if (!exists) {
+      setExpandedJobId(null);
+    }
+  }, [expandedJobId, result?.items]);
+
   if (authLoading) {
     return (
       <Card className="glass-card" withBorder>
@@ -256,6 +318,22 @@ export function QueuePage() {
       </Card>
     );
   }
+
+  const enqueueMaintenanceTask = async (taskType: "refresh_media_metadata" | "backfill_cover_cache") => {
+    try {
+      await graphqlRequest(QUEUE_ENQUEUE_MAINTENANCE_TASK_MUTATION, {
+        input: {
+          taskType,
+          purge: false,
+          limit: 200
+        }
+      });
+      notifications.show({ color: "green", message: t("queue.enqueueDone") });
+      void load();
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    }
+  };
 
   const openPurgeModal = () => {
     modals.openConfirmModal({
@@ -282,29 +360,42 @@ export function QueuePage() {
 
   const openEnqueueModal = () => {
     const EnqueueForm = () => {
+      const [taskType, setTaskType] = useState("reprocess_batch");
       const [purge, setPurge] = useState(true);
       const [classifierRematch, setClassifierRematch] = useState(false);
       const [apisDisabled, setApisDisabled] = useState(true);
       const [localSearchDisabled, setLocalSearchDisabled] = useState(true);
       const [orphans, setOrphans] = useState(false);
+      const [maintenanceLimit, setMaintenanceLimit] = useState<number | "">(200);
       const [batchSize, setBatchSize] = useState<number | "">("");
       const [chunkSize, setChunkSize] = useState<number | "">("");
       const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+      const isReprocess = taskType === "reprocess_batch";
 
       const submit = async () => {
         try {
-          await graphqlRequest(QUEUE_ENQUEUE_REPROCESS_BATCH_MUTATION, {
-            input: {
-              purge,
-              classifierRematch,
-              apisDisabled,
-              localSearchDisabled,
-              orphans: orphans || undefined,
-              batchSize: typeof batchSize === "number" ? batchSize : undefined,
-              chunkSize: typeof chunkSize === "number" ? chunkSize : undefined,
-              contentTypes: selectedTypes.length ? selectedTypes : undefined
-            }
-          });
+          if (isReprocess) {
+            await graphqlRequest(QUEUE_ENQUEUE_REPROCESS_BATCH_MUTATION, {
+              input: {
+                purge,
+                classifierRematch,
+                apisDisabled,
+                localSearchDisabled,
+                orphans: orphans || undefined,
+                batchSize: typeof batchSize === "number" ? batchSize : undefined,
+                chunkSize: typeof chunkSize === "number" ? chunkSize : undefined,
+                contentTypes: selectedTypes.length ? selectedTypes : undefined
+              }
+            });
+          } else {
+            await graphqlRequest(QUEUE_ENQUEUE_MAINTENANCE_TASK_MUTATION, {
+              input: {
+                taskType,
+                purge,
+                limit: typeof maintenanceLimit === "number" ? maintenanceLimit : undefined
+              }
+            });
+          }
           modals.closeAll();
           notifications.show({ color: "green", message: t("queue.enqueueDone") });
           void load();
@@ -315,23 +406,55 @@ export function QueuePage() {
 
       return (
         <Stack>
-          <SimpleGrid cols={{ base: 1, md: 2 }}>
-            <Checkbox label={t("queue.form.purge")} checked={purge} onChange={(e) => setPurge(e.currentTarget.checked)} />
-            <Checkbox label={t("queue.form.classifierRematch")} checked={classifierRematch} onChange={(e) => setClassifierRematch(e.currentTarget.checked)} />
-            <Checkbox label={t("queue.form.apisDisabled")} checked={apisDisabled} onChange={(e) => setApisDisabled(e.currentTarget.checked)} />
-            <Checkbox label={t("queue.form.localSearchDisabled")} checked={localSearchDisabled} onChange={(e) => setLocalSearchDisabled(e.currentTarget.checked)} />
-            <Checkbox label={t("queue.form.orphans")} checked={orphans} onChange={(e) => setOrphans(e.currentTarget.checked)} />
-          </SimpleGrid>
-          <SimpleGrid cols={{ base: 1, md: 2 }}>
-            <NumberInput label={t("queue.form.batchSize")} min={1} value={batchSize} onChange={(value) => setBatchSize(value === "" ? "" : Number(value))} />
-            <NumberInput label={t("queue.form.chunkSize")} min={1} value={chunkSize} onChange={(value) => setChunkSize(value === "" ? "" : Number(value))} />
-          </SimpleGrid>
-          <MultiSelect
-            label={t("queue.form.contentTypes")}
-            data={contentTypes.map((item) => ({ value: item, label: t(`contentTypes.${item}`) }))}
-            value={selectedTypes}
-            onChange={setSelectedTypes}
+          <Select
+            label={t("queue.form.taskType")}
+            value={taskType}
+            allowDeselect={false}
+            onChange={(value) => setTaskType(value || "reprocess_batch")}
+            data={[
+              { value: "reprocess_batch", label: t("queue.form.taskTypes.reprocessBatch") },
+              { value: "refresh_media_metadata", label: t("queue.form.taskTypes.refreshMediaMetadata") },
+              { value: "backfill_cover_cache", label: t("queue.form.taskTypes.backfillCoverCache") }
+            ]}
           />
+          <Text c="dimmed" size="sm">
+            {taskType === "reprocess_batch"
+              ? t("queue.form.taskDescriptions.reprocessBatch")
+              : taskType === "refresh_media_metadata"
+                ? t("queue.form.taskDescriptions.refreshMediaMetadata")
+                : t("queue.form.taskDescriptions.backfillCoverCache")}
+          </Text>
+
+          <Checkbox label={t("queue.form.purge")} checked={purge} onChange={(e) => setPurge(e.currentTarget.checked)} />
+
+          {isReprocess ? (
+            <>
+              <SimpleGrid cols={{ base: 1, md: 2 }}>
+                <Checkbox label={t("queue.form.classifierRematch")} checked={classifierRematch} onChange={(e) => setClassifierRematch(e.currentTarget.checked)} />
+                <Checkbox label={t("queue.form.apisDisabled")} checked={apisDisabled} onChange={(e) => setApisDisabled(e.currentTarget.checked)} />
+                <Checkbox label={t("queue.form.localSearchDisabled")} checked={localSearchDisabled} onChange={(e) => setLocalSearchDisabled(e.currentTarget.checked)} />
+                <Checkbox label={t("queue.form.orphans")} checked={orphans} onChange={(e) => setOrphans(e.currentTarget.checked)} />
+              </SimpleGrid>
+              <SimpleGrid cols={{ base: 1, md: 2 }}>
+                <NumberInput label={t("queue.form.batchSize")} min={1} value={batchSize} onChange={(value) => setBatchSize(value === "" ? "" : Number(value))} />
+                <NumberInput label={t("queue.form.chunkSize")} min={1} value={chunkSize} onChange={(value) => setChunkSize(value === "" ? "" : Number(value))} />
+              </SimpleGrid>
+              <MultiSelect
+                label={t("queue.form.contentTypes")}
+                data={contentTypes.map((item) => ({ value: item, label: t(`contentTypes.${item}`) }))}
+                value={selectedTypes}
+                onChange={setSelectedTypes}
+              />
+            </>
+          ) : (
+            <NumberInput
+              label={t("queue.form.limit")}
+              min={1}
+              max={2000}
+              value={maintenanceLimit}
+              onChange={(value) => setMaintenanceLimit(value === "" ? "" : Number(value))}
+            />
+          )}
           <Group justify="flex-end" className="modal-footer">
             <Button onClick={() => modals.closeAll()} variant="default">
               {t("common.cancel")}
@@ -370,6 +493,24 @@ export function QueuePage() {
           <Text c="dimmed">{t("queue.subtitle")}</Text>
         </div>
         <Group>
+          <Tooltip label={t("queue.quickActions.refreshMetadataHint")} withArrow>
+            <Button
+              variant="light"
+              leftSection={<Sparkles size={16} />}
+              onClick={() => void enqueueMaintenanceTask("refresh_media_metadata")}
+            >
+              {t("queue.quickActions.refreshMetadata")}
+            </Button>
+          </Tooltip>
+          <Tooltip label={t("queue.quickActions.backfillCoverHint")} withArrow>
+            <Button
+              variant="light"
+              leftSection={<ImageDown size={16} />}
+              onClick={() => void enqueueMaintenanceTask("backfill_cover_cache")}
+            >
+              {t("queue.quickActions.backfillCover")}
+            </Button>
+          </Tooltip>
           <Button leftSection={<CalendarSync size={16} />} onClick={openEnqueueModal}>
             {t("queue.enqueue")}
           </Button>
@@ -395,6 +536,22 @@ export function QueuePage() {
         ))}
       </SimpleGrid>
 
+      <Card className="glass-card queue-section-block" withBorder>
+        <Group mb="sm">
+          <DatabaseBackup size={16} />
+          <Text fw={600}>{t("queue.queueSummaryTitle")}</Text>
+        </Group>
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
+          {queueAggregationItems.map((item) => (
+            <Card key={item.value} className="queue-summary-item" radius="md" p="sm">
+              <Text c="dimmed" size="sm">{item.label}</Text>
+              <Text fw={700} size="lg">{item.count}</Text>
+              <Text size="xs" c="dimmed">{item.value}</Text>
+            </Card>
+          ))}
+        </SimpleGrid>
+      </Card>
+
       <Card className="glass-card" withBorder>
         <Group mb="sm">
           <Filter size={16} />
@@ -405,10 +562,10 @@ export function QueuePage() {
             label={t("queue.queueFilter")}
             data={[
               { value: allFilterOption, label: `${t("queue.all")} (${result?.totalCount ?? 0})` },
-              ...((result?.aggregations.queue || []).map((item) => ({
+              ...queueAggregationItems.map((item) => ({
                 value: item.value,
                 label: `${item.label} (${item.count})`
-              })))
+              }))
             ]}
             value={queues}
             onChange={(value) => {
@@ -521,22 +678,61 @@ export function QueuePage() {
                 </Table.Tr>
               ) : (
                 (result?.items || []).map((job) => (
-                  <Table.Tr key={job.id}>
-                    <Table.Td>{job.id}</Table.Td>
-                    <Table.Td>{job.queue}</Table.Td>
-                    <Table.Td>
-                      <Badge color={job.status === "failed" ? "red" : job.status === "processed" ? "green" : "yellow"}>
-                        {renderStatusLabel(job.status)}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>{job.priority}</Table.Td>
-                    <Table.Td>
-                      {job.retries}/{job.maxRetries}
-                    </Table.Td>
-                    <Table.Td>{new Date(job.createdAt).toLocaleString()}</Table.Td>
-                    <Table.Td>{job.ranAt ? new Date(job.ranAt).toLocaleString() : "-"}</Table.Td>
-                    <Table.Td>{job.error || "-"}</Table.Td>
-                  </Table.Tr>
+                  <Fragment key={job.id}>
+                    <Table.Tr
+                      style={{ cursor: "pointer" }}
+                      onClick={() => {
+                        setExpandedJobId((current) => (current === job.id ? null : job.id));
+                      }}
+                    >
+                      <Table.Td>{job.id}</Table.Td>
+                      <Table.Td>
+                        <Stack gap={2}>
+                          <Text size="sm">{normalizeQueueLabel(job.queue)}</Text>
+                          <Text size="xs" c="dimmed">{job.queue}</Text>
+                        </Stack>
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge color={job.status === "failed" ? "red" : job.status === "processed" ? "green" : "yellow"}>
+                          {renderStatusLabel(job.status)}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>{job.priority}</Table.Td>
+                      <Table.Td>
+                        {job.retries}/{job.maxRetries}
+                      </Table.Td>
+                      <Table.Td>{new Date(job.createdAt).toLocaleString()}</Table.Td>
+                      <Table.Td>{job.ranAt ? new Date(job.ranAt).toLocaleString() : "-"}</Table.Td>
+                      <Table.Td>{job.error || "-"}</Table.Td>
+                    </Table.Tr>
+                    {expandedJobId === job.id ? (
+                      <Table.Tr>
+                        <Table.Td colSpan={8}>
+                          <Card className="queue-detail-panel" radius="md" p="sm">
+                            <Stack gap="sm">
+                              <Text fw={600}>{t("queue.details.title")}</Text>
+                              <SimpleGrid cols={{ base: 1, md: 2 }}>
+                                <div>
+                                  <Text c="dimmed" size="xs">{t("queue.details.queueRaw")}</Text>
+                                  <Text size="sm">{job.queue}</Text>
+                                </div>
+                                <div>
+                                  <Text c="dimmed" size="xs">{t("queue.details.nextRun")}</Text>
+                                  <Text size="sm">{new Date(job.runAfter).toLocaleString()}</Text>
+                                </div>
+                              </SimpleGrid>
+                              <div>
+                                <Text c="dimmed" size="xs">{t("queue.details.payload")}</Text>
+                                <ScrollArea.Autosize mah={180} type="auto">
+                                  <Text ff="monospace" size="xs">{formatPayload(job.payload)}</Text>
+                                </ScrollArea.Autosize>
+                              </div>
+                            </Stack>
+                          </Card>
+                        </Table.Td>
+                      </Table.Tr>
+                    ) : null}
+                  </Fragment>
                 ))
               )}
             </Table.Tbody>

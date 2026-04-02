@@ -60,3 +60,11 @@ func (m *QueueMutation) EnqueueReprocessTorrentsBatch(
 	err := m.QueueManager.EnqueueReprocessTorrentsBatch(ctx, input)
 	return nil, err
 }
+
+func (m *QueueMutation) EnqueueMaintenanceTask(
+	ctx context.Context,
+	input manager.EnqueueMaintenanceTaskRequest,
+) (*string, error) {
+	err := m.QueueManager.EnqueueMaintenanceTask(ctx, input)
+	return nil, err
+}

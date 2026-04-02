@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActionIcon,
   Accordion,
@@ -11,9 +11,9 @@ import {
   Loader,
   Modal,
   NumberInput,
-  Pagination,
   ScrollArea,
   Select,
+  SimpleGrid,
   Stack,
   Switch,
   Table,
@@ -21,10 +21,11 @@ import {
   Text,
   TextInput,
   Textarea,
+  Tooltip,
   Title
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { LogIn, Pencil, Plus, RefreshCcw, Save, Trash2 } from "lucide-react";
+import { CircleHelp, LogIn, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { apiRequest } from "@/lib/api";
@@ -32,7 +33,6 @@ import { useTabsUnderline } from "@/lib/use-tabs-underline";
 import { useI18n } from "@/languages/provider";
 
 type SystemSettings = {
-  logLevel: string;
   tmdbEnabled: boolean;
   imdbEnabled: boolean;
   doubanEnabled: boolean;
@@ -41,26 +41,62 @@ type SystemSettings = {
   doubanUserAgent: string;
   doubanAcceptLanguage: string;
   doubanReferer: string;
+  performance: {
+    dht: {
+      scalingFactor: number;
+      reseedIntervalSeconds: number;
+      saveFilesThreshold: number;
+      savePieces: boolean;
+      rescrapeThresholdHours: number;
+      statusLogIntervalSeconds: number;
+      getOldestNodesIntervalSeconds: number;
+      oldPeerThresholdMinutes: number;
+    };
+    queue: {
+      processTorrentConcurrency: number;
+      processTorrentCheckIntervalSeconds: number;
+      processTorrentTimeoutSeconds: number;
+      processTorrentBatchConcurrency: number;
+      processTorrentBatchCheckIntervalSeconds: number;
+      processTorrentBatchTimeoutSeconds: number;
+      refreshMediaMetadataConcurrency: number;
+      refreshMediaMetadataCheckIntervalSeconds: number;
+      refreshMediaMetadataTimeoutSeconds: number;
+      backfillCoverCacheConcurrency: number;
+      backfillCoverCacheCheckIntervalSeconds: number;
+      backfillCoverCacheTimeoutSeconds: number;
+    };
+    media: {
+      autoCacheCover: boolean;
+      autoFetchBilingual: boolean;
+    };
+  };
 };
 
 type SettingsResponse = {
   settings: SystemSettings;
 };
 
-type LogsResponse = {
+type RuntimeSettingStatus = {
+  key: string;
+  value: string;
+  source: "runtime" | "default";
+};
+
+type WorkerRuntimeStatus = {
+  key: string;
   enabled: boolean;
-  path: string;
-  categories: Array<{ key: string }>;
-  category: string;
-  files: Array<{ name: string; sizeBytes: number; updatedAt: string }>;
-  selectedFile?: string;
-  updatedAt?: string;
-  page: number;
-  linesPerPage: number;
-  totalPages: number;
-  totalLines: number;
-  lines: string[];
-  message?: string;
+  started: boolean;
+};
+
+type RuntimeStatus = {
+  checkedAt: string;
+  settings: RuntimeSettingStatus[];
+  workers: WorkerRuntimeStatus[];
+};
+
+type RuntimeStatusResponse = {
+  status: RuntimeStatus;
 };
 
 type PluginTestResult = {
@@ -91,22 +127,100 @@ type SubtitleTemplateResponse = {
   template: SubtitleTemplate;
 };
 
-const LOG_LEVEL_OPTIONS = [
-  { value: "DEBUG", label: "DEBUG" },
-  { value: "INFO", label: "INFO" },
-  { value: "WARNING", label: "WARNING" },
-  { value: "ERROR", label: "ERROR" },
-  { value: "CRITICAL", label: "CRITICAL" },
-  { value: "ALERT", label: "ALERT" },
-  { value: "EMERGENCY", label: "EMERGENCY" }
-] as const;
+type PerformancePresetKey = "resource" | "realtime" | "throughput";
 
-const LOG_LINES_OPTIONS = [
-  { value: "100", label: "100" },
-  { value: "200", label: "200" },
-  { value: "500", label: "500" },
-  { value: "1000", label: "1000" }
-] as const;
+const PERFORMANCE_PRESETS: Record<PerformancePresetKey, SystemSettings["performance"]> = {
+  resource: {
+    dht: {
+      scalingFactor: 4,
+      reseedIntervalSeconds: 120,
+      saveFilesThreshold: 80,
+      savePieces: false,
+      rescrapeThresholdHours: 24 * 30,
+      statusLogIntervalSeconds: 90,
+      getOldestNodesIntervalSeconds: 20,
+      oldPeerThresholdMinutes: 20
+    },
+    queue: {
+      processTorrentConcurrency: 1,
+      processTorrentCheckIntervalSeconds: 45,
+      processTorrentTimeoutSeconds: 10 * 60,
+      processTorrentBatchConcurrency: 1,
+      processTorrentBatchCheckIntervalSeconds: 45,
+      processTorrentBatchTimeoutSeconds: 10 * 60,
+      refreshMediaMetadataConcurrency: 1,
+      refreshMediaMetadataCheckIntervalSeconds: 45,
+      refreshMediaMetadataTimeoutSeconds: 20 * 60,
+      backfillCoverCacheConcurrency: 1,
+      backfillCoverCacheCheckIntervalSeconds: 45,
+      backfillCoverCacheTimeoutSeconds: 20 * 60
+    },
+    media: {
+      autoCacheCover: false,
+      autoFetchBilingual: false
+    }
+  },
+  realtime: {
+    dht: {
+      scalingFactor: 8,
+      reseedIntervalSeconds: 30,
+      saveFilesThreshold: 100,
+      savePieces: false,
+      rescrapeThresholdHours: 24 * 7,
+      statusLogIntervalSeconds: 30,
+      getOldestNodesIntervalSeconds: 6,
+      oldPeerThresholdMinutes: 10
+    },
+    queue: {
+      processTorrentConcurrency: 2,
+      processTorrentCheckIntervalSeconds: 8,
+      processTorrentTimeoutSeconds: 10 * 60,
+      processTorrentBatchConcurrency: 1,
+      processTorrentBatchCheckIntervalSeconds: 10,
+      processTorrentBatchTimeoutSeconds: 10 * 60,
+      refreshMediaMetadataConcurrency: 2,
+      refreshMediaMetadataCheckIntervalSeconds: 10,
+      refreshMediaMetadataTimeoutSeconds: 20 * 60,
+      backfillCoverCacheConcurrency: 2,
+      backfillCoverCacheCheckIntervalSeconds: 10,
+      backfillCoverCacheTimeoutSeconds: 20 * 60
+    },
+    media: {
+      autoCacheCover: true,
+      autoFetchBilingual: true
+    }
+  },
+  throughput: {
+    dht: {
+      scalingFactor: 20,
+      reseedIntervalSeconds: 30,
+      saveFilesThreshold: 300,
+      savePieces: false,
+      rescrapeThresholdHours: 24 * 7,
+      statusLogIntervalSeconds: 30,
+      getOldestNodesIntervalSeconds: 5,
+      oldPeerThresholdMinutes: 10
+    },
+    queue: {
+      processTorrentConcurrency: 4,
+      processTorrentCheckIntervalSeconds: 10,
+      processTorrentTimeoutSeconds: 15 * 60,
+      processTorrentBatchConcurrency: 3,
+      processTorrentBatchCheckIntervalSeconds: 10,
+      processTorrentBatchTimeoutSeconds: 15 * 60,
+      refreshMediaMetadataConcurrency: 3,
+      refreshMediaMetadataCheckIntervalSeconds: 15,
+      refreshMediaMetadataTimeoutSeconds: 30 * 60,
+      backfillCoverCacheConcurrency: 2,
+      backfillCoverCacheCheckIntervalSeconds: 15,
+      backfillCoverCacheTimeoutSeconds: 30 * 60
+    },
+    media: {
+      autoCacheCover: true,
+      autoFetchBilingual: true
+    }
+  }
+};
 
 export function SettingsPage() {
   const { t } = useI18n();
@@ -115,8 +229,9 @@ export function SettingsPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [runtimeStatusLoading, setRuntimeStatusLoading] = useState(false);
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
   const [settings, setSettings] = useState<SystemSettings>({
-    logLevel: "INFO",
     tmdbEnabled: true,
     imdbEnabled: true,
     doubanEnabled: true,
@@ -124,16 +239,38 @@ export function SettingsPage() {
     doubanCookie: "",
     doubanUserAgent: "",
     doubanAcceptLanguage: "",
-    doubanReferer: ""
+    doubanReferer: "",
+    performance: {
+      dht: {
+        scalingFactor: 10,
+        reseedIntervalSeconds: 60,
+        saveFilesThreshold: 100,
+        savePieces: false,
+        rescrapeThresholdHours: 24 * 30,
+        statusLogIntervalSeconds: 45,
+        getOldestNodesIntervalSeconds: 10,
+        oldPeerThresholdMinutes: 15
+      },
+      queue: {
+        processTorrentConcurrency: 1,
+        processTorrentCheckIntervalSeconds: 30,
+        processTorrentTimeoutSeconds: 10 * 60,
+        processTorrentBatchConcurrency: 1,
+        processTorrentBatchCheckIntervalSeconds: 30,
+        processTorrentBatchTimeoutSeconds: 10 * 60,
+        refreshMediaMetadataConcurrency: 1,
+        refreshMediaMetadataCheckIntervalSeconds: 30,
+        refreshMediaMetadataTimeoutSeconds: 20 * 60,
+        backfillCoverCacheConcurrency: 1,
+        backfillCoverCacheCheckIntervalSeconds: 30,
+        backfillCoverCacheTimeoutSeconds: 20 * 60
+      },
+      media: {
+        autoCacheCover: true,
+        autoFetchBilingual: true
+      }
+    }
   });
-
-  const [logsLoading, setLogsLoading] = useState(false);
-  const [logsRefreshNonce, setLogsRefreshNonce] = useState(0);
-  const [logsCategory, setLogsCategory] = useState("main");
-  const [logsFile, setLogsFile] = useState("");
-  const [logsPage, setLogsPage] = useState(1);
-  const [logsLines, setLogsLines] = useState(1000);
-  const [logs, setLogs] = useState<LogsResponse | null>(null);
   const [pluginTesting, setPluginTesting] = useState<Record<string, boolean>>({});
   const [pluginResults, setPluginResults] = useState<Record<string, PluginTestResult | null>>({});
   const [pluginInputs, setPluginInputs] = useState({
@@ -173,6 +310,24 @@ export function SettingsPage() {
     void loadSettings();
   }, [isAdmin, loadSettings]);
 
+  const loadRuntimeStatus = useCallback(async () => {
+    if (!isAdmin) return;
+    setRuntimeStatusLoading(true);
+    try {
+      const data = await apiRequest<RuntimeStatusResponse>("/api/admin/settings/runtime-status");
+      setRuntimeStatus(data.status);
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setRuntimeStatusLoading(false);
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void loadRuntimeStatus();
+  }, [isAdmin, loadRuntimeStatus]);
+
   const loadSubtitleTemplates = useCallback(async () => {
     if (!isAdmin) return;
     setSubtitleTemplatesLoading(true);
@@ -191,56 +346,10 @@ export function SettingsPage() {
     void loadSubtitleTemplates();
   }, [isAdmin, loadSubtitleTemplates]);
 
-  useEffect(() => {
-    if (!isAdmin) return;
-
-    let cancelled = false;
-    const run = async () => {
-      setLogsLoading(true);
-      try {
-        const query = new URLSearchParams({
-          category: logsCategory,
-          page: String(logsPage),
-          lines: String(logsLines)
-        });
-        if (logsFile) {
-          query.set("file", logsFile);
-        }
-        const data = await apiRequest<LogsResponse>(`/api/logs?${query.toString()}`);
-        if (cancelled) return;
-
-        setLogs(data);
-        if (data.category && data.category !== logsCategory) {
-          setLogsCategory(data.category);
-        }
-        const selectedFile = data.selectedFile || "";
-        if (selectedFile !== logsFile) {
-          setLogsFile(selectedFile);
-        }
-        if (data.page > 0 && data.page !== logsPage) {
-          setLogsPage(data.page);
-        }
-      } catch (error) {
-        if (cancelled) return;
-        notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
-      } finally {
-        if (!cancelled) {
-          setLogsLoading(false);
-        }
-      }
-    };
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [isAdmin, logsCategory, logsFile, logsLines, logsPage, logsRefreshNonce]);
-
   const saveSettings = async () => {
     setSaving(true);
     try {
       const payload = {
-        logLevel: settings.logLevel,
         tmdbEnabled: settings.tmdbEnabled,
         imdbEnabled: settings.imdbEnabled,
         doubanEnabled: settings.doubanEnabled,
@@ -248,12 +357,13 @@ export function SettingsPage() {
         doubanCookie: settings.doubanCookie,
         doubanUserAgent: settings.doubanUserAgent,
         doubanAcceptLanguage: settings.doubanAcceptLanguage,
-        doubanReferer: settings.doubanReferer
+        doubanReferer: settings.doubanReferer,
+        performance: settings.performance
       };
       const data = await apiRequest<SettingsResponse>("/api/admin/settings", { method: "PUT", data: payload });
       setSettings(data.settings);
+      void loadRuntimeStatus();
       notifications.show({ color: "green", message: t("settings.saved") });
-      setLogsRefreshNonce((current) => current + 1);
     } catch (error) {
       notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
     } finally {
@@ -368,31 +478,6 @@ export function SettingsPage() {
     }
   };
 
-  const categoryOptions = useMemo(
-    () =>
-      (logs?.categories?.length ? logs.categories : [{ key: "main" }, { key: "dht" }, { key: "site_plugins" }]).map((item) => ({
-        value: item.key,
-        label: t(`settings.logCategory.${item.key}`)
-      })),
-    [logs?.categories, t]
-  );
-
-  const fileOptions = useMemo(
-    () =>
-      (logs?.files || []).map((item) => ({
-        value: item.name,
-        label: item.name
-      })),
-    [logs?.files]
-  );
-
-  const logContent = useMemo(() => {
-    if (logs?.lines?.length) {
-      return logs.lines.join("\n");
-    }
-    return logs?.message || t("settings.logsEmpty");
-  }, [logs?.lines, logs?.message, t]);
-
   const renderPluginResult = (plugin: "tmdb" | "imdb" | "douban") => {
     const result = pluginResults[plugin];
     if (!result) return null;
@@ -400,6 +485,98 @@ export function SettingsPage() {
       <ScrollArea className="settings-plugin-test-scroll" h={320} type="auto" scrollbarSize={8}>
         <pre className="settings-plugin-test-content">{JSON.stringify(result, null, 2)}</pre>
       </ScrollArea>
+    );
+  };
+
+  const updateDHTPerformance = (updates: Partial<SystemSettings["performance"]["dht"]>) => {
+    setSettings((current) => ({
+      ...current,
+      performance: {
+        ...current.performance,
+        dht: {
+          ...current.performance.dht,
+          ...updates
+        }
+      }
+    }));
+  };
+
+  const updateQueuePerformance = (updates: Partial<SystemSettings["performance"]["queue"]>) => {
+    setSettings((current) => ({
+      ...current,
+      performance: {
+        ...current.performance,
+        queue: {
+          ...current.performance.queue,
+          ...updates
+        }
+      }
+    }));
+  };
+
+  const updateMediaPerformance = (updates: Partial<SystemSettings["performance"]["media"]>) => {
+    setSettings((current) => ({
+      ...current,
+      performance: {
+        ...current.performance,
+        media: {
+          ...current.performance.media,
+          ...updates
+        }
+      }
+    }));
+  };
+
+  const applyPerformancePreset = (preset: PerformancePresetKey) => {
+    const next = PERFORMANCE_PRESETS[preset];
+    setSettings((current) => ({
+      ...current,
+      performance: {
+        dht: { ...next.dht },
+        queue: { ...next.queue },
+        media: { ...next.media }
+      }
+    }));
+    notifications.show({
+      color: "green",
+      message: `${t("settings.performancePresetApplied")} ${t(`settings.performancePresetOptions.${preset}`)}`
+    });
+  };
+
+  const renderPerformanceLabel = (label: string, impact: string) => (
+    <Group gap={6} wrap="nowrap">
+      <span>{label}</span>
+      <Tooltip label={impact} withArrow multiline maw={340}>
+        <ActionIcon
+          size={18}
+          radius="xl"
+          variant="subtle"
+          color="gray"
+          aria-label={t("settings.performanceImpactAria")}
+        >
+          <CircleHelp size={13} />
+        </ActionIcon>
+      </Tooltip>
+    </Group>
+  );
+
+  const formatRuntimeCheckedAt = (value: string) => {
+    if (!value) return "-";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleString();
+  };
+
+  const renderRuntimeValue = (value: string) => {
+    const maxLength = 72;
+    if (value.length <= maxLength) {
+      return <Text className="settings-runtime-value">{value}</Text>;
+    }
+    const truncated = `${value.slice(0, maxLength - 1)}…`;
+    return (
+      <Tooltip label={value} withArrow multiline maw={560}>
+        <Text className="settings-runtime-value settings-runtime-value-truncated">{truncated}</Text>
+      </Tooltip>
     );
   };
 
@@ -440,89 +617,388 @@ export function SettingsPage() {
   return (
     <Stack gap="md">
       <Card className="glass-card" withBorder>
-        <Stack gap={4}>
-          <Title order={2}>{t("settings.title")}</Title>
-          <Text c="dimmed">{t("settings.subtitle")}</Text>
-        </Stack>
+        <Group justify="space-between" align="flex-start" wrap="wrap">
+          <Stack gap={4}>
+            <Title order={2}>{t("settings.title")}</Title>
+            <Text c="dimmed">{t("settings.subtitle")}</Text>
+          </Stack>
+          <Group>
+            <Button
+              variant="default"
+              onClick={() => {
+                void loadSettings();
+                void loadRuntimeStatus();
+                void loadSubtitleTemplates();
+              }}
+            >
+              {t("common.refresh")}
+            </Button>
+            <Button leftSection={<Save size={14} />} loading={saving} onClick={() => void saveSettings()}>
+              {t("settings.save")}
+            </Button>
+          </Group>
+        </Group>
       </Card>
 
       <Card className="glass-card" withBorder>
-        <Tabs ref={tabsRef} className="app-tabs" defaultValue="logs">
+        <Tabs ref={tabsRef} className="app-tabs" defaultValue="performance">
           <Tabs.List grow>
-            <Tabs.Tab value="logs">{t("settings.tabLogs")}</Tabs.Tab>
+            <Tabs.Tab value="performance">{t("settings.tabPerformance")}</Tabs.Tab>
             <Tabs.Tab value="plugins">{t("settings.tabSitePlugins")}</Tabs.Tab>
           </Tabs.List>
 
-          <Tabs.Panel value="logs" pt="md">
+          <Tabs.Panel value="performance" pt="md">
             <Stack gap="md">
-              <Select
-                label={t("settings.logLevel")}
-                value={settings.logLevel}
-                onChange={(value) => setSettings((current) => ({ ...current, logLevel: value || "INFO" }))}
-                data={LOG_LEVEL_OPTIONS.map((item) => ({ value: item.value, label: item.label }))}
-                allowDeselect={false}
-              />
+              <Title order={4}>{t("settings.performanceTitle")}</Title>
+              <Text c="dimmed" size="sm">{t("settings.performanceHint")}</Text>
 
-              <Group grow className="settings-log-controls">
-                <Select
-                  label={t("settings.logCategoryLabel")}
-                  value={logsCategory}
-                  data={categoryOptions}
-                  allowDeselect={false}
-                  onChange={(value) => {
-                    setLogsCategory(value || "main");
-                    setLogsFile("");
-                    setLogsPage(1);
-                  }}
-                />
-                <Select
-                  label={t("settings.logFileLabel")}
-                  value={logsFile}
-                  data={fileOptions}
-                  placeholder={t("settings.logFilePlaceholder")}
-                  onChange={(value) => {
-                    setLogsFile(value || "");
-                    setLogsPage(1);
-                  }}
-                  searchable
-                  clearable
-                />
-                <Select
-                  label={t("settings.logLinesPerPage")}
-                  value={String(logsLines)}
-                  data={LOG_LINES_OPTIONS.map((item) => ({ value: item.value, label: item.label }))}
-                  allowDeselect={false}
-                  onChange={(value) => {
-                    const parsed = Number(value || "1000");
-                    setLogsLines(Number.isFinite(parsed) ? parsed : 1000);
-                    setLogsPage(1);
-                  }}
-                />
-              </Group>
+              <Card className="settings-section-block" radius="lg">
+                <Stack gap="sm">
+                  <Group justify="space-between" align="flex-start" wrap="wrap">
+                    <Stack gap={2}>
+                      <Title order={5}>{t("settings.runtimeStatusTitle")}</Title>
+                      <Text c="dimmed" size="sm">{t("settings.runtimeStatusHint")}</Text>
+                    </Stack>
+                    <Button size="xs" variant="default" loading={runtimeStatusLoading} onClick={() => void loadRuntimeStatus()}>
+                      {t("common.refresh")}
+                    </Button>
+                  </Group>
 
-              <Group justify="space-between">
-                <Text c="dimmed" size="sm">
-                  {t("settings.logPath")}: {logs?.path || "-"} · {t("common.total")} {logs?.totalLines || 0}
-                </Text>
-                <Button
-                  variant="default"
-                  leftSection={<RefreshCcw size={14} />}
-                  loading={logsLoading}
-                  onClick={() => setLogsRefreshNonce((current) => current + 1)}
-                >
-                  {t("common.refresh")}
-                </Button>
-              </Group>
+                  <Text size="sm" c="dimmed">
+                    {t("settings.runtimeStatusCheckedAt")}: {formatRuntimeCheckedAt(runtimeStatus?.checkedAt || "")}
+                  </Text>
 
-              <Pagination
-                total={Math.max(logs?.totalPages || 1, 1)}
-                value={logsPage}
-                onChange={setLogsPage}
-              />
+                  <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+                    <Stack gap={8}>
+                      <Text fw={600} size="sm">{t("settings.runtimeStatusWorkersTitle")}</Text>
+                      {runtimeStatus?.workers?.length ? (
+                        <Group gap={8} className="settings-runtime-worker-list">
+                          {runtimeStatus.workers.map((worker) => (
+                            <Card key={worker.key} className="settings-runtime-worker-item" p="xs" radius="md">
+                              <Stack gap={6}>
+                                <Text className="settings-runtime-worker-key">{worker.key}</Text>
+                                <Group gap={6}>
+                                  <Badge size="sm" variant="light" color={worker.enabled ? "teal" : "gray"}>
+                                    {t("settings.runtimeStatusEnabledLabel")}: {worker.enabled ? t("common.yes") : t("common.no")}
+                                  </Badge>
+                                  <Badge size="sm" variant="light" color={worker.started ? "green" : "yellow"}>
+                                    {t("settings.runtimeStatusStartedLabel")}: {worker.started ? t("common.yes") : t("common.no")}
+                                  </Badge>
+                                </Group>
+                              </Stack>
+                            </Card>
+                          ))}
+                        </Group>
+                      ) : (
+                        <Text size="sm" c="dimmed">{t("settings.runtimeStatusNoWorkers")}</Text>
+                      )}
+                    </Stack>
 
-              <ScrollArea className="settings-log-scroll" h={560} type="auto" scrollbarSize={8}>
-                <pre className="settings-log-content">{logContent}</pre>
-              </ScrollArea>
+                    <Stack gap={8}>
+                      <Text fw={600} size="sm">{t("settings.runtimeStatusSettingsTitle")}</Text>
+                      {runtimeStatus?.settings?.length ? (
+                        <ScrollArea.Autosize mah={280} type="auto" scrollbarSize={8}>
+                          <Stack gap={6} className="settings-runtime-key-list">
+                            {runtimeStatus.settings.map((item) => (
+                              <div key={item.key} className="settings-runtime-key-row">
+                                <div className="settings-runtime-key-head">
+                                  <Text className="settings-runtime-key">{item.key}</Text>
+                                  <Text className={`settings-runtime-key-source ${item.source === "runtime" ? "is-runtime" : "is-default"}`}>
+                                    ({item.source === "runtime" ? t("settings.runtimeStatusSourceRuntime") : t("settings.runtimeStatusSourceDefault")})
+                                  </Text>
+                                </div>
+                                {renderRuntimeValue(item.value === "" ? t("settings.runtimeStatusEmptyValue") : item.value)}
+                              </div>
+                            ))}
+                          </Stack>
+                        </ScrollArea.Autosize>
+                      ) : (
+                        <Text size="sm" c="dimmed">{t("settings.runtimeStatusNoSettings")}</Text>
+                      )}
+                    </Stack>
+                  </SimpleGrid>
+                </Stack>
+              </Card>
+
+              <Card className="settings-section-block" radius="lg">
+                <Stack gap="sm">
+                  <Title order={5}>{t("settings.performancePresetTitle")}</Title>
+                  <Text c="dimmed" size="sm">{t("settings.performancePresetHint")}</Text>
+                  <SimpleGrid cols={{ base: 1, md: 3 }}>
+                    {(["resource", "realtime", "throughput"] as PerformancePresetKey[]).map((preset) => (
+                      <Card key={preset} className="settings-preset-card" radius="md" p="sm">
+                        <Stack gap={8}>
+                          <Text fw={700}>{t(`settings.performancePresetOptions.${preset}`)}</Text>
+                          <Text size="sm" c="dimmed">{t(`settings.performancePresetDescriptions.${preset}`)}</Text>
+                          <Button size="xs" variant="light" onClick={() => applyPerformancePreset(preset)}>
+                            {t("settings.performancePresetApply")}
+                          </Button>
+                        </Stack>
+                      </Card>
+                    ))}
+                  </SimpleGrid>
+                </Stack>
+              </Card>
+
+              <Card className="settings-section-block" radius="lg">
+                <Stack gap="sm">
+                  <Title order={5}>{t("settings.performanceDhtTitle")}</Title>
+                  <SimpleGrid cols={{ base: 1, md: 2 }}>
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.dhtScalingFactor"), t("settings.performanceImpact.dhtScalingFactor"))}
+                      min={1}
+                      max={200}
+                      value={settings.performance.dht.scalingFactor}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateDHTPerformance({ scalingFactor: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.dhtReseedIntervalSeconds"), t("settings.performanceImpact.dhtReseedIntervalSeconds"))}
+                      min={10}
+                      max={3600}
+                      value={settings.performance.dht.reseedIntervalSeconds}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateDHTPerformance({ reseedIntervalSeconds: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.dhtSaveFilesThreshold"), t("settings.performanceImpact.dhtSaveFilesThreshold"))}
+                      min={1}
+                      max={20000}
+                      value={settings.performance.dht.saveFilesThreshold}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateDHTPerformance({ saveFilesThreshold: value });
+                        }
+                      }}
+                    />
+                    <Stack gap={6} className="settings-switch-field">
+                      <div className="settings-switch-field-label">
+                        {renderPerformanceLabel(t("settings.dhtSavePieces"), t("settings.performanceImpact.dhtSavePieces"))}
+                      </div>
+                      <Switch
+                        checked={settings.performance.dht.savePieces}
+                        onChange={(event) => updateDHTPerformance({ savePieces: event.currentTarget.checked })}
+                      />
+                    </Stack>
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.dhtRescrapeThresholdHours"), t("settings.performanceImpact.dhtRescrapeThresholdHours"))}
+                      min={1}
+                      max={24 * 365}
+                      value={settings.performance.dht.rescrapeThresholdHours}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateDHTPerformance({ rescrapeThresholdHours: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.dhtStatusLogIntervalSeconds"), t("settings.performanceImpact.dhtStatusLogIntervalSeconds"))}
+                      min={5}
+                      max={3600}
+                      value={settings.performance.dht.statusLogIntervalSeconds}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateDHTPerformance({ statusLogIntervalSeconds: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.dhtGetOldestNodesIntervalSeconds"), t("settings.performanceImpact.dhtGetOldestNodesIntervalSeconds"))}
+                      min={1}
+                      max={600}
+                      value={settings.performance.dht.getOldestNodesIntervalSeconds}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateDHTPerformance({ getOldestNodesIntervalSeconds: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.dhtOldPeerThresholdMinutes"), t("settings.performanceImpact.dhtOldPeerThresholdMinutes"))}
+                      min={1}
+                      max={24 * 60}
+                      value={settings.performance.dht.oldPeerThresholdMinutes}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateDHTPerformance({ oldPeerThresholdMinutes: value });
+                        }
+                      }}
+                    />
+                  </SimpleGrid>
+                </Stack>
+              </Card>
+
+              <Card className="settings-section-block" radius="lg">
+                <Stack gap="sm">
+                  <Title order={5}>{t("settings.performanceMediaTitle")}</Title>
+                  <SimpleGrid cols={{ base: 1, md: 2 }}>
+                    <Stack gap={6} className="settings-switch-field">
+                      <div className="settings-switch-field-label">
+                        {renderPerformanceLabel(t("settings.mediaAutoCacheCover"), t("settings.performanceImpact.mediaAutoCacheCover"))}
+                      </div>
+                      <Switch
+                        checked={settings.performance.media.autoCacheCover}
+                        onChange={(event) => updateMediaPerformance({ autoCacheCover: event.currentTarget.checked })}
+                      />
+                    </Stack>
+                    <Stack gap={6} className="settings-switch-field">
+                      <div className="settings-switch-field-label">
+                        {renderPerformanceLabel(t("settings.mediaAutoFetchBilingual"), t("settings.performanceImpact.mediaAutoFetchBilingual"))}
+                      </div>
+                      <Switch
+                        checked={settings.performance.media.autoFetchBilingual}
+                        onChange={(event) => updateMediaPerformance({ autoFetchBilingual: event.currentTarget.checked })}
+                      />
+                    </Stack>
+                  </SimpleGrid>
+                </Stack>
+              </Card>
+
+              <Card className="settings-section-block" radius="lg">
+                <Stack gap="sm">
+                  <Title order={5}>{t("settings.performanceQueueTitle")}</Title>
+                  <SimpleGrid cols={{ base: 1, md: 3 }}>
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.queueProcessTorrentConcurrency"), t("settings.performanceImpact.queueProcessTorrentConcurrency"))}
+                      min={1}
+                      max={128}
+                      value={settings.performance.queue.processTorrentConcurrency}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateQueuePerformance({ processTorrentConcurrency: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.queueProcessTorrentCheckIntervalSeconds"), t("settings.performanceImpact.queueProcessTorrentCheckIntervalSeconds"))}
+                      min={1}
+                      max={300}
+                      value={settings.performance.queue.processTorrentCheckIntervalSeconds}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateQueuePerformance({ processTorrentCheckIntervalSeconds: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.queueProcessTorrentTimeoutSeconds"), t("settings.performanceImpact.queueProcessTorrentTimeoutSeconds"))}
+                      min={5}
+                      max={7200}
+                      value={settings.performance.queue.processTorrentTimeoutSeconds}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateQueuePerformance({ processTorrentTimeoutSeconds: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.queueProcessTorrentBatchConcurrency"), t("settings.performanceImpact.queueProcessTorrentBatchConcurrency"))}
+                      min={1}
+                      max={128}
+                      value={settings.performance.queue.processTorrentBatchConcurrency}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateQueuePerformance({ processTorrentBatchConcurrency: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.queueProcessTorrentBatchCheckIntervalSeconds"), t("settings.performanceImpact.queueProcessTorrentBatchCheckIntervalSeconds"))}
+                      min={1}
+                      max={300}
+                      value={settings.performance.queue.processTorrentBatchCheckIntervalSeconds}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateQueuePerformance({ processTorrentBatchCheckIntervalSeconds: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.queueProcessTorrentBatchTimeoutSeconds"), t("settings.performanceImpact.queueProcessTorrentBatchTimeoutSeconds"))}
+                      min={5}
+                      max={7200}
+                      value={settings.performance.queue.processTorrentBatchTimeoutSeconds}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateQueuePerformance({ processTorrentBatchTimeoutSeconds: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.queueRefreshMediaMetadataConcurrency"), t("settings.performanceImpact.queueRefreshMediaMetadataConcurrency"))}
+                      min={1}
+                      max={128}
+                      value={settings.performance.queue.refreshMediaMetadataConcurrency}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateQueuePerformance({ refreshMediaMetadataConcurrency: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.queueRefreshMediaMetadataCheckIntervalSeconds"), t("settings.performanceImpact.queueRefreshMediaMetadataCheckIntervalSeconds"))}
+                      min={1}
+                      max={300}
+                      value={settings.performance.queue.refreshMediaMetadataCheckIntervalSeconds}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateQueuePerformance({ refreshMediaMetadataCheckIntervalSeconds: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.queueRefreshMediaMetadataTimeoutSeconds"), t("settings.performanceImpact.queueRefreshMediaMetadataTimeoutSeconds"))}
+                      min={5}
+                      max={7200}
+                      value={settings.performance.queue.refreshMediaMetadataTimeoutSeconds}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateQueuePerformance({ refreshMediaMetadataTimeoutSeconds: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.queueBackfillCoverCacheConcurrency"), t("settings.performanceImpact.queueBackfillCoverCacheConcurrency"))}
+                      min={1}
+                      max={128}
+                      value={settings.performance.queue.backfillCoverCacheConcurrency}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateQueuePerformance({ backfillCoverCacheConcurrency: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.queueBackfillCoverCacheCheckIntervalSeconds"), t("settings.performanceImpact.queueBackfillCoverCacheCheckIntervalSeconds"))}
+                      min={1}
+                      max={300}
+                      value={settings.performance.queue.backfillCoverCacheCheckIntervalSeconds}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateQueuePerformance({ backfillCoverCacheCheckIntervalSeconds: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.queueBackfillCoverCacheTimeoutSeconds"), t("settings.performanceImpact.queueBackfillCoverCacheTimeoutSeconds"))}
+                      min={5}
+                      max={7200}
+                      value={settings.performance.queue.backfillCoverCacheTimeoutSeconds}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateQueuePerformance({ backfillCoverCacheTimeoutSeconds: value });
+                        }
+                      }}
+                    />
+                  </SimpleGrid>
+                </Stack>
+              </Card>
             </Stack>
           </Tabs.Panel>
 
@@ -796,20 +1272,6 @@ export function SettingsPage() {
           </Tabs.Panel>
         </Tabs>
 
-        <Group justify="flex-end" mt="md">
-          <Button
-            variant="default"
-            onClick={() => {
-              void loadSettings();
-              void loadSubtitleTemplates();
-            }}
-          >
-            {t("common.refresh")}
-          </Button>
-          <Button leftSection={<Save size={14} />} loading={saving} onClick={() => void saveSettings()}>
-            {t("settings.save")}
-          </Button>
-        </Group>
       </Card>
 
       <Modal

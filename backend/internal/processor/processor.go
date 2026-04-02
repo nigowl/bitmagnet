@@ -32,6 +32,7 @@ type processor struct {
 	dao             *dao.Query
 	blockingManager blocking.Manager
 	mediaService    media.Service
+	mediaWarmupSem  chan struct{}
 	logger          *zap.SugaredLogger
 }
 
@@ -242,9 +243,23 @@ func (c processor) ensureMediaRefsReady(refs []model.ContentRef) {
 	if c.mediaService == nil || len(refs) == 0 {
 		return
 	}
+	if c.mediaWarmupSem != nil {
+		select {
+		case c.mediaWarmupSem <- struct{}{}:
+		default:
+			if c.logger != nil {
+				c.logger.Debugw("skip media warmup: previous task still running", "refCount", len(refs))
+			}
+			return
+		}
+	}
 
 	refsCopy := append([]model.ContentRef(nil), refs...)
 	go func() {
+		if c.mediaWarmupSem != nil {
+			defer func() { <-c.mediaWarmupSem }()
+		}
+
 		runCtx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
 

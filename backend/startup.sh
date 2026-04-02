@@ -39,12 +39,18 @@ load_optional_env() {
   local env_file
 
   for env_file in \
+    "$ROOT_DIR/../.env.startup" \
+    "$ROOT_DIR/../.env.startup.local" \
+    "$ROOT_DIR/../.env" \
+    "$ROOT_DIR/../.env.local" \
     "$ROOT_DIR/.env.startup" \
     "$ROOT_DIR/.env.startup.local" \
     "$ROOT_DIR/.env"; do
     if [[ -f "$env_file" ]]; then
+      set -a
       # shellcheck disable=SC1090
       source "$env_file"
+      set +a
     fi
   done
 }
@@ -84,7 +90,36 @@ Environment:
   POSTGRES_AUTO_START=0     Do not attempt to manage postgres
   BITMAGNET_WORKER_KEYS     Worker keys, e.g. "http_server" or "http_server,queue_server"
   BITMAGNET_MODE            Default mode when no positional mode is passed
+  BITMAGNET_LOG_LEVEL       Alias of LOG_LEVEL (DEBUG/INFO/WARNING/ERROR/...)
+  BITMAGNET_LOG_MAX_SIZE_MB Rotate log file size (MiB), maps to LOG_FILE_ROTATOR_MAX_SIZE in bytes
+  BITMAGNET_LOG_MAX_BACKUPS Rotate log backup count, maps to LOG_FILE_ROTATOR_MAX_BACKUPS
 USAGE
+}
+
+is_positive_integer() {
+  [[ "$1" =~ ^[0-9]+$ ]] && (( "$1" >= 0 ))
+}
+
+apply_logging_env_aliases() {
+  if [[ -n "${BITMAGNET_LOG_LEVEL:-}" ]] && [[ -z "${LOG_LEVEL:-}" ]]; then
+    export LOG_LEVEL="$BITMAGNET_LOG_LEVEL"
+  fi
+
+  if [[ -n "${BITMAGNET_LOG_MAX_SIZE_MB:-}" ]] && [[ -z "${LOG_FILE_ROTATOR_MAX_SIZE:-}" ]]; then
+    if ! is_positive_integer "$BITMAGNET_LOG_MAX_SIZE_MB"; then
+      echo "BITMAGNET_LOG_MAX_SIZE_MB must be a non-negative integer (MiB)." >&2
+      exit 1
+    fi
+    export LOG_FILE_ROTATOR_MAX_SIZE="$((BITMAGNET_LOG_MAX_SIZE_MB * 1024 * 1024))"
+  fi
+
+  if [[ -n "${BITMAGNET_LOG_MAX_BACKUPS:-}" ]] && [[ -z "${LOG_FILE_ROTATOR_MAX_BACKUPS:-}" ]]; then
+    if ! is_positive_integer "$BITMAGNET_LOG_MAX_BACKUPS"; then
+      echo "BITMAGNET_LOG_MAX_BACKUPS must be a non-negative integer." >&2
+      exit 1
+    fi
+    export LOG_FILE_ROTATOR_MAX_BACKUPS="$BITMAGNET_LOG_MAX_BACKUPS"
+  fi
 }
 
 require_command() {
@@ -370,6 +405,7 @@ normalize_mode() {
 main() {
   load_optional_env
   restore_env_overrides
+  apply_logging_env_aliases
   parse_args "$@"
   normalize_mode
 
