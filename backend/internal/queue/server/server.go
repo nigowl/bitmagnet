@@ -345,6 +345,15 @@ func (h *serverHandler) handleJob(
 			}
 			// execute the queue handler of this job
 			jobErr = handler.Exec(ctx, h.Handler, *job)
+			if isContextCancellation(jobErr) {
+				h.logger.Debugw(
+					"job execution canceled while handling queue job",
+					"job_id", job.ID,
+					"queue", h.Queue,
+					"error", jobErr,
+				)
+				return jobErr
+			}
 		}
 
 		job.RanAt = sql.NullTime{Time: time.Now(), Valid: true}
@@ -378,7 +387,11 @@ func (h *serverHandler) handleJob(
 		return updateErr
 	})
 	if err != nil {
-		h.logger.Error("error handling job", "error", err)
+		if isContextCancellation(err) {
+			h.logger.Debugw("job handling canceled", "queue", h.Queue, "error", err)
+		} else {
+			h.logger.Errorw("error handling job", "queue", h.Queue, "error", err)
+		}
 	} else if processed {
 		h.logger.Debugw("job processed", "job_id", jobID, "queue", h.Queue)
 	}
@@ -387,3 +400,7 @@ func (h *serverHandler) handleJob(
 }
 
 var ErrJobExceededDeadline = errors.New("the job did not complete before its deadline")
+
+func isContextCancellation(err error) bool {
+	return errors.Is(err, context.Canceled)
+}

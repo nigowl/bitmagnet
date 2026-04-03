@@ -8,7 +8,6 @@ import {
   Button,
   Card,
   Group,
-  Image,
   Loader,
   ScrollArea,
   Stack,
@@ -19,6 +18,7 @@ import {
 import { notifications } from "@mantine/notifications";
 import { ArrowLeft, ExternalLink, Heart, RefreshCw } from "lucide-react";
 import { useAuth } from "@/auth/provider";
+import { CoverImage } from "@/components/cover-image";
 import { useI18n } from "@/languages/provider";
 import { fetchMediaDetail, type MediaDetailResponse, type MediaDetailTorrent } from "@/lib/media-api";
 import { buildMediaExternalLinks, extractMediaFacts, formatQualityTag, getBackdropUrl, getPosterUrl, pickRecommendedTorrent } from "@/lib/media";
@@ -87,6 +87,10 @@ function firstNonEmpty(...values: Array<string | undefined | null>): string | nu
 
 function sameText(left: string, right: string): boolean {
   return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
+function compactInlineValue(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function fallbackCategoryHref(mediaType?: string): string {
@@ -254,9 +258,6 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
     attributes: item.attributes ?? []
   });
   const quickExternalLinks = externalLinks;
-  const externalGridStyle = {
-    "--media-external-cols": String(Math.max(1, quickExternalLinks.length))
-  } as CSSProperties;
   const recommendedTorrent = pickRecommendedTorrent(torrents);
   const favoriteTarget = recommendedTorrent || torrents[0] || null;
   const isFavorited = favoriteTarget ? hasFavorite(favoriteTarget.infoHash) : false;
@@ -283,6 +284,27 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
       };
     })
     .filter((entry): entry is { id: string; label: string; href: string } => Boolean(entry));
+  const externalLinkCards = [
+    ...quickExternalLinks.map((link) => ({
+      id: `external:${link.key}:${link.href}`,
+      kind: "external" as const,
+      key: link.key,
+      label: link.label,
+      value: compactInlineValue(link.value || link.href),
+      href: link.href
+    })),
+    ...subtitleLinks.map((link) => ({
+      id: `subtitle:${link.id}`,
+      kind: "subtitle" as const,
+      key: "subtitle",
+      label: link.label,
+      value: compactInlineValue(link.href),
+      href: link.href
+    }))
+  ];
+  const externalGridStyle = {
+    "--media-external-cols": String(Math.max(1, Math.min(3, externalLinkCards.length)))
+  } as CSSProperties;
 
   const metaRows = [
     { label: t("media.detail.tagline"), value: metadataValue(item.tagline) },
@@ -352,6 +374,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
           </Button>
           <Group gap="xs">
             <ActionIcon
+              className="app-icon-btn"
               size={36}
               variant={isFavorited ? "light" : "default"}
               color={isFavorited ? "red" : undefined}
@@ -368,15 +391,16 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
         </Group>
 
         <Card className="glass-card media-detail-hero" withBorder>
-          <Group align="flex-start" wrap="nowrap" gap="lg">
-            {poster ? (
-              <Image src={poster} alt={item.title} w={220} radius="md" />
-            ) : (
-              <Card withBorder w={220} h={320} className="media-poster-fallback-card">
-                <Text c="dimmed">{t("media.noPoster")}</Text>
-              </Card>
-            )}
-
+          <div className="media-detail-hero-layout">
+            <div className="media-detail-hero-poster-shell">
+              {poster ? (
+                <CoverImage src={poster} alt={item.title} w={360} radius="md" />
+              ) : (
+                <Card withBorder w={220} h={320} className="media-poster-fallback-card">
+                  <Text c="dimmed">{t("media.noPoster")}</Text>
+                </Card>
+              )}
+            </div>
             <Stack gap="sm" className="entity-hero-stack media-flex-grow">
               <div className="media-title-language-row">
                 <div className="media-title-language-copy">
@@ -389,7 +413,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
                 </div>
               </div>
 
-              {selectedOverview ? <Text c="dimmed" className="entity-subtitle">{selectedOverview}</Text> : null}
+
               {aliases.length > 0 ? (
                 <Group gap={6} wrap="wrap">
                   {aliases.slice(0, 6).map((alias) => (
@@ -429,81 +453,59 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
                   ))}
                 </Group>
               ) : null}
+
+              {selectedOverview ? <Text c="dimmed" className="entity-subtitle media-detail-overview-text">{selectedOverview}</Text> : null}
             </Stack>
-          </Group>
+          </div>
         </Card>
 
-        {(externalLinks.length > 0 || recommendedTorrent || subtitleLinks.length > 0) ? (
+        {(externalLinkCards.length > 0 || recommendedTorrent) ? (
           <div className="media-detail-sidecars">
-            {(quickExternalLinks.length > 0 || subtitleLinks.length > 0) ? (
+            {externalLinkCards.length > 0 ? (
               <Card className="media-detail-sidecar-card media-external-card" withBorder>
                 <Text fw={600} mb="sm">{t("media.detail.externalLinks")}</Text>
-                {quickExternalLinks.length > 0 ? (
-                  <div className="media-external-links-grid" style={externalGridStyle}>
-                    {quickExternalLinks.map((link) => (
-                      <div key={link.href} className="media-external-link-row">
-                        {(() => {
-                          const linkValue = link.value;
-
-                          return (
-                            <>
-                              <div>
-                                <Text size="sm" fw={700} className="card-title">
-                                  {link.key === "tmdb" || link.key === "imdb" || link.key === "tvdb" || link.key === "douban"
-                                    ? t(`media.sources.${link.key}`)
-                                    : link.key === "homepage"
-                                      ? t("media.detail.homepage")
-                                      : link.label}
-                                </Text>
-                                <Text
-                                  size="xs"
-                                  c="dimmed"
-                                  lineClamp={1}
-                                  title={linkValue}
-                                >
-                                  {linkValue}
-                                </Text>
-                              </div>
-                              <Button
-                                component="a"
-                                href={link.href}
-                                target="_blank"
-                                rel="noreferrer"
-                                variant="light"
-                                size="xs"
-                                rightSection={<ExternalLink size={13} />}
-                              >
-                                {t("media.detail.openLink")}
-                              </Button>
-                            </>
-                          );
-                        })()}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-
-                {subtitleLinks.length > 0 ? (
-                  <div className="media-external-subtitle-row">
-                    <Text fw={700} size="sm">{t("media.detail.subtitleLinks")}</Text>
-                    <Group gap={8} wrap="wrap" mt={8}>
-                      {subtitleLinks.map((link) => (
-                        <Button
-                          key={link.id}
-                          component="a"
-                          href={link.href}
-                          target="_blank"
-                          rel="noreferrer"
-                          variant="light"
-                          size="xs"
-                          rightSection={<ExternalLink size={13} />}
+                <div className="media-external-links-grid" style={externalGridStyle}>
+                  {externalLinkCards.map((link) => (
+                    <div key={link.id} className="media-external-link-row">
+                      <div className="media-external-link-main">
+                        <Text
+                          size="sm"
+                          fw={700}
+                          className="card-title media-external-link-title"
+                          title={link.kind === "subtitle" ? link.label : undefined}
                         >
-                          {link.label}
-                        </Button>
-                      ))}
-                    </Group>
-                  </div>
-                ) : null}
+                          {link.kind === "subtitle"
+                            ? link.label
+                            : link.key === "tmdb" || link.key === "imdb" || link.key === "tvdb" || link.key === "douban"
+                              ? t(`media.sources.${link.key}`)
+                              : link.key === "homepage"
+                                ? t("media.detail.homepage")
+                                : link.label}
+                        </Text>
+                        <Text
+                          size="xs"
+                          c="dimmed"
+                          className="media-external-link-value"
+                          title={link.value}
+                        >
+                          {link.value}
+                        </Text>
+                      </div>
+                      <Button
+                        component="a"
+                        href={link.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="media-external-link-action"
+                        variant="light"
+                        size="xs"
+                        rightSection={<ExternalLink size={13} />}
+                      >
+                        {t("media.detail.openLink")}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               </Card>
             ) : null}
 

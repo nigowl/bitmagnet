@@ -708,6 +708,44 @@ body {
   color: var(--page-text);
 }
 
+.app-icon-btn {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.app-icon-btn svg {
+  transition: transform 0.3s ease, opacity 0.2s ease;
+}
+
+.app-icon-btn:hover {
+  transform: translateY(-1px);
+}
+
+.app-icon-btn:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.app-icon-btn:active svg {
+  transform: scale(0.9);
+}
+
+.app-icon-btn.spin-on-active:active svg {
+  transform: rotate(-160deg) scale(0.9);
+}
+
+.app-icon-btn[data-spinning="true"] svg {
+  animation: app-icon-spin 0.8s linear infinite;
+}
+
+@keyframes app-icon-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .torrent-list-item {
   background: var(--card-bg);
   /* border: 1px solid var(--card-border); */
@@ -734,7 +772,7 @@ body {
 .sort-button-group {
   background: var(--surface-strong);
   border: 1px solid var(--card-border);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-xl);
   padding: 3px;
 }
 
@@ -745,6 +783,21 @@ body {
 .media-detail-page-content {
   position: relative;
   z-index: 2;
+}
+
+.media-detail-hero-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.media-detail-hero-poster-shell {
+  flex: 0 0 auto;
+}
+
+.media-detail-overview-text {
+  white-space: pre-wrap;
+  line-height: 1.65;
 }
 
 .media-facts-inline {
@@ -801,6 +854,11 @@ body {
   display: grid;
   grid-template-columns: repeat(var(--media-external-cols, 3), minmax(0, 1fr));
   gap: 10px;
+  align-items: stretch;
+}
+
+.media-external-links-grid>* {
+  min-width: 0;
 }
 
 .media-external-link-row {
@@ -811,6 +869,40 @@ body {
   border-radius: var(--radius-lg);
   border: 1px solid var(--card-border);
   background: color-mix(in srgb, var(--card-bg) 70%, var(--muted-surface));
+  min-width: 0;
+  overflow: hidden;
+}
+
+.media-external-link-main {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.media-external-link-title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+.media-external-link-value {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+.media-external-link-action.mantine-Button-root {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.media-external-link-action .mantine-Button-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .media-external-card {
@@ -823,11 +915,6 @@ body {
   background:
     radial-gradient(circle at top right, rgba(255, 122, 0, 0.12), transparent 36%),
     linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 92%, var(--brand-muted)), var(--card-bg));
-}
-
-.media-external-subtitle-row {
-  margin-top: 10px;
-  padding-top: 5px;
 }
 
 .media-facts-grid {
@@ -1631,6 +1718,21 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .media-detail-hero-layout {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .media-detail-hero-poster-shell {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+
+  .media-detail-overview-text {
+    text-align: left;
+  }
+
   .media-title-language-switch {
     justify-items: start;
   }
@@ -1722,19 +1824,25 @@ body {
 
 .settings-runtime-worker-list {
   align-items: stretch;
+  width: 100%;
 }
 
 .settings-runtime-worker-item {
   border: 0;
   background: color-mix(in srgb, var(--card-bg) 84%, var(--muted-surface));
   box-shadow: none;
-  min-width: 220px;
+  width: 100%;
 }
 
 .settings-runtime-worker-key {
   font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, Liberation Mono, monospace;
   font-size: 12px;
   color: var(--page-text);
+}
+
+.settings-runtime-worker-scope {
+  font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, Liberation Mono, monospace;
+  color: color-mix(in srgb, var(--page-text) 74%, var(--text-muted));
 }
 
 .settings-runtime-key-list {

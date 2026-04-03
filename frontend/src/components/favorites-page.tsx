@@ -7,7 +7,6 @@ import {
   Button,
   Card,
   Group,
-  Image,
   Loader,
   Stack,
   Tabs,
@@ -18,6 +17,7 @@ import { notifications } from "@mantine/notifications";
 import { HardDrive, HeartOff, LogIn, RefreshCw, UserPlus, Users } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
+import { CoverImage } from "@/components/cover-image";
 import { graphqlRequest } from "@/lib/api";
 import { TORRENT_CONTENT_SEARCH_QUERY } from "@/lib/graphql";
 import { fetchMediaDetail, type MediaDetailResponse } from "@/lib/media-api";
@@ -346,7 +346,7 @@ export function FavoritesPage() {
                         <Link href={href} className="unstyled-link favorites-media-link">
                           <div className="media-wall-poster-shell">
                             {poster ? (
-                              <Image className="media-wall-poster home-media-poster" src={poster} alt={titleText} />
+                              <CoverImage className="media-wall-poster home-media-poster" src={poster} alt={titleText} />
                             ) : (
                               <div className="media-wall-poster home-media-poster media-wall-poster-fallback">
                                 <Text c="dimmed" size="sm">{t("media.noPoster")}</Text>

@@ -184,7 +184,7 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
               />
 
               <ActionIcon
-                className="nav-utility-button"
+                className="app-icon-btn nav-utility-button"
                 variant="default"
                 radius="xl"
                 size={38}

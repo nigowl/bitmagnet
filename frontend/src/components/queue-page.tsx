@@ -586,22 +586,29 @@ export function QueuePage() {
         </div>
         <Group>
           <Tooltip label={t("queue.enqueue")} withArrow>
-            <ActionIcon variant="light" size="lg" onClick={openEnqueueModal} aria-label={t("queue.enqueue")}>
+            <ActionIcon className="app-icon-btn" variant="light" size="lg" onClick={openEnqueueModal} aria-label={t("queue.enqueue")}>
               <CalendarSync size={16} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label={t("queue.purge")} withArrow>
-            <ActionIcon color="red" variant="light" size="lg" onClick={openPurgeModal} aria-label={t("queue.purge")}>
+            <ActionIcon className="app-icon-btn" color="red" variant="light" size="lg" onClick={openPurgeModal} aria-label={t("queue.purge")}>
               <Trash2 size={16} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label={t("queue.cleanupSettings.button")} withArrow>
-            <ActionIcon variant="light" size="lg" onClick={openCleanupSettingsModal} aria-label={t("queue.cleanupSettings.button")}>
+            <ActionIcon className="app-icon-btn" variant="light" size="lg" onClick={openCleanupSettingsModal} aria-label={t("queue.cleanupSettings.button")}>
               <Settings2 size={16} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label={t("common.refresh")} withArrow>
-            <ActionIcon variant="default" size="lg" onClick={() => void load()} aria-label={t("common.refresh")}>
+            <ActionIcon
+              className="app-icon-btn spin-on-active"
+              data-spinning={loading ? "true" : "false"}
+              variant="default"
+              size="lg"
+              onClick={() => void load()}
+              aria-label={t("common.refresh")}
+            >
               <RotateCcw size={16} />
             </ActionIcon>
           </Tooltip>

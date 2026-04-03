@@ -27,6 +27,8 @@ import (
 
 var ErrInvalidInput = errors.New("invalid input")
 var ErrUnsupportedPlugin = errors.New("unsupported plugin")
+var ErrWorkerRegistryUnavailable = errors.New("worker registry unavailable")
+var ErrWorkerNotFound = errors.New("worker not found")
 
 type mediaRuntimeCacheInvalidator interface {
 	InvalidateRuntimeSettingsCache()
@@ -43,6 +45,7 @@ type Settings struct {
 	DoubanAcceptLanguage string              `json:"doubanAcceptLanguage"`
 	DoubanReferer        string              `json:"doubanReferer"`
 	Performance          PerformanceSettings `json:"performance"`
+	Home                 HomeSettings        `json:"home"`
 }
 
 type PerformanceSettings struct {
@@ -80,8 +83,26 @@ type QueuePerformanceSettings struct {
 }
 
 type MediaPerformanceSettings struct {
-	AutoCacheCover     bool `json:"autoCacheCover"`
-	AutoFetchBilingual bool `json:"autoFetchBilingual"`
+	AutoCacheCover       bool `json:"autoCacheCover"`
+	AutoFetchBilingual   bool `json:"autoFetchBilingual"`
+	WarmupTimeoutSeconds int  `json:"warmupTimeoutSeconds"`
+}
+
+type HomeSettings struct {
+	Daily     HomeDailySettings     `json:"daily"`
+	HighScore HomeHighScoreSettings `json:"highScore"`
+}
+
+type HomeDailySettings struct {
+	RefreshHour int `json:"refreshHour"`
+	PoolLimit   int `json:"poolLimit"`
+}
+
+type HomeHighScoreSettings struct {
+	PoolLimit int     `json:"poolLimit"`
+	MinScore  float64 `json:"minScore"`
+	MaxScore  float64 `json:"maxScore"`
+	Window    float64 `json:"window"`
 }
 
 type UpdateInput struct {
@@ -95,6 +116,7 @@ type UpdateInput struct {
 	DoubanAcceptLanguage *string                   `json:"doubanAcceptLanguage"`
 	DoubanReferer        *string                   `json:"doubanReferer"`
 	Performance          *PerformanceSettingsInput `json:"performance"`
+	Home                 *HomeSettingsInput        `json:"home"`
 }
 
 type PerformanceSettingsInput struct {
@@ -132,8 +154,26 @@ type QueuePerformanceSettingsInput struct {
 }
 
 type MediaPerformanceSettingsInput struct {
-	AutoCacheCover     *bool `json:"autoCacheCover"`
-	AutoFetchBilingual *bool `json:"autoFetchBilingual"`
+	AutoCacheCover       *bool `json:"autoCacheCover"`
+	AutoFetchBilingual   *bool `json:"autoFetchBilingual"`
+	WarmupTimeoutSeconds *int  `json:"warmupTimeoutSeconds"`
+}
+
+type HomeSettingsInput struct {
+	Daily     *HomeDailySettingsInput     `json:"daily"`
+	HighScore *HomeHighScoreSettingsInput `json:"highScore"`
+}
+
+type HomeDailySettingsInput struct {
+	RefreshHour *int `json:"refreshHour"`
+	PoolLimit   *int `json:"poolLimit"`
+}
+
+type HomeHighScoreSettingsInput struct {
+	PoolLimit *int     `json:"poolLimit"`
+	MinScore  *float64 `json:"minScore"`
+	MaxScore  *float64 `json:"maxScore"`
+	Window    *float64 `json:"window"`
 }
 
 type RuntimeStatus struct {
@@ -156,7 +196,9 @@ type WorkerRuntimeStatus struct {
 
 type Service interface {
 	Get(ctx context.Context) (Settings, error)
+	GetHome(ctx context.Context) (HomeSettings, error)
 	GetRuntimeStatus(ctx context.Context) (RuntimeStatus, error)
+	RestartWorker(ctx context.Context, key string) (worker.RestartReport, error)
 	Update(ctx context.Context, input UpdateInput) (Settings, error)
 	SyncRuntime(ctx context.Context) error
 	TestPlugin(ctx context.Context, pluginKey string, input PluginTestInput) (PluginTestResult, error)
@@ -211,8 +253,21 @@ func NewService(p Params) Service {
 			},
 			Queue: newQueuePerformanceSettingsDefaults(queue.NewDefaultPerformanceConfig()),
 			Media: MediaPerformanceSettings{
-				AutoCacheCover:     true,
-				AutoFetchBilingual: true,
+				AutoCacheCover:       true,
+				AutoFetchBilingual:   true,
+				WarmupTimeoutSeconds: 90,
+			},
+		},
+		Home: HomeSettings{
+			Daily: HomeDailySettings{
+				RefreshHour: 2,
+				PoolLimit:   96,
+			},
+			HighScore: HomeHighScoreSettings{
+				PoolLimit: 120,
+				MinScore:  8.0,
+				MaxScore:  9.9,
+				Window:    1.0,
 			},
 		},
 	}
@@ -255,6 +310,14 @@ func (s *service) Get(ctx context.Context) (Settings, error) {
 	}
 
 	return s.merge(values), nil
+}
+
+func (s *service) GetHome(ctx context.Context) (HomeSettings, error) {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		return HomeSettings{}, err
+	}
+	return settings.Home, nil
 }
 
 func (s *service) GetRuntimeStatus(ctx context.Context) (RuntimeStatus, error) {
@@ -302,6 +365,48 @@ func (s *service) GetRuntimeStatus(ctx context.Context) (RuntimeStatus, error) {
 		Settings:  settings,
 		Workers:   workers,
 	}, nil
+}
+
+func (s *service) RestartWorker(ctx context.Context, key string) (worker.RestartReport, error) {
+	if s.workerRegistry == nil {
+		return worker.RestartReport{}, ErrWorkerRegistryUnavailable
+	}
+
+	workerKey := strings.TrimSpace(key)
+	if workerKey == "" {
+		return worker.RestartReport{}, fmt.Errorf("%w: workerKey", ErrInvalidInput)
+	}
+
+	found := false
+	for _, w := range s.workerRegistry.Workers() {
+		if w.Key() == workerKey {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return worker.RestartReport{}, fmt.Errorf("%w: %s", ErrWorkerNotFound, workerKey)
+	}
+
+	restartStartedAt := time.Now()
+	s.logger.Info("admin worker restart requested", zap.String("worker_key", workerKey))
+
+	report, err := s.workerRegistry.RestartWithReport(ctx, workerKey)
+	if err != nil {
+		s.logger.Error(
+			"admin worker restart failed",
+			zap.String("worker_key", workerKey),
+			zap.Error(err),
+			zap.Duration("elapsed", time.Since(restartStartedAt)),
+		)
+		return report, err
+	}
+	s.logger.Info(
+		"admin worker restart succeeded",
+		zap.String("worker_key", workerKey),
+		zap.Duration("elapsed", time.Since(restartStartedAt)),
+	)
+	return report, nil
 }
 
 func (s *service) SyncRuntime(ctx context.Context) error {
@@ -480,7 +585,15 @@ func (s *service) Update(ctx context.Context, input UpdateInput) (Settings, erro
 			}
 		}
 		if m := input.Performance.Media; m != nil {
-			applyMediaPerformanceUpdate(m, &effective, updates)
+			if err := applyMediaPerformanceUpdate(m, &effective, updates); err != nil {
+				return Settings{}, err
+			}
+		}
+	}
+
+	if input.Home != nil {
+		if err := applyHomeUpdate(input.Home, &effective, updates); err != nil {
+			return Settings{}, err
 		}
 	}
 
@@ -643,6 +756,7 @@ func (s *service) merge(values map[string]string) Settings {
 	applyDHTPerformanceMerge(&result, values)
 	applyQueuePerformanceMerge(&result, values)
 	applyMediaPerformanceMerge(&result, values)
+	applyHomeMerge(&result, values)
 
 	return result
 }
@@ -775,7 +889,7 @@ func applyMediaPerformanceUpdate(
 	input *MediaPerformanceSettingsInput,
 	effective *Settings,
 	updates map[string]*string,
-) {
+) error {
 	if input.AutoCacheCover != nil {
 		value := strconv.FormatBool(*input.AutoCacheCover)
 		updates[runtimeconfig.KeyMediaAutoCacheCover] = &value
@@ -787,6 +901,87 @@ func applyMediaPerformanceUpdate(
 		updates[runtimeconfig.KeyMediaAutoFetchBilingual] = &value
 		effective.Performance.Media.AutoFetchBilingual = *input.AutoFetchBilingual
 	}
+
+	if input.WarmupTimeoutSeconds != nil {
+		if *input.WarmupTimeoutSeconds < 5 || *input.WarmupTimeoutSeconds > 7200 {
+			return fmt.Errorf("%w: performance.media.warmupTimeoutSeconds", ErrInvalidInput)
+		}
+		value := strconv.Itoa(*input.WarmupTimeoutSeconds)
+		updates[runtimeconfig.KeyMediaWarmupTimeoutSeconds] = &value
+		effective.Performance.Media.WarmupTimeoutSeconds = *input.WarmupTimeoutSeconds
+	}
+
+	return nil
+}
+
+func applyHomeUpdate(
+	input *HomeSettingsInput,
+	effective *Settings,
+	updates map[string]*string,
+) error {
+	if input == nil {
+		return nil
+	}
+
+	if daily := input.Daily; daily != nil {
+		if daily.RefreshHour != nil {
+			if *daily.RefreshHour < 0 || *daily.RefreshHour > 23 {
+				return fmt.Errorf("%w: home.daily.refreshHour", ErrInvalidInput)
+			}
+			value := strconv.Itoa(*daily.RefreshHour)
+			updates[runtimeconfig.KeyHomeDailyRefreshHour] = &value
+			effective.Home.Daily.RefreshHour = *daily.RefreshHour
+		}
+		if daily.PoolLimit != nil {
+			if *daily.PoolLimit < 24 || *daily.PoolLimit > 240 {
+				return fmt.Errorf("%w: home.daily.poolLimit", ErrInvalidInput)
+			}
+			value := strconv.Itoa(*daily.PoolLimit)
+			updates[runtimeconfig.KeyHomeDailyPoolLimit] = &value
+			effective.Home.Daily.PoolLimit = *daily.PoolLimit
+		}
+	}
+
+	if high := input.HighScore; high != nil {
+		if high.PoolLimit != nil {
+			if *high.PoolLimit < 24 || *high.PoolLimit > 240 {
+				return fmt.Errorf("%w: home.highScore.poolLimit", ErrInvalidInput)
+			}
+			value := strconv.Itoa(*high.PoolLimit)
+			updates[runtimeconfig.KeyHomeHighScorePoolLimit] = &value
+			effective.Home.HighScore.PoolLimit = *high.PoolLimit
+		}
+		if high.MinScore != nil {
+			if *high.MinScore < 0 || *high.MinScore > 10 {
+				return fmt.Errorf("%w: home.highScore.minScore", ErrInvalidInput)
+			}
+			value := strconv.FormatFloat(*high.MinScore, 'f', 4, 64)
+			updates[runtimeconfig.KeyHomeHighScoreMin] = &value
+			effective.Home.HighScore.MinScore = *high.MinScore
+		}
+		if high.MaxScore != nil {
+			if *high.MaxScore < 0 || *high.MaxScore > 10 {
+				return fmt.Errorf("%w: home.highScore.maxScore", ErrInvalidInput)
+			}
+			value := strconv.FormatFloat(*high.MaxScore, 'f', 4, 64)
+			updates[runtimeconfig.KeyHomeHighScoreMax] = &value
+			effective.Home.HighScore.MaxScore = *high.MaxScore
+		}
+		if high.Window != nil {
+			if *high.Window <= 0 || *high.Window > 10 {
+				return fmt.Errorf("%w: home.highScore.window", ErrInvalidInput)
+			}
+			value := strconv.FormatFloat(*high.Window, 'f', 4, 64)
+			updates[runtimeconfig.KeyHomeHighScoreWindow] = &value
+			effective.Home.HighScore.Window = *high.Window
+		}
+	}
+
+	if effective.Home.HighScore.MinScore > effective.Home.HighScore.MaxScore {
+		return fmt.Errorf("%w: home.highScore.minScore", ErrInvalidInput)
+	}
+
+	return nil
 }
 
 func applyDHTPerformanceMerge(result *Settings, values map[string]string) {
@@ -915,6 +1110,69 @@ func applyMediaPerformanceMerge(result *Settings, values map[string]string) {
 	applyBool(runtimeconfig.KeyMediaAutoFetchBilingual, func(v bool) {
 		result.Performance.Media.AutoFetchBilingual = v
 	})
+	applyInt := func(key string, min, max int, setter func(v int)) {
+		raw, ok := values[key]
+		if !ok {
+			return
+		}
+		parsed, err := strconv.Atoi(strings.TrimSpace(raw))
+		if err != nil || parsed < min || parsed > max {
+			return
+		}
+		setter(parsed)
+	}
+	applyInt(runtimeconfig.KeyMediaWarmupTimeoutSeconds, 5, 7200, func(v int) {
+		result.Performance.Media.WarmupTimeoutSeconds = v
+	})
+}
+
+func applyHomeMerge(result *Settings, values map[string]string) {
+	applyInt := func(key string, min, max int, setter func(v int)) {
+		raw, ok := values[key]
+		if !ok {
+			return
+		}
+		parsed, err := strconv.Atoi(strings.TrimSpace(raw))
+		if err != nil || parsed < min || parsed > max {
+			return
+		}
+		setter(parsed)
+	}
+	applyFloat := func(key string, min, max float64, setter func(v float64)) {
+		raw, ok := values[key]
+		if !ok {
+			return
+		}
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+		if err != nil || parsed < min || parsed > max {
+			return
+		}
+		setter(parsed)
+	}
+
+	applyInt(runtimeconfig.KeyHomeDailyRefreshHour, 0, 23, func(v int) {
+		result.Home.Daily.RefreshHour = v
+	})
+	applyInt(runtimeconfig.KeyHomeDailyPoolLimit, 24, 240, func(v int) {
+		result.Home.Daily.PoolLimit = v
+	})
+	applyInt(runtimeconfig.KeyHomeHighScorePoolLimit, 24, 240, func(v int) {
+		result.Home.HighScore.PoolLimit = v
+	})
+	applyFloat(runtimeconfig.KeyHomeHighScoreMin, 0, 10, func(v float64) {
+		result.Home.HighScore.MinScore = v
+	})
+	applyFloat(runtimeconfig.KeyHomeHighScoreMax, 0, 10, func(v float64) {
+		result.Home.HighScore.MaxScore = v
+	})
+	applyFloat(runtimeconfig.KeyHomeHighScoreWindow, 0.0001, 10, func(v float64) {
+		result.Home.HighScore.Window = v
+	})
+
+	if result.Home.HighScore.MinScore > result.Home.HighScore.MaxScore {
+		result.Home.HighScore.MinScore = 8.0
+		result.Home.HighScore.MaxScore = 9.9
+	}
 }
 
 func hasUpdateWithPrefix(updates map[string]*string, prefix string) bool {
@@ -992,8 +1250,16 @@ func settingsToRuntimeValueMap(settings Settings) map[string]string {
 		runtimeconfig.KeyQueueCleanupCompletedMaxRecords:               strconv.Itoa(settings.Performance.Queue.CleanupCompletedMaxRecords),
 		runtimeconfig.KeyQueueCleanupCompletedMaxAgeDays:               strconv.Itoa(settings.Performance.Queue.CleanupCompletedMaxAgeDays),
 
-		runtimeconfig.KeyMediaAutoCacheCover:     strconv.FormatBool(settings.Performance.Media.AutoCacheCover),
-		runtimeconfig.KeyMediaAutoFetchBilingual: strconv.FormatBool(settings.Performance.Media.AutoFetchBilingual),
+		runtimeconfig.KeyMediaAutoCacheCover:       strconv.FormatBool(settings.Performance.Media.AutoCacheCover),
+		runtimeconfig.KeyMediaAutoFetchBilingual:   strconv.FormatBool(settings.Performance.Media.AutoFetchBilingual),
+		runtimeconfig.KeyMediaWarmupTimeoutSeconds: strconv.Itoa(settings.Performance.Media.WarmupTimeoutSeconds),
+
+		runtimeconfig.KeyHomeDailyRefreshHour:   strconv.Itoa(settings.Home.Daily.RefreshHour),
+		runtimeconfig.KeyHomeDailyPoolLimit:     strconv.Itoa(settings.Home.Daily.PoolLimit),
+		runtimeconfig.KeyHomeHighScorePoolLimit: strconv.Itoa(settings.Home.HighScore.PoolLimit),
+		runtimeconfig.KeyHomeHighScoreMin:       strconv.FormatFloat(settings.Home.HighScore.MinScore, 'f', 4, 64),
+		runtimeconfig.KeyHomeHighScoreMax:       strconv.FormatFloat(settings.Home.HighScore.MaxScore, 'f', 4, 64),
+		runtimeconfig.KeyHomeHighScoreWindow:    strconv.FormatFloat(settings.Home.HighScore.Window, 'f', 4, 64),
 	}
 }
 

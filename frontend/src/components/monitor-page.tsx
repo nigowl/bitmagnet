@@ -339,7 +339,14 @@ export function MonitorPage() {
             <Text c="dimmed" size="sm">{t("monitor.lastUpdated")}: {new Date(lastUpdatedAt).toLocaleString()}</Text>
           ) : null}
           <Tooltip label={t("common.refresh")} withArrow>
-            <ActionIcon variant="default" size="lg" onClick={() => void load()} aria-label={t("common.refresh")}>
+            <ActionIcon
+              className="app-icon-btn spin-on-active"
+              data-spinning={loading ? "true" : "false"}
+              variant="default"
+              size="lg"
+              onClick={() => void load()}
+              aria-label={t("common.refresh")}
+            >
               <RefreshCw size={16} />
             </ActionIcon>
           </Tooltip>

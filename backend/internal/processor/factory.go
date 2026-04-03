@@ -1,6 +1,8 @@
 package processor
 
 import (
+	"time"
+
 	"github.com/nigowl/bitmagnet/internal/blocking"
 	"github.com/nigowl/bitmagnet/internal/classifier"
 	"github.com/nigowl/bitmagnet/internal/database/dao"
@@ -46,7 +48,7 @@ func New(p Params) Result {
 			if err != nil {
 				return nil, err
 			}
-			return processor{
+			return &processor{
 				dao:             d,
 				search:          s,
 				blockingManager: bm,
@@ -54,7 +56,11 @@ func New(p Params) Result {
 				defaultWorkflow: p.ClassifierConfig.Workflow,
 				mediaService:    p.MediaService,
 				mediaWarmupSem:  make(chan struct{}, 1),
-				logger:          p.Logger,
+				mediaWarmupCfg: mediaWarmupRuntimeConfig{
+					defaultTimeout: 90 * time.Second,
+					cacheTTL:       10 * time.Second,
+				},
+				logger: p.Logger,
 			}, nil
 		}),
 	}

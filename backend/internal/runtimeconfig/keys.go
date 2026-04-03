@@ -16,6 +16,14 @@ const (
 	KeyMediaDoubanReferer        = "system.media.douban.referer"
 	KeyMediaAutoCacheCover       = "system.performance.media.auto_cache_cover"
 	KeyMediaAutoFetchBilingual   = "system.performance.media.auto_fetch_bilingual"
+	KeyMediaWarmupTimeoutSeconds = "system.performance.media.warmup_timeout_seconds"
+
+	KeyHomeDailyRefreshHour   = "system.home.daily.refresh_hour"
+	KeyHomeDailyPoolLimit     = "system.home.daily.pool_limit"
+	KeyHomeHighScorePoolLimit = "system.home.high_score.pool_limit"
+	KeyHomeHighScoreMin       = "system.home.high_score.min"
+	KeyHomeHighScoreMax       = "system.home.high_score.max"
+	KeyHomeHighScoreWindow    = "system.home.high_score.window"
 
 	KeyMediaSubtitleTemplates = "system.media.subtitle.templates"
 
@@ -44,7 +52,7 @@ const (
 )
 
 func AdminEditableKeys() []string {
-	return append([]string{
+	return append(append([]string{
 		KeySystemLogLevel,
 		KeyMediaTMDBEnabled,
 		KeyMediaIMDbEnabled,
@@ -54,7 +62,7 @@ func AdminEditableKeys() []string {
 		KeyMediaDoubanUserAgent,
 		KeyMediaDoubanAcceptLanguage,
 		KeyMediaDoubanReferer,
-	}, PerformanceKeys()...)
+	}, PerformanceKeys()...), HomeKeys()...)
 }
 
 func DoubanKeys() []string {
@@ -115,5 +123,17 @@ func PerformanceKeys() []string {
 		KeyQueueCleanupCompletedMaxAgeDays,
 		KeyMediaAutoCacheCover,
 		KeyMediaAutoFetchBilingual,
+		KeyMediaWarmupTimeoutSeconds,
+	}
+}
+
+func HomeKeys() []string {
+	return []string{
+		KeyHomeDailyRefreshHour,
+		KeyHomeDailyPoolLimit,
+		KeyHomeHighScorePoolLimit,
+		KeyHomeHighScoreMin,
+		KeyHomeHighScoreMax,
+		KeyHomeHighScoreWindow,
 	}
 }

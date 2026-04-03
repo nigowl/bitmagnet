@@ -164,6 +164,8 @@ export function LogsPage() {
           </Stack>
           <Tooltip label={t("common.refresh")} withArrow>
             <ActionIcon
+              className="app-icon-btn spin-on-active"
+              data-spinning={logsLoading ? "true" : "false"}
               variant="default"
               size="lg"
               loading={logsLoading}

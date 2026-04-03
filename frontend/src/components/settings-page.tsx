@@ -25,7 +25,7 @@ import {
   Title
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { CircleHelp, LogIn, Pencil, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
+import { CircleHelp, LogIn, Pencil, Plus, RefreshCw, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { apiRequest } from "@/lib/api";
@@ -69,6 +69,19 @@ type SystemSettings = {
     media: {
       autoCacheCover: boolean;
       autoFetchBilingual: boolean;
+      warmupTimeoutSeconds: number;
+    };
+  };
+  home: {
+    daily: {
+      refreshHour: number;
+      poolLimit: number;
+    };
+    highScore: {
+      poolLimit: number;
+      minScore: number;
+      maxScore: number;
+      window: number;
     };
   };
 };
@@ -97,6 +110,21 @@ type RuntimeStatus = {
 
 type RuntimeStatusResponse = {
   status: RuntimeStatus;
+};
+
+type WorkerRestartResponse = {
+  ok: boolean;
+  report?: {
+    elapsed?: string | number;
+    workers?: Array<{
+      key?: string;
+      phases?: Array<{
+        name?: string;
+        status?: string;
+        elapsed?: string | number;
+      }>;
+    }>;
+  };
 };
 
 type PluginTestResult = {
@@ -157,7 +185,8 @@ const PERFORMANCE_PRESETS: Record<PerformancePresetKey, SystemSettings["performa
     },
     media: {
       autoCacheCover: false,
-      autoFetchBilingual: false
+      autoFetchBilingual: false,
+      warmupTimeoutSeconds: 120
     }
   },
   realtime: {
@@ -187,7 +216,8 @@ const PERFORMANCE_PRESETS: Record<PerformancePresetKey, SystemSettings["performa
     },
     media: {
       autoCacheCover: true,
-      autoFetchBilingual: true
+      autoFetchBilingual: true,
+      warmupTimeoutSeconds: 90
     }
   },
   throughput: {
@@ -217,7 +247,8 @@ const PERFORMANCE_PRESETS: Record<PerformancePresetKey, SystemSettings["performa
     },
     media: {
       autoCacheCover: true,
-      autoFetchBilingual: true
+      autoFetchBilingual: true,
+      warmupTimeoutSeconds: 150
     }
   }
 };
@@ -231,6 +262,7 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [runtimeStatusLoading, setRuntimeStatusLoading] = useState(false);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
+  const [workerRestarting, setWorkerRestarting] = useState<Record<string, boolean>>({});
   const [settings, setSettings] = useState<SystemSettings>({
     tmdbEnabled: true,
     imdbEnabled: true,
@@ -267,7 +299,20 @@ export function SettingsPage() {
       },
       media: {
         autoCacheCover: true,
-        autoFetchBilingual: true
+        autoFetchBilingual: true,
+        warmupTimeoutSeconds: 90
+      }
+    },
+    home: {
+      daily: {
+        refreshHour: 2,
+        poolLimit: 96
+      },
+      highScore: {
+        poolLimit: 120,
+        minScore: 8,
+        maxScore: 9.9,
+        window: 1
       }
     }
   });
@@ -358,7 +403,8 @@ export function SettingsPage() {
         doubanUserAgent: settings.doubanUserAgent,
         doubanAcceptLanguage: settings.doubanAcceptLanguage,
         doubanReferer: settings.doubanReferer,
-        performance: settings.performance
+        performance: settings.performance,
+        home: settings.home
       };
       const data = await apiRequest<SettingsResponse>("/api/admin/settings", { method: "PUT", data: payload });
       setSettings(data.settings);
@@ -527,6 +573,27 @@ export function SettingsPage() {
     }));
   };
 
+  const updateHomeSettings = (
+    updates: {
+      daily?: Partial<SystemSettings["home"]["daily"]>;
+      highScore?: Partial<SystemSettings["home"]["highScore"]>;
+    }
+  ) => {
+    setSettings((current) => ({
+      ...current,
+      home: {
+        daily: {
+          ...current.home.daily,
+          ...(updates.daily || {})
+        },
+        highScore: {
+          ...current.home.highScore,
+          ...(updates.highScore || {})
+        }
+      }
+    }));
+  };
+
   const applyPerformancePreset = (preset: PerformancePresetKey) => {
     const next = PERFORMANCE_PRESETS[preset];
     setSettings((current) => ({
@@ -548,6 +615,7 @@ export function SettingsPage() {
       <span>{label}</span>
       <Tooltip label={impact} withArrow multiline maw={340}>
         <ActionIcon
+          className="app-icon-btn"
           size={18}
           radius="xl"
           variant="subtle"
@@ -567,6 +635,26 @@ export function SettingsPage() {
     return parsed.toLocaleString();
   };
 
+  const prettifyGoDuration = (raw?: string | number) => {
+    if (raw === undefined || raw === null) return "-";
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      const milliseconds = raw / 1_000_000;
+      if (milliseconds < 1000) {
+        return `${milliseconds.toFixed(milliseconds >= 100 ? 0 : 1)}ms`;
+      }
+      const seconds = milliseconds / 1000;
+      return `${seconds.toFixed(seconds >= 10 ? 1 : 2)}s`;
+    }
+    const text = String(raw).trim();
+    if (!text) return "-";
+    return text
+      .replace(/µs/g, "us")
+      .replace(/h/g, "h ")
+      .replace(/m(?!s)/g, "m ")
+      .replace(/s/g, "s ")
+      .trim();
+  };
+
   const renderRuntimeValue = (value: string) => {
     const maxLength = 72;
     if (value.length <= maxLength) {
@@ -578,6 +666,60 @@ export function SettingsPage() {
         <Text className="settings-runtime-value settings-runtime-value-truncated">{truncated}</Text>
       </Tooltip>
     );
+  };
+
+  const workerDetails = (key: string) => {
+    if (key === "queue_server") {
+      return {
+        kind: t("settings.workerKindQueue"),
+        scope: "system.performance.queue.*",
+        desc: t("settings.workerDescQueue")
+      };
+    }
+    if (key === "dht_crawler") {
+      return {
+        kind: t("settings.workerKindDht"),
+        scope: "system.performance.dht.*",
+        desc: t("settings.workerDescDht")
+      };
+    }
+    if (key === "web_server") {
+      return {
+        kind: t("settings.workerKindWeb"),
+        scope: "system.*",
+        desc: t("settings.workerDescWeb")
+      };
+    }
+    return {
+      kind: t("settings.workerKindGeneric"),
+      scope: "-",
+      desc: t("settings.workerDescGeneric")
+    };
+  };
+
+  const restartWorker = async (workerKey: string) => {
+    setWorkerRestarting((current) => ({ ...current, [workerKey]: true }));
+    try {
+      const data = await apiRequest<WorkerRestartResponse>(`/api/admin/settings/workers/${encodeURIComponent(workerKey)}/restart`, {
+        method: "POST"
+      });
+      const workerReport = Array.isArray(data.report?.workers) ? data.report?.workers?.[0] : undefined;
+      const phaseText = Array.isArray(workerReport?.phases)
+        ? workerReport.phases
+            .map((phase) => `${phase.name || "phase"}=${phase.status || "-"}(${prettifyGoDuration(phase.elapsed)})`)
+            .join(" · ")
+        : "";
+      const elapsedText = prettifyGoDuration(data.report?.elapsed);
+      const message = phaseText
+        ? `${t("settings.workerRestartDone")} · ${t("settings.workerRestartElapsed")}: ${elapsedText} · ${phaseText}`
+        : `${t("settings.workerRestartDone")} · ${t("settings.workerRestartElapsed")}: ${elapsedText}`;
+      notifications.show({ color: "green", message });
+      await loadRuntimeStatus();
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setWorkerRestarting((current) => ({ ...current, [workerKey]: false }));
+    }
   };
 
   if (authLoading) {
@@ -625,6 +767,8 @@ export function SettingsPage() {
           <Group>
             <Tooltip label={t("common.refresh")} withArrow>
               <ActionIcon
+                className="app-icon-btn spin-on-active"
+                data-spinning={runtimeStatusLoading || loading ? "true" : "false"}
                 variant="default"
                 size="lg"
                 onClick={() => {
@@ -639,6 +783,7 @@ export function SettingsPage() {
             </Tooltip>
             <Tooltip label={t("settings.save")} withArrow>
               <ActionIcon
+                className="app-icon-btn"
                 variant="light"
                 size="lg"
                 loading={saving}
@@ -656,6 +801,7 @@ export function SettingsPage() {
         <Tabs ref={tabsRef} className="app-tabs" defaultValue="performance">
           <Tabs.List grow>
             <Tabs.Tab value="performance">{t("settings.tabPerformance")}</Tabs.Tab>
+            <Tabs.Tab value="home">{t("settings.tabHome")}</Tabs.Tab>
             <Tabs.Tab value="plugins">{t("settings.tabSitePlugins")}</Tabs.Tab>
           </Tabs.List>
 
@@ -684,23 +830,48 @@ export function SettingsPage() {
                     <Stack gap={8}>
                       <Text fw={600} size="sm">{t("settings.runtimeStatusWorkersTitle")}</Text>
                       {runtimeStatus?.workers?.length ? (
-                        <Group gap={8} className="settings-runtime-worker-list">
-                          {runtimeStatus.workers.map((worker) => (
-                            <Card key={worker.key} className="settings-runtime-worker-item" p="xs" radius="md">
-                              <Stack gap={6}>
-                                <Text className="settings-runtime-worker-key">{worker.key}</Text>
-                                <Group gap={6}>
-                                  <Badge size="sm" variant="light" color={worker.enabled ? "teal" : "gray"}>
-                                    {t("settings.runtimeStatusEnabledLabel")}: {worker.enabled ? t("common.yes") : t("common.no")}
-                                  </Badge>
-                                  <Badge size="sm" variant="light" color={worker.started ? "green" : "yellow"}>
-                                    {t("settings.runtimeStatusStartedLabel")}: {worker.started ? t("common.yes") : t("common.no")}
-                                  </Badge>
-                                </Group>
-                              </Stack>
-                            </Card>
-                          ))}
-                        </Group>
+                        <ScrollArea.Autosize mah={280} type="auto" scrollbarSize={8}>
+                          <Stack gap={6} className="settings-runtime-worker-list">
+                            {runtimeStatus.workers.map((worker) => (
+                              <Card key={worker.key} className="settings-runtime-worker-item" p="xs" radius="md">
+                                <Stack gap={6}>
+                                  <Group justify="space-between" align="flex-start" wrap="nowrap">
+                                    <Stack gap={1}>
+                                      <Text className="settings-runtime-worker-key">{worker.key}</Text>
+                                      <Text size="xs" c="dimmed">{workerDetails(worker.key).kind}</Text>
+                                    </Stack>
+                                    <Tooltip label={t("settings.workerRestart")} withArrow>
+                                      <ActionIcon
+                                        className="app-icon-btn spin-on-active"
+                                        data-spinning={workerRestarting[worker.key] ? "true" : "false"}
+                                        variant="subtle"
+                                        color="gray"
+                                        size="sm"
+                                        loading={Boolean(workerRestarting[worker.key])}
+                                        aria-label={t("settings.workerRestart")}
+                                        onClick={() => void restartWorker(worker.key)}
+                                      >
+                                        <RotateCcw size={14} />
+                                      </ActionIcon>
+                                    </Tooltip>
+                                  </Group>
+                                  <Group gap={6} wrap="wrap">
+                                    <Badge size="xs" variant="light" color={worker.enabled ? "teal" : "gray"}>
+                                      {t("settings.runtimeStatusEnabledLabel")}: {worker.enabled ? t("common.yes") : t("common.no")}
+                                    </Badge>
+                                    <Badge size="xs" variant="light" color={worker.started ? "green" : "yellow"}>
+                                      {t("settings.runtimeStatusStartedLabel")}: {worker.started ? t("common.yes") : t("common.no")}
+                                    </Badge>
+                                  </Group>
+                                  <Text size="xs" c="dimmed">
+                                    {t("settings.workerConfigScope")}: <span className="settings-runtime-worker-scope">{workerDetails(worker.key).scope}</span>
+                                  </Text>
+                                  <Text size="xs" c="dimmed" lineClamp={1} title={workerDetails(worker.key).desc}>{workerDetails(worker.key).desc}</Text>
+                                </Stack>
+                              </Card>
+                            ))}
+                          </Stack>
+                        </ScrollArea.Autosize>
                       ) : (
                         <Text size="sm" c="dimmed">{t("settings.runtimeStatusNoWorkers")}</Text>
                       )}
@@ -868,6 +1039,17 @@ export function SettingsPage() {
                         onChange={(event) => updateMediaPerformance({ autoFetchBilingual: event.currentTarget.checked })}
                       />
                     </Stack>
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.mediaWarmupTimeoutSeconds"), t("settings.performanceImpact.mediaWarmupTimeoutSeconds"))}
+                      min={5}
+                      max={7200}
+                      value={settings.performance.media.warmupTimeoutSeconds}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateMediaPerformance({ warmupTimeoutSeconds: value });
+                        }
+                      }}
+                    />
                   </SimpleGrid>
                 </Stack>
               </Card>
@@ -1005,6 +1187,103 @@ export function SettingsPage() {
                       onChange={(value) => {
                         if (typeof value === "number" && Number.isFinite(value)) {
                           updateQueuePerformance({ backfillCoverCacheTimeoutSeconds: value });
+                        }
+                      }}
+                    />
+                  </SimpleGrid>
+                </Stack>
+              </Card>
+            </Stack>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="home" pt="md">
+            <Stack gap="md">
+              <Title order={4}>{t("settings.homeTitle")}</Title>
+              <Text c="dimmed" size="sm">{t("settings.homeHint")}</Text>
+
+              <Card className="settings-section-block" radius="lg">
+                <Stack gap="sm">
+                  <Title order={5}>{t("settings.homeDailyTitle")}</Title>
+                  <Text c="dimmed" size="sm">{t("settings.homeDailyHint")}</Text>
+                  <SimpleGrid cols={{ base: 1, md: 2 }}>
+                    <NumberInput
+                      label={t("settings.homeDailyRefreshHour")}
+                      min={0}
+                      max={23}
+                      value={settings.home.daily.refreshHour}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateHomeSettings({ daily: { refreshHour: value } });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={t("settings.homeDailyPoolLimit")}
+                      min={24}
+                      max={240}
+                      value={settings.home.daily.poolLimit}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateHomeSettings({ daily: { poolLimit: value } });
+                        }
+                      }}
+                    />
+                  </SimpleGrid>
+                </Stack>
+              </Card>
+
+              <Card className="settings-section-block" radius="lg">
+                <Stack gap="sm">
+                  <Title order={5}>{t("settings.homeHighScoreTitle")}</Title>
+                  <Text c="dimmed" size="sm">{t("settings.homeHighScoreHint")}</Text>
+                  <SimpleGrid cols={{ base: 1, md: 2 }}>
+                    <NumberInput
+                      label={t("settings.homeHighScorePoolLimit")}
+                      min={24}
+                      max={240}
+                      value={settings.home.highScore.poolLimit}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateHomeSettings({ highScore: { poolLimit: value } });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={t("settings.homeHighScoreMin")}
+                      min={0}
+                      max={10}
+                      step={0.1}
+                      decimalScale={1}
+                      value={settings.home.highScore.minScore}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateHomeSettings({ highScore: { minScore: value } });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={t("settings.homeHighScoreMax")}
+                      min={0}
+                      max={10}
+                      step={0.1}
+                      decimalScale={1}
+                      value={settings.home.highScore.maxScore}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateHomeSettings({ highScore: { maxScore: value } });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={t("settings.homeHighScoreWindow")}
+                      min={0.1}
+                      max={10}
+                      step={0.1}
+                      decimalScale={1}
+                      value={settings.home.highScore.window}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          updateHomeSettings({ highScore: { window: value } });
                         }
                       }}
                     />
@@ -1253,6 +1532,7 @@ export function SettingsPage() {
                               <Table.Td>
                                 <Group gap={6}>
                                   <ActionIcon
+                                    className="app-icon-btn"
                                     variant="default"
                                     size={30}
                                     onClick={() => openEditSubtitleModal(template)}
@@ -1261,6 +1541,7 @@ export function SettingsPage() {
                                     <Pencil size={14} />
                                   </ActionIcon>
                                   <ActionIcon
+                                    className="app-icon-btn"
                                     color="red"
                                     variant="light"
                                     size={30}

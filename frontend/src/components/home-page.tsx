@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActionIcon, Badge, Button, Card, Group, Image, Loader, Stack, Text, Title } from "@mantine/core";
+import { ActionIcon, Card, Group, Loader, Stack, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { ChevronLeft, ChevronRight, Clapperboard, ListOrdered, RefreshCw, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, ListOrdered, Users } from "lucide-react";
+import { apiRequest } from "@/lib/api";
+import { CoverImage } from "@/components/cover-image";
 import { useI18n } from "@/languages/provider";
 import { fetchMediaList, type MediaListItem } from "@/lib/media-api";
 import { buildMediaDetailHref, extractMediaFacts, getDisplayTitle, getPosterUrl, pickBestQualityTag } from "@/lib/media";
@@ -12,12 +14,145 @@ import { buildMediaDetailHref, extractMediaFacts, getDisplayTitle, getPosterUrl,
 const HOME_SECTION_LIMIT = 16;
 const DAILY_CAROUSEL_INTERVAL_MS = 5600;
 
-function pickDailyRecommendations(items: MediaListItem[], count: number): MediaListItem[] {
+type HomeSettings = {
+  daily: {
+    refreshHour: number;
+    poolLimit: number;
+  };
+  highScore: {
+    poolLimit: number;
+    minScore: number;
+    maxScore: number;
+    window: number;
+  };
+};
+
+const DEFAULT_HOME_SETTINGS: HomeSettings = {
+  daily: {
+    refreshHour: 2,
+    poolLimit: 96
+  },
+  highScore: {
+    poolLimit: 120,
+    minScore: 8,
+    maxScore: 9.9,
+    window: 1
+  }
+};
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeHomeSettings(input: unknown): HomeSettings {
+  const raw = (input && typeof input === "object") ? (input as Partial<HomeSettings>) : {};
+  const rawDaily: Partial<HomeSettings["daily"]> = (raw.daily && typeof raw.daily === "object")
+    ? (raw.daily as Partial<HomeSettings["daily"]>)
+    : {};
+  const rawHigh: Partial<HomeSettings["highScore"]> = (raw.highScore && typeof raw.highScore === "object")
+    ? (raw.highScore as Partial<HomeSettings["highScore"]>)
+    : {};
+
+  const refreshHour = typeof rawDaily.refreshHour === "number"
+    ? clampNumber(Math.round(rawDaily.refreshHour), 0, 23)
+    : DEFAULT_HOME_SETTINGS.daily.refreshHour;
+  const dailyPoolLimit = typeof rawDaily.poolLimit === "number"
+    ? clampNumber(Math.round(rawDaily.poolLimit), 24, 240)
+    : DEFAULT_HOME_SETTINGS.daily.poolLimit;
+
+  const minScore = typeof rawHigh.minScore === "number"
+    ? clampNumber(rawHigh.minScore, 0, 10)
+    : DEFAULT_HOME_SETTINGS.highScore.minScore;
+  const maxScoreCandidate = typeof rawHigh.maxScore === "number"
+    ? clampNumber(rawHigh.maxScore, 0, 10)
+    : DEFAULT_HOME_SETTINGS.highScore.maxScore;
+  const maxScore = Math.max(minScore, maxScoreCandidate);
+  const window = typeof rawHigh.window === "number"
+    ? clampNumber(rawHigh.window, 0.1, 10)
+    : DEFAULT_HOME_SETTINGS.highScore.window;
+  const highScorePoolLimit = typeof rawHigh.poolLimit === "number"
+    ? clampNumber(Math.round(rawHigh.poolLimit), 24, 240)
+    : DEFAULT_HOME_SETTINGS.highScore.poolLimit;
+
+  return {
+    daily: {
+      refreshHour,
+      poolLimit: dailyPoolLimit
+    },
+    highScore: {
+      poolLimit: highScorePoolLimit,
+      minScore,
+      maxScore,
+      window
+    }
+  };
+}
+
+function buildRecommendationDayToken(refreshHour: number, now: Date = new Date()): number {
+  const shifted = new Date(now.getTime() - (refreshHour * 60 * 60 * 1000));
+  const year = shifted.getFullYear();
+  const month = shifted.getMonth() + 1;
+  const date = shifted.getDate();
+  return (year * 10000) + (month * 100) + date;
+}
+
+function seededUnit(seed: number): number {
+  const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453123;
+  return x - Math.floor(x);
+}
+
+function pickDailyRecommendations(items: MediaListItem[], count: number, dayToken: number): MediaListItem[] {
   if (items.length <= count) return items;
-  const dayToken = Number(new Date().toISOString().slice(0, 10).replace(/-/g, ""));
   const start = dayToken % items.length;
   const rotated = [...items.slice(start), ...items.slice(0, start)];
   return rotated.slice(0, count);
+}
+
+function pickHighScoreRecommendations(
+  items: MediaListItem[],
+  count: number,
+  config: HomeSettings["highScore"],
+  dayToken: number
+): MediaListItem[] {
+  if (items.length <= count) return items;
+  const minScore = clampNumber(config.minScore, 0, 10);
+  const maxScore = clampNumber(Math.max(config.maxScore, minScore), 0, 10);
+  const windowSpan = clampNumber(config.window, 0.1, 10);
+  const availableSpan = Math.max(0, maxScore - minScore);
+  const actualWindow = Math.min(windowSpan, availableSpan || windowSpan);
+  const randomStart = availableSpan > actualWindow
+    ? minScore + (seededUnit(dayToken + 97) * (availableSpan - actualWindow))
+    : minScore;
+  const randomEnd = Math.min(maxScore, randomStart + actualWindow);
+
+  const inRandomBand = items.filter((item) => typeof item.voteAverage === "number" &&
+    item.voteAverage >= randomStart &&
+    item.voteAverage <= randomEnd);
+  const inConfiguredBand = items.filter((item) => typeof item.voteAverage === "number" &&
+    item.voteAverage >= minScore &&
+    item.voteAverage <= maxScore &&
+    !inRandomBand.includes(item));
+
+  const merged = [...inRandomBand, ...inConfiguredBand];
+  if (merged.length < count) {
+    for (const item of items) {
+      if (!merged.includes(item)) {
+        merged.push(item);
+      }
+      if (merged.length >= count) break;
+    }
+  }
+
+  return pickDailyRecommendations(merged, count, dayToken);
+}
+
+async function fetchHomeSettings(): Promise<HomeSettings> {
+  try {
+    const response = await apiRequest<{ home?: unknown }>("/api/settings/home");
+    return normalizeHomeSettings(response.home);
+  } catch {
+    return DEFAULT_HOME_SETTINGS;
+  }
 }
 
 function MediaWallCard({ item, t, titleLanguage }: {
@@ -50,7 +185,7 @@ function MediaWallCard({ item, t, titleLanguage }: {
         <article className="media-wall-card home-media-card">
           <div className="media-wall-poster-shell">
             {poster ? (
-              <Image className="media-wall-poster" src={poster} alt={titleText} />
+              <CoverImage className="media-wall-poster" src={poster} alt={titleText} />
             ) : (
               <div className="media-wall-poster media-wall-poster-fallback">
                 <Text c="dimmed" size="sm">{t("media.noPoster")}</Text>
@@ -275,7 +410,7 @@ function DailyPicksCarousel({ title, items, loading, emptyText, t, titleLanguage
           {sectionItems.length > 1 ? (
             <>
               <ActionIcon
-                className="home-daily-carousel-control home-daily-carousel-control-prev"
+                className="app-icon-btn home-daily-carousel-control home-daily-carousel-control-prev"
                 variant="filled"
                 color="gray"
                 aria-label="Previous slide"
@@ -284,7 +419,7 @@ function DailyPicksCarousel({ title, items, loading, emptyText, t, titleLanguage
                 <ChevronLeft size={16} />
               </ActionIcon>
               <ActionIcon
-                className="home-daily-carousel-control home-daily-carousel-control-next"
+                className="app-icon-btn home-daily-carousel-control home-daily-carousel-control-next"
                 variant="filled"
                 color="gray"
                 aria-label="Next slide"
@@ -304,36 +439,37 @@ export function HomePage() {
   const { t, locale } = useI18n();
   const titleLanguage = locale === "en" ? "en" : "zh";
   const [loading, setLoading] = useState(true);
+  const [homeSettings, setHomeSettings] = useState<HomeSettings>(DEFAULT_HOME_SETTINGS);
+  const [activeDayToken, setActiveDayToken] = useState<number>(buildRecommendationDayToken(DEFAULT_HOME_SETTINGS.daily.refreshHour));
   const [dailyPicks, setDailyPicks] = useState<MediaListItem[]>([]);
   const [highScore, setHighScore] = useState<MediaListItem[]>([]);
-  const [hotPicks, setHotPicks] = useState<MediaListItem[]>([]);
   const [movies, setMovies] = useState<MediaListItem[]>([]);
   const [series, setSeries] = useState<MediaListItem[]>([]);
   const [anime, setAnime] = useState<MediaListItem[]>([]);
 
   const loadSection = useCallback(async (category: "movie" | "series" | "anime", limit: number) => {
-    const data = await fetchMediaList({ category, limit, page: 1 });
+    const data = await fetchMediaList({ category, sort: "popular", limit, page: 1 });
     return data.items || [];
   }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [popularData, ratingData, downloadData, movieItems, seriesItems, animeItems] = await Promise.all([
-        fetchMediaList({ sort: "popular", limit: 48, page: 1 }),
-        fetchMediaList({ sort: "rating", limit: HOME_SECTION_LIMIT, page: 1 }),
-        fetchMediaList({ sort: "download", limit: HOME_SECTION_LIMIT, page: 1 }),
+      const latestHomeSettings = await fetchHomeSettings();
+      const dayToken = buildRecommendationDayToken(latestHomeSettings.daily.refreshHour);
+      const [popularData, ratingData, movieItems, seriesItems, animeItems] = await Promise.all([
+        fetchMediaList({ sort: "popular", limit: latestHomeSettings.daily.poolLimit, page: 1 }),
+        fetchMediaList({ sort: "rating", limit: latestHomeSettings.highScore.poolLimit, page: 1 }),
         loadSection("movie", HOME_SECTION_LIMIT),
         loadSection("series", HOME_SECTION_LIMIT),
         loadSection("anime", HOME_SECTION_LIMIT)
       ]);
 
       const popularItems = popularData.items || [];
-      setDailyPicks(pickDailyRecommendations(popularItems, HOME_SECTION_LIMIT));
-      setHighScore((ratingData.items || []).slice(0, HOME_SECTION_LIMIT));
-      setHotPicks((downloadData.items || []).length > 0
-        ? (downloadData.items || []).slice(0, HOME_SECTION_LIMIT)
-        : popularItems.slice(0, HOME_SECTION_LIMIT));
+      setHomeSettings(latestHomeSettings);
+      setActiveDayToken(dayToken);
+      setDailyPicks(pickDailyRecommendations(popularItems, HOME_SECTION_LIMIT, dayToken));
+      setHighScore(pickHighScoreRecommendations(ratingData.items || [], HOME_SECTION_LIMIT, latestHomeSettings.highScore, dayToken));
       setMovies(movieItems);
       setSeries(seriesItems);
       setAnime(animeItems);
@@ -348,9 +484,19 @@ export function HomePage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const nextToken = buildRecommendationDayToken(homeSettings.daily.refreshHour);
+      if (nextToken !== activeDayToken) {
+        void load();
+      }
+    }, 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [activeDayToken, homeSettings.daily.refreshHour, load]);
+
   return (
     <Stack gap="md">
-      <Card className="glass-card da-search-card" withBorder>
+      {/* <Card className="glass-card da-search-card" withBorder>
         <Group justify="space-between" align="flex-start" wrap="wrap">
           <Stack gap={4} className="page-heading">
             <Title order={2} className="page-title">{t("home.title")}</Title>
@@ -373,14 +519,13 @@ export function HomePage() {
             </Button>
           </Group>
         </Group>
-      </Card>
+      </Card> */}
 
       <DailyPicksCarousel title={t("home.dailyPicks")} items={dailyPicks} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
       <HomeSection title={t("home.highRated")} items={highScore} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
-      <HomeSection title={t("home.hotNow")} items={hotPicks} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
-      <HomeSection title={t("contentTypes.movie")} items={movies} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
-      <HomeSection title={t("contentTypes.tv_show")} items={series} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
-      <HomeSection title={t("nav.anime")} items={anime} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
+      <HomeSection title={t("home.hotMovies")} items={movies} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
+      <HomeSection title={t("home.hotSeries")} items={series} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
+      <HomeSection title={t("home.hotAnime")} items={anime} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
     </Stack>
   );
 }

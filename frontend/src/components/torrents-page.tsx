@@ -516,11 +516,11 @@ export function TorrentsPage() {
         <Card className="glass-card torrent-filter-sidebar" withBorder w={{ base: "100%", lg: 320 }}>
           <Accordion className="torrents-filters" multiple defaultValue={["searchSort", "contentType", "source", "tag"]}>
             <Accordion.Item value="searchSort">
-              <Accordion.Control>{t("torrents.search")} / {t("torrents.orderBy")}</Accordion.Control>
+              <Accordion.Control>{t("torrents.search")}</Accordion.Control>
               <Accordion.Panel>
                 <Stack>
                   <TextInput
-                    label={t("torrents.search")}
+                    mt={8}
                     leftSection={<Search size={16} />}
                     value={search}
                     onChange={(event) => {
@@ -535,6 +535,7 @@ export function TorrentsPage() {
               <Accordion.Control>{t("torrents.contentType")}</Accordion.Control>
               <Accordion.Panel>
                 <Checkbox.Group
+                  mt={8}
                   value={contentTypeFilters}
                   onChange={(value) => {
                     updateQuery({ types: value, page: null });
@@ -557,39 +558,6 @@ export function TorrentsPage() {
                 </Checkbox.Group>
               </Accordion.Panel>
             </Accordion.Item>
-
-            {/* <Accordion.Item value="source">
-              <Accordion.Control>{t("torrents.sourceFilter")}</Accordion.Control>
-              <Accordion.Panel>
-                {(result?.aggregations.torrentSource.length || 0) === 0 ? (
-                  <Text size="sm" c="dimmed">{t("torrents.noFilterOptions")}</Text>
-                ) : (
-                  <Checkbox.Group
-                    value={sourceFilters}
-                    onChange={(value) => {
-                      setSourceFilters(value);
-                      setPage(1);
-                    }}
-                  >
-                    <Stack gap={8}>
-                      {(result?.aggregations.torrentSource || []).map((item) => (
-                        <Checkbox
-                          key={item.value}
-                          value={item.value}
-                          label={
-                            <span className="filter-option-label">
-                              <Text size="sm" lineClamp={1}>{item.label}</Text>
-                              <Badge size="xs" variant="light" className="filter-option-count">{item.count}</Badge>
-                            </span>
-                          }
-                        />
-                      ))}
-                    </Stack>
-                  </Checkbox.Group>
-                )}
-              </Accordion.Panel>
-            </Accordion.Item> */}
-
             <Accordion.Item value="tag">
               <Accordion.Control>{t("torrents.tagFilter")}</Accordion.Control>
               <Accordion.Panel>
@@ -598,6 +566,7 @@ export function TorrentsPage() {
                 ) : (
                   <ScrollArea.Autosize mah={280} offsetScrollbars>
                     <Checkbox.Group
+                      mt={8}
                       value={tagFilters}
                       onChange={(value) => {
                         updateQuery({ tags: value, page: null });
@@ -717,17 +686,22 @@ export function TorrentsPage() {
                         </Group>
                         <Group gap={6}>
                           <Tooltip label={t("torrents.copyHash")}>
-                            <ActionIcon variant="light" onClick={() => void copyHash(item.infoHash)}>
+                            <ActionIcon className="app-icon-btn" variant="light" onClick={() => void copyHash(item.infoHash)}>
                               <Copy size={14} />
                             </ActionIcon>
                           </Tooltip>
                           <Tooltip label={t("torrents.openMagnet")}>
-                            <ActionIcon variant="light" onClick={() => openMagnet(item.torrent.magnetUri)} disabled={!item.torrent.magnetUri}>
+                            <ActionIcon
+                              className="app-icon-btn"
+                              variant="light"
+                              onClick={() => openMagnet(item.torrent.magnetUri)}
+                              disabled={!item.torrent.magnetUri}
+                            >
                               <ExternalLink size={14} />
                             </ActionIcon>
                           </Tooltip>
                           <Tooltip label={t("torrents.details")}>
-                            <ActionIcon variant="light" onClick={() => openDetail(item)}>
+                            <ActionIcon className="app-icon-btn" variant="light" onClick={() => openDetail(item)}>
                               <Eye size={14} />
                             </ActionIcon>
                           </Tooltip>

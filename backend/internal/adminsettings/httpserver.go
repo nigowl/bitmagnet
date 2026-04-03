@@ -39,8 +39,10 @@ func (b *builder) Key() string {
 }
 
 func (b *builder) Apply(e *gin.Engine) error {
+	e.GET("/api/settings/home", b.getHomeSettings)
 	e.GET("/api/admin/settings", b.authMiddleware(), b.requireAdmin(), b.getSettings)
 	e.GET("/api/admin/settings/runtime-status", b.authMiddleware(), b.requireAdmin(), b.getRuntimeStatus)
+	e.POST("/api/admin/settings/workers/:workerKey/restart", b.authMiddleware(), b.requireAdmin(), b.restartWorker)
 	e.PUT("/api/admin/settings", b.authMiddleware(), b.requireAdmin(), b.updateSettings)
 	e.GET("/api/admin/settings/subtitle-templates", b.authMiddleware(), b.requireAdmin(), b.listSubtitleTemplates)
 	e.POST("/api/admin/settings/subtitle-templates", b.authMiddleware(), b.requireAdmin(), b.createSubtitleTemplate)
@@ -54,6 +56,15 @@ func (b *builder) Apply(e *gin.Engine) error {
 	return nil
 }
 
+func (b *builder) getHomeSettings(c *gin.Context) {
+	home, err := b.service.GetHome(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"home": home})
+}
+
 func (b *builder) getRuntimeStatus(c *gin.Context) {
 	status, err := b.service.GetRuntimeStatus(c.Request.Context())
 	if err != nil {
@@ -61,6 +72,34 @@ func (b *builder) getRuntimeStatus(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": status})
+}
+
+func (b *builder) restartWorker(c *gin.Context) {
+	workerKey := c.Param("workerKey")
+	if workerKey == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "workerKey is required"})
+		return
+	}
+
+	report, err := b.service.RestartWorker(c.Request.Context(), workerKey)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, ErrWorkerNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, ErrWorkerRegistryUnavailable):
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":     true,
+		"report": report,
+	})
 }
 
 func (b *builder) authMiddleware() gin.HandlerFunc {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/nigowl/bitmagnet/internal/media"
 	"github.com/nigowl/bitmagnet/internal/model"
 	"github.com/nigowl/bitmagnet/internal/protocol"
+	"github.com/nigowl/bitmagnet/internal/runtimeconfig"
 	"go.uber.org/zap"
 	"gorm.io/gen/field"
 	"gorm.io/gorm/clause"
@@ -33,7 +36,17 @@ type processor struct {
 	blockingManager blocking.Manager
 	mediaService    media.Service
 	mediaWarmupSem  chan struct{}
+	mediaWarmupCfg  mediaWarmupRuntimeConfig
 	logger          *zap.SugaredLogger
+}
+
+type mediaWarmupRuntimeConfig struct {
+	defaultTimeout time.Duration
+	cacheTTL       time.Duration
+	mutex          sync.RWMutex
+	cacheLoaded    bool
+	cachedAt       time.Time
+	cachedTimeout  time.Duration
 }
 
 type MissingHashesError struct {
@@ -44,7 +57,7 @@ func (e MissingHashesError) Error() string {
 	return fmt.Sprintf("missing %d info hashes", len(e.InfoHashes))
 }
 
-func (c processor) Process(ctx context.Context, params MessageParams) error {
+func (c *processor) Process(ctx context.Context, params MessageParams) error {
 	workflowName := params.ClassifierWorkflow
 	if workflowName == "" {
 		workflowName = c.defaultWorkflow
@@ -239,7 +252,7 @@ func newTorrentContent(t model.Torrent, c classification.Result) model.TorrentCo
 	return tc
 }
 
-func (c processor) ensureMediaRefsReady(refs []model.ContentRef) {
+func (c *processor) ensureMediaRefsReady(refs []model.ContentRef) {
 	if c.mediaService == nil || len(refs) == 0 {
 		return
 	}
@@ -260,11 +273,59 @@ func (c processor) ensureMediaRefsReady(refs []model.ContentRef) {
 			defer func() { <-c.mediaWarmupSem }()
 		}
 
-		runCtx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		timeout := c.getMediaWarmupTimeout()
+		runCtx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 
 		if err := c.mediaService.EnsureContentRefsReady(runCtx, refsCopy); err != nil && c.logger != nil {
-			c.logger.Warnw("ensure media refs ready failed", "error", err, "refCount", len(refsCopy))
+			c.logger.Warnw("ensure media refs ready failed", "error", err, "refCount", len(refsCopy), "timeout", timeout.String())
 		}
 	}()
+}
+
+func (c *processor) getMediaWarmupTimeout() time.Duration {
+	defaultTimeout := c.mediaWarmupCfg.defaultTimeout
+	if defaultTimeout <= 0 {
+		defaultTimeout = 90 * time.Second
+	}
+	if c.dao == nil {
+		return defaultTimeout
+	}
+
+	if c.mediaWarmupCfg.cacheTTL <= 0 {
+		c.mediaWarmupCfg.cacheTTL = 10 * time.Second
+	}
+
+	now := time.Now()
+	c.mediaWarmupCfg.mutex.RLock()
+	if c.mediaWarmupCfg.cacheLoaded && now.Sub(c.mediaWarmupCfg.cachedAt) < c.mediaWarmupCfg.cacheTTL {
+		timeout := c.mediaWarmupCfg.cachedTimeout
+		c.mediaWarmupCfg.mutex.RUnlock()
+		if timeout > 0 {
+			return timeout
+		}
+		return defaultTimeout
+	}
+	c.mediaWarmupCfg.mutex.RUnlock()
+
+	loadedTimeout := defaultTimeout
+	db := c.dao.KeyValue.UnderlyingDB()
+	if db != nil {
+		values, err := runtimeconfig.ReadValues(context.Background(), db, []string{runtimeconfig.KeyMediaWarmupTimeoutSeconds})
+		if err == nil {
+			if raw, ok := values[runtimeconfig.KeyMediaWarmupTimeoutSeconds]; ok {
+				if parsed, parseErr := strconv.Atoi(strings.TrimSpace(raw)); parseErr == nil && parsed >= 5 && parsed <= 7200 {
+					loadedTimeout = time.Duration(parsed) * time.Second
+				}
+			}
+		}
+	}
+
+	c.mediaWarmupCfg.mutex.Lock()
+	c.mediaWarmupCfg.cacheLoaded = true
+	c.mediaWarmupCfg.cachedAt = now
+	c.mediaWarmupCfg.cachedTimeout = loadedTimeout
+	c.mediaWarmupCfg.mutex.Unlock()
+
+	return loadedTimeout
 }

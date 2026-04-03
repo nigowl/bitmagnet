@@ -197,6 +197,7 @@ export function MaintenancePage() {
           <Group>
             <Tooltip label={t("maintenance.start")} withArrow>
               <ActionIcon
+                className="app-icon-btn"
                 variant="light"
                 size="lg"
                 loading={starting}
@@ -208,6 +209,8 @@ export function MaintenancePage() {
             </Tooltip>
             <Tooltip label={t("common.refresh")} withArrow>
               <ActionIcon
+                className="app-icon-btn spin-on-active"
+                data-spinning={pendingLoading || refreshing ? "true" : "false"}
                 variant="default"
                 size="lg"
                 loading={pendingLoading || refreshing}

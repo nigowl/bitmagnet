@@ -9,7 +9,6 @@ import {
   Button,
   Card,
   Group,
-  Image,
   Loader,
   Pagination,
   Stack,
@@ -20,6 +19,7 @@ import {
 import { useDebouncedValue } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import { ChevronDown, ChevronUp, FilterX, ListOrdered, RefreshCw, Search, Users } from "lucide-react";
+import { CoverImage } from "@/components/cover-image";
 import { useI18n } from "@/languages/provider";
 import { fetchMediaList, type MediaListItem } from "@/lib/media-api";
 import { buildMediaDetailHref, extractMediaFacts, getDisplayTitle, getPosterUrl, pickBestQualityTag } from "@/lib/media";
@@ -495,7 +495,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
                   {t("common.refresh")}
                 </Button>
                 <ActionIcon
-                  className="media-advanced-toggle"
+                  className="app-icon-btn media-advanced-toggle"
                   data-expanded={showAdvancedFilters ? "true" : "false"}
                   variant="default"
                   size={36}
@@ -646,7 +646,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
                     <article className="media-wall-card">
                       <div className="media-wall-poster-shell">
                         {poster ? (
-                          <Image className="media-wall-poster" src={poster} alt={titleText} />
+                          <CoverImage className="media-wall-poster" src={poster} alt={titleText} />
                         ) : (
                           <div className="media-wall-poster media-wall-poster-fallback">
                             <Text c="dimmed" size="sm">{t("media.noPoster")}</Text>

@@ -19,7 +19,7 @@ type persistPayload struct {
 	addTags          map[protocol.ID]map[string]struct{}
 }
 
-func (c processor) persist(ctx context.Context, payload persistPayload) error {
+func (c *processor) persist(ctx context.Context, payload persistPayload) error {
 	contentsMap := make(map[model.ContentRef]struct{}, len(payload.torrentContents))
 	affectedMediaRefs := make(map[model.ContentRef]struct{}, len(payload.torrentContents))
 	contentsPtr := make([]*model.Content, 0, len(payload.torrentContents))
