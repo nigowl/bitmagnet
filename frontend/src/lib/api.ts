@@ -12,20 +12,62 @@ interface GraphQLResponse<T> {
 }
 
 const authTokenStorageKey = "bitmagnet-auth-token";
+const authTokenCookieKey = "bitmagnet-auth-token";
+
+function getCookieValue(name: string): string {
+  if (typeof document === "undefined") return "";
+  const needle = `${name}=`;
+  const parts = document.cookie.split(";");
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed.startsWith(needle)) continue;
+    const raw = trimmed.slice(needle.length);
+    if (!raw) return "";
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+  return "";
+}
+
+function setTokenCookie(token: string) {
+  if (typeof document === "undefined") return;
+  const encoded = encodeURIComponent(token);
+  const maxAgeSeconds = 60 * 60 * 24 * 30;
+  document.cookie = `${authTokenCookieKey}=${encoded}; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax`;
+}
+
+function clearTokenCookie() {
+  if (typeof document === "undefined") return;
+  document.cookie = `${authTokenCookieKey}=; Path=/; Max-Age=0; SameSite=Lax`;
+}
 
 export function getAuthToken(): string {
   if (typeof window === "undefined") return "";
-  return window.localStorage.getItem(authTokenStorageKey) || "";
+  const fromStorage = window.localStorage.getItem(authTokenStorageKey) || "";
+  if (fromStorage.trim()) {
+    const normalized = fromStorage.trim();
+    if (!getCookieValue(authTokenCookieKey)) {
+      setTokenCookie(normalized);
+    }
+    return normalized;
+  }
+  return getCookieValue(authTokenCookieKey).trim();
 }
 
 export function setAuthToken(token: string) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(authTokenStorageKey, token);
+  const normalized = token.trim();
+  window.localStorage.setItem(authTokenStorageKey, normalized);
+  setTokenCookie(normalized);
 }
 
 export function clearAuthToken() {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(authTokenStorageKey);
+  clearTokenCookie();
 }
 
 export async function graphqlRequest<T>(query: string, variables?: Record<string, unknown>) {

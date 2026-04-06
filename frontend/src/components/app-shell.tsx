@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import {
   ActionIcon,
   AppShell,
@@ -38,6 +38,7 @@ import {
   Settings,
   SunMedium,
   Tv,
+  Users,
   UserPlus,
   Wrench
 } from "lucide-react";
@@ -56,6 +57,7 @@ const adminItems = [
   { href: "/monitor", labelKey: "nav.monitor", icon: HeartPulse },
   { href: "/logs", labelKey: "nav.logs", icon: ScrollText },
   { href: "/queue", labelKey: "nav.queue", icon: Radar },
+  { href: "/users", labelKey: "nav.users", icon: Users },
   { href: "/settings", labelKey: "nav.settings", icon: Settings },
   { href: "/maintenance", labelKey: "nav.maintenance", icon: Wrench }
 ] as const;
@@ -94,7 +96,7 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
   const { setColorScheme } = useMantineColorScheme();
   const computedColorScheme = useComputedColorScheme("light", { getInitialValueInEffect: true });
   const themeReady = useMounted();
-  const { user, isAdmin, logout, changePassword } = useAuth();
+  const { user, isAdmin, logout, changePassword, loading: authLoading, accessSettings } = useAuth();
   const { openLogin, openRegister } = useAuthDialog();
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -108,6 +110,14 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
     { href: buildMediaHref("anime"), label: t("nav.anime"), icon: Clapperboard },
     { href: "/torrents", label: t("nav.torrents"), icon: ListOrdered }
   ];
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!accessSettings.membershipEnabled) return;
+    if (user) return;
+    if (isRouteActive(pathname, "/login") || isRouteActive(pathname, "/register")) return;
+    router.replace(`/login?redirect=${encodeURIComponent(pathname || "/")}`);
+  }, [accessSettings.membershipEnabled, authLoading, pathname, router, user]);
 
   const toggleTheme = () => {
     setColorScheme(computedColorScheme === "dark" ? "light" : "dark");
@@ -145,6 +155,24 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
       <MoonStar size={variant === "sm" ? 15 : 17} className="nav-theme-icon nav-theme-icon-moon" />
     </span>
   );
+  const isAuthStandaloneRoute = isRouteActive(pathname, "/login") || isRouteActive(pathname, "/register");
+
+  if (isAuthStandaloneRoute) {
+    return (
+      <AppShell padding={0}>
+        <AppShell.Main className="app-shell-main app-shell-main-auth">
+          <div className="auth-page-layout">
+            <div className="auth-page-main">
+              <div className="auth-page-shell">
+                {children}
+              </div>
+            </div>
+            <SiteFooter />
+          </div>
+        </AppShell.Main>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell padding={0} header={{ height: 76 }}>

@@ -21,7 +21,8 @@ FROM alpine:3.20
 RUN apk add --no-cache \
     curl \
     iproute2-ss \
-    ca-certificates
+    ca-certificates \
+    ffmpeg
 
 COPY --from=build /tmp/bitmagnet /usr/bin/bitmagnet
 EXPOSE 3333

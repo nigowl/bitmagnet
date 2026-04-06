@@ -53,8 +53,10 @@ func New(p Params) Result {
 						Handler:           g.Handler(),
 						ReadHeaderTimeout: 5 * time.Second,
 						ReadTimeout:       30 * time.Second,
-						WriteTimeout:      30 * time.Second,
-						IdleTimeout:       60 * time.Second,
+						// Streaming endpoints (player/transcode) keep responses open for minutes.
+						// A finite global WriteTimeout will terminate active playback unexpectedly.
+						WriteTimeout: 0,
+						IdleTimeout:  60 * time.Second,
 					}
 					ln, listenErr := net.Listen("tcp", s.Addr)
 					if listenErr != nil {

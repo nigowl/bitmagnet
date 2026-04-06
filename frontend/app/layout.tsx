@@ -3,6 +3,7 @@ import { cookies, headers } from "next/headers";
 import { Manrope, JetBrains_Mono } from "next/font/google";
 import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
+import "plyr/dist/plyr.css";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { ApplicationShell } from "@/components/app-shell";

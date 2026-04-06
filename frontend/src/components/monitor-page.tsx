@@ -100,7 +100,7 @@ export function MonitorPage() {
       case "done":
         return "green";
       default:
-        return "gray";
+        return "slate";
     }
   }, []);
 
@@ -212,8 +212,8 @@ export function MonitorPage() {
   }, [sourceNameMap, torrentBuckets]);
 
   const queueOption = useMemo(() => {
-    const chartTextColor = colorScheme === "dark" ? "#d8e1f0" : "#546072";
-    const chartLineColor = colorScheme === "dark" ? "rgba(216,225,240,0.14)" : "rgba(84,96,114,0.14)";
+    const chartTextColor = colorScheme === "dark" ? "#a9b9d2" : "#546072";
+    const chartLineColor = colorScheme === "dark" ? "rgba(169,185,210,0.2)" : "rgba(84,96,114,0.14)";
     const chartTooltipBackground = colorScheme === "dark" ? "rgba(23,29,39,0.96)" : "rgba(255,255,255,0.96)";
     const chartPalette = colorScheme === "dark"
       ? ["#ff9233", "#59c9a5", "#6cb6ff", "#d2a8ff", "#f2cc60"]
@@ -259,8 +259,8 @@ export function MonitorPage() {
   }, [colorScheme, queueBuckets]);
 
   const torrentOption = useMemo(() => {
-    const chartTextColor = colorScheme === "dark" ? "#d8e1f0" : "#546072";
-    const chartLineColor = colorScheme === "dark" ? "rgba(216,225,240,0.14)" : "rgba(84,96,114,0.14)";
+    const chartTextColor = colorScheme === "dark" ? "#a9b9d2" : "#546072";
+    const chartLineColor = colorScheme === "dark" ? "rgba(169,185,210,0.2)" : "rgba(84,96,114,0.14)";
     const chartTooltipBackground = colorScheme === "dark" ? "rgba(23,29,39,0.96)" : "rgba(255,255,255,0.96)";
     const chartPalette = colorScheme === "dark"
       ? ["#6cb6ff", "#ff9233", "#59c9a5", "#d2a8ff", "#f2cc60", "#ff7b72"]
@@ -332,7 +332,7 @@ export function MonitorPage() {
       <Group justify="space-between" wrap="wrap" align="flex-start">
         <div>
           <Title order={2}>{t("monitor.title")}</Title>
-          <Text c="dimmed">{t("monitor.subtitle")}</Text>
+          <Text c="dimmed" className="page-subtitle">{t("monitor.subtitle")}</Text>
         </div>
         <Group gap="sm" wrap="wrap">
           {lastUpdatedAt ? (
@@ -513,12 +513,12 @@ export function MonitorPage() {
                   <Table.Tr key={worker.key}>
                     <Table.Td>{worker.key}</Table.Td>
                     <Table.Td>
-                      <Badge color={worker.enabled ? "blue" : "gray"}>
+                      <Badge color={worker.enabled ? "blue" : "slate"}>
                         {worker.enabled ? t("common.yes") : t("common.no")}
                       </Badge>
                     </Table.Td>
                     <Table.Td>
-                      <Badge color={worker.started ? "green" : "gray"}>
+                      <Badge color={worker.started ? "green" : "slate"}>
                         {worker.started ? t("common.yes") : t("common.no")}
                       </Badge>
                     </Table.Td>

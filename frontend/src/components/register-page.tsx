@@ -11,21 +11,30 @@ import { useI18n } from "@/languages/provider";
 export function RegisterPage() {
   const router = useRouter();
   const { t } = useI18n();
-  const { register } = useAuth();
+  const { register, accessSettings } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [loading, setLoading] = useState(false);
 
   const submit = async () => {
+    if (!accessSettings.registrationEnabled) {
+      notifications.show({ color: "yellow", message: t("auth.registrationDisabled") });
+      return;
+    }
     if (password !== confirmPassword) {
       notifications.show({ color: "yellow", message: t("auth.passwordMismatch") });
+      return;
+    }
+    if (accessSettings.inviteRequired && !inviteCode.trim()) {
+      notifications.show({ color: "yellow", message: t("auth.inviteRequired") });
       return;
     }
 
     setLoading(true);
     try {
-      await register(username, password);
+      await register(username, password, inviteCode.trim());
       notifications.show({ color: "green", message: t("auth.registerSuccess") });
       router.push("/profile");
     } catch (error) {
@@ -36,13 +45,16 @@ export function RegisterPage() {
   };
 
   return (
-    <Card className="glass-card" withBorder maw={460} mx="auto">
+    <Card className="glass-card auth-page-card" withBorder maw={460} w="min(100%, 460px)">
       <Stack>
         <Title order={2}>{t("auth.register")}</Title>
         <Text size="sm" c="dimmed">{t("auth.registerSubtitle")}</Text>
         <TextInput label={t("auth.username")} value={username} onChange={(event) => setUsername(event.currentTarget.value)} />
         <PasswordInput label={t("auth.password")} value={password} onChange={(event) => setPassword(event.currentTarget.value)} />
         <PasswordInput label={t("auth.confirmPassword")} value={confirmPassword} onChange={(event) => setConfirmPassword(event.currentTarget.value)} />
+        {accessSettings.inviteRequired ? (
+          <TextInput label={t("auth.inviteCode")} value={inviteCode} onChange={(event) => setInviteCode(event.currentTarget.value)} />
+        ) : null}
         <Button loading={loading} onClick={() => void submit()}>
           {t("auth.register")}
         </Button>

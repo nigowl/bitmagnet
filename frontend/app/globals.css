@@ -21,6 +21,10 @@
   --filter-active-text: #8e4713;
   --warm-border: #ffd8bc;
   --warm-border-strong: #ffbb86;
+  --description-font-size: 0.875rem;
+  --player-control-text: #edf3ff;
+  --player-control-accent: #ffd7a2;
+  --player-control-surface: rgba(9, 14, 24, 0.95);
   --radius-xs: 6px;
   --radius-sm: 10px;
   --radius-md: 14px;
@@ -53,6 +57,10 @@
   --filter-active-text: #ffd0a1;
   --warm-border: rgba(255, 146, 51, 0.28);
   --warm-border-strong: rgba(255, 146, 51, 0.45);
+  --description-font-size: 0.8125rem;
+  --player-control-text: #b8c7dc;
+  --player-control-accent: #ffd0a1;
+  --player-control-surface: rgba(9, 14, 24, 0.95);
 }
 
 * {
@@ -157,6 +165,51 @@ body {
   min-height: calc(100vh - 76px);
   display: flex;
   flex-direction: column;
+}
+
+.app-shell-main-auth {
+  min-height: 100vh;
+  padding-top: 0;
+}
+
+.auth-page-layout {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-page-main {
+  flex: 1 1 auto;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 72px;
+}
+
+.auth-page-shell {
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: clamp(18px, 4vh, 48px) clamp(14px, 3vw, 28px);
+}
+
+.auth-page-card {
+  width: min(100%, 460px);
+}
+
+.app-shell-main-auth .site-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 8;
+  padding: 14px 0;
+  background: color-mix(in srgb, var(--page-bg) 86%, transparent);
+  backdrop-filter: blur(6px);
 }
 
 .site-footer {
@@ -322,7 +375,13 @@ body {
 
 .page-subtitle,
 .entity-subtitle {
+  font-size: var(--description-font-size);
   line-height: 1.6;
+}
+
+.hint-text {
+  font-size: var(--description-font-size);
+  line-height: 1.45;
 }
 
 .entity-hero-stack {
@@ -1796,7 +1855,6 @@ body {
 .settings-section-block {
   border: 0;
   background: transparent;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--card-border) 42%, transparent);
 }
 
 .settings-preset-card {
@@ -1820,6 +1878,14 @@ body {
   font-size: var(--mantine-font-size-sm);
   font-weight: 500;
   line-height: 1.55;
+}
+
+.settings-toggle-panel {
+  margin-top: 2px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--card-border) 75%, transparent);
+  background: color-mix(in srgb, var(--card-bg) 86%, var(--muted-surface));
 }
 
 .settings-runtime-worker-list {
@@ -1956,49 +2022,799 @@ body {
   word-break: break-word;
 }
 
-.settings-plugin-accordion .mantine-Accordion-item {
-  border: 1px solid color-mix(in srgb, var(--card-border) 82%, transparent);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--card-bg) 82%, var(--muted-surface));
-  overflow: hidden;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
-}
-
-.settings-plugin-accordion .mantine-Accordion-item+.mantine-Accordion-item {
-  margin-top: 10px;
-}
-
-.settings-plugin-accordion .mantine-Accordion-item:hover {
-  border-color: color-mix(in srgb, var(--brand-orange) 38%, var(--card-border));
-  box-shadow: var(--soft-shadow);
-  transform: translateY(-1px);
-}
-
-.settings-plugin-accordion .mantine-Accordion-item[data-active="true"] {
-  border-color: color-mix(in srgb, var(--brand-orange) 46%, var(--card-border));
-  background: color-mix(in srgb, var(--card-bg) 88%, var(--brand-muted));
-}
-
-.settings-plugin-accordion .mantine-Accordion-control {
-  border-radius: var(--radius-lg);
-  background: transparent;
-  color: var(--page-text);
-  font-weight: 700;
-}
-
-.settings-plugin-accordion .mantine-Accordion-control:hover {
-  background: color-mix(in srgb, var(--brand-muted) 40%, transparent);
-}
-
-.settings-plugin-accordion .mantine-Accordion-panel {
-  border-top: 1px solid color-mix(in srgb, var(--card-border) 74%, transparent);
-}
-
-.settings-plugin-accordion .mantine-Accordion-content {
-  background: transparent;
-}
-
 .settings-subtitle-template-item {
   background: color-mix(in srgb, var(--card-bg) 86%, var(--muted-surface));
   border-color: color-mix(in srgb, var(--card-border) 85%, transparent);
+}
+
+.settings-sections-accordion .mantine-Accordion-item {
+  border: 1px solid color-mix(in srgb, var(--card-border) 82%, transparent);
+  border-radius: var(--radius-lg);
+  /* background: color-mix(in srgb, var(--card-bg) 82%, var(--muted-surface)); */
+  background: transparent;
+  overflow: hidden;
+}
+
+.settings-sections-accordion .mantine-Accordion-item+.mantine-Accordion-item {
+  margin-top: 10px;
+}
+
+.settings-sections-accordion .mantine-Accordion-control {
+  border-radius: var(--radius-lg);
+  background: transparent;
+  font-weight: 700;
+}
+
+.settings-sections-accordion .mantine-Accordion-control:hover {
+  background: color-mix(in srgb, var(--brand-muted) 40%, transparent);
+}
+
+.settings-sections-accordion .mantine-Accordion-content {
+  background: transparent;
+}
+
+.player-download-mapping-card {
+  border-color: color-mix(in srgb, var(--brand-orange) 28%, var(--card-border)) !important;
+  background:
+    radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--brand-muted) 60%, transparent), transparent 42%),
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--card-bg) 92%, var(--brand-muted)),
+      color-mix(in srgb, var(--card-bg) 84%, var(--muted-surface)));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--brand-muted) 46%, transparent);
+}
+
+.player-download-mapping-tabs .mantine-Tabs-list {
+  border: 1px solid color-mix(in srgb, var(--brand-orange) 20%, var(--card-border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--card-bg) 84%, var(--muted-surface));
+  padding: 4px;
+  gap: 6px;
+}
+
+.player-download-mapping-tabs .mantine-Tabs-tab {
+  border-radius: var(--radius-xs);
+  color: var(--muted-text);
+  font-weight: 700;
+}
+
+.player-download-mapping-tabs .mantine-Tabs-tab:hover {
+  background: color-mix(in srgb, var(--brand-muted) 44%, transparent);
+  color: var(--page-text);
+}
+
+.player-download-mapping-tabs .mantine-Tabs-tab[data-active="true"] {
+  background: color-mix(in srgb, var(--brand-muted) 72%, var(--card-bg));
+  color: var(--brand-orange-deep);
+  border: 1px solid color-mix(in srgb, var(--brand-orange) 30%, var(--card-border));
+}
+
+.torrent-player-stage {
+  display: grid;
+  gap: 10px;
+}
+
+.torrent-player-page {
+  position: relative;
+  padding: 10px;
+  border-radius: 14px;
+  max-width: 1360px;
+  margin: auto;
+}
+
+.torrent-player-stage.is-fullscreen {
+  width: 100vw;
+  height: 100vh;
+  background: #03050a;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+.torrent-player-shell {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--card-border) 86%, transparent);
+  background:
+    linear-gradient(180deg, rgba(8, 12, 21, 0.95), rgba(6, 10, 18, 0.96)),
+    #05070d;
+  min-height: 260px;
+  box-shadow: 0 14px 34px rgba(5, 10, 22, 0.36);
+}
+
+.torrent-player-stage.is-fullscreen .torrent-player-shell {
+  border-radius: 10px;
+  border-color: rgba(255, 255, 255, 0.08);
+  flex: 1;
+  min-height: 0;
+}
+
+.torrent-bootstrap-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  background:
+    radial-gradient(circle at 12% 14%, rgba(255, 122, 0, 0.16), transparent 32%),
+    radial-gradient(circle at 85% 80%, rgba(58, 116, 255, 0.15), transparent 34%),
+    color-mix(in srgb, #05070d 72%, transparent);
+  backdrop-filter: blur(10px) saturate(108%);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.torrent-bootstrap-card {
+  width: min(920px, 94vw);
+  max-height: min(86vh, 920px);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--brand-orange) 34%, var(--card-border)) !important;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 92%, rgba(255, 122, 0, 0.08)), var(--card-bg)),
+    var(--card-bg);
+  box-shadow: 0 24px 60px rgba(7, 12, 24, 0.45);
+}
+
+.torrent-player-video {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  background: #000;
+  display: block;
+}
+
+.torrent-player-stage.is-fullscreen .torrent-player-video {
+  width: 100%;
+  height: calc(100vh - 210px);
+  max-height: none;
+  object-fit: contain;
+}
+
+.torrent-player-stage.is-fullscreen .torrent-player-control-surface {
+  border-radius: 10px;
+}
+
+.torrent-player-wrap {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--card-border) 84%, rgba(255, 255, 255, 0.08));
+  background: linear-gradient(180deg, rgba(4, 6, 11, 0.98), rgba(8, 12, 22, 0.98));
+  box-shadow: 0 20px 48px rgba(4, 8, 18, 0.45);
+}
+
+.torrent-player-plyr-wrap {
+  position: relative;
+  /* width: min(100%, calc(max(260px, 100vh - var(--torrent-player-height-offset, 340px)) * var(--torrent-player-aspect-ratio-value, 1.7778))); */
+  margin: 0 auto;
+  --torrent-video-object-fit: contain;
+  --torrent-player-aspect-ratio: 16 / 9;
+  aspect-ratio: var(--torrent-player-aspect-ratio, 16 / 9);
+  min-height: 0;
+  max-height: none;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--card-border) 84%, rgba(255, 255, 255, 0.08));
+  background: linear-gradient(180deg, rgba(4, 6, 11, 0.98), rgba(8, 12, 22, 0.98));
+  box-shadow: 0 20px 48px rgba(4, 8, 18, 0.45);
+}
+
+.torrent-plyr {
+  --plyr-color-main: var(--brand-orange);
+  --plyr-video-controls-background: linear-gradient(180deg, rgba(8, 12, 18, 0.48), rgba(7, 10, 16, 0.88));
+  --plyr-video-control-color: #f3f6ff;
+  --plyr-menu-background: rgba(10, 15, 27, 0.92);
+  --plyr-menu-color: #f3f6ff;
+  --plyr-control-icon-size: 14px;
+}
+
+.torrent-plyr.plyr {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.torrent-player-shell .plyr__video-wrapper {
+  background: #000;
+  height: 100%;
+  line-height: 0;
+  padding-bottom: 0 !important;
+}
+
+.torrent-player-shell .plyr__video-wrapper::before {
+  content: none !important;
+}
+
+.torrent-player-shell .plyr:not(.plyr--fullscreen) .plyr__video-wrapper {
+  aspect-ratio: var(--torrent-player-aspect-ratio, 16 / 9);
+}
+
+.torrent-player-shell .plyr video {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: var(--torrent-video-object-fit, contain);
+  object-position: center center;
+  vertical-align: top;
+  background: #000;
+}
+
+.torrent-plyr .plyr__control--overlaid {
+  background: rgba(8, 12, 18, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.64);
+}
+
+.torrent-player-shell .plyr:not(.plyr--fullscreen) .plyr__controls,
+.torrent-player-shell .plyr:not(.plyr--fullscreen) .plyr__control--overlaid {
+  display: none !important;
+}
+
+.torrent-plyr .plyr__captions {
+  padding-bottom: 54px;
+}
+
+.torrent-plyr .plyr__menu__container {
+  border-radius: 12px;
+  border: 1px solid rgba(142, 162, 208, 0.22);
+}
+
+.torrent-plyr .plyr__captions {
+  font-size: calc(1em * var(--torrent-subtitle-scale, 1));
+  line-height: 1.45;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+}
+
+.torrent-plyr video::cue {
+  font-size: calc(1em * var(--torrent-subtitle-scale, 1));
+  line-height: 1.45;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+}
+
+.torrent-inline-controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 8;
+  padding: 10px 12px 11px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px);
+  transition: opacity 150ms ease, transform 170ms ease;
+  background: linear-gradient(180deg, rgba(7, 11, 18, 0), rgba(6, 10, 18, 0.9));
+}
+
+.torrent-player-buffering-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(6, 10, 20, 0.45), rgba(4, 8, 15, 0.68));
+  color: #f5f8ff;
+}
+
+.torrent-player-stage-shell {
+  position: relative;
+}
+
+.torrent-player-shell .plyr.plyr--fullscreen,
+.torrent-player-shell .plyr:fullscreen,
+.torrent-player-shell .plyr:-webkit-full-screen {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  max-height: none !important;
+  border-radius: 0;
+}
+
+.torrent-player-shell .plyr.plyr--fullscreen .plyr__video-wrapper,
+.torrent-player-shell .plyr:fullscreen .plyr__video-wrapper,
+.torrent-player-shell .plyr:-webkit-full-screen .plyr__video-wrapper,
+.torrent-player-shell .plyr.plyr--fullscreen video,
+.torrent-player-shell .plyr:fullscreen video,
+.torrent-player-shell .plyr:-webkit-full-screen video {
+  height: 100%;
+}
+
+.torrent-player-stage-shell:hover .torrent-inline-controls,
+.torrent-player-stage-shell:focus-within .torrent-inline-controls,
+.torrent-player-stage-shell.is-paused .torrent-inline-controls {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.torrent-inline-controls-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(130px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.torrent-inline-play-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--player-control-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.torrent-inline-play-btn:hover,
+.torrent-inline-icon-btn:hover,
+.torrent-inline-rate-btn:hover,
+.torrent-inline-subtitle-btn:hover,
+.torrent-inline-manage-btn:hover {
+  opacity: 0.84;
+}
+
+.torrent-inline-time {
+  color: var(--player-control-text);
+  font-size: 11px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  min-width: 60px;
+  text-align: center;
+  letter-spacing: 0.1px;
+}
+
+.torrent-inline-seek-shell {
+  position: relative;
+  height: 30px;
+  display: flex;
+  align-items: center;
+}
+
+.torrent-inline-seek-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(40, 52, 78, 0.44);
+  border: 1px solid rgba(160, 178, 222, 0.14);
+}
+
+.torrent-inline-seek-downloaded,
+.torrent-inline-seek-contiguous,
+.torrent-inline-seek-played {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+}
+
+.torrent-inline-seek-downloaded {
+  background: linear-gradient(90deg, rgba(68, 98, 162, 0.34), rgba(94, 132, 202, 0.38));
+}
+
+.torrent-inline-seek-contiguous {
+  background: linear-gradient(90deg, rgba(74, 148, 255, 0.46), rgba(112, 187, 255, 0.52));
+}
+
+.torrent-inline-seek-played {
+  background: linear-gradient(90deg, rgba(255, 137, 44, 0.66), rgba(255, 182, 90, 0.7));
+  box-shadow: 0 0 10px rgba(255, 154, 77, 0.18);
+}
+
+.torrent-inline-seek-played::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  transform: translate(50%, -50%);
+  border-radius: 50%;
+  background: #f8fbff;
+  box-shadow:
+    0 0 0 2px rgba(18, 24, 38, 0.82),
+    0 0 0 4px rgba(255, 155, 72, 0.28);
+}
+
+.torrent-inline-seek-input {
+  position: relative;
+  width: 100%;
+  height: 30px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.torrent-inline-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.torrent-inline-icon-btn {
+  height: 28px;
+  min-width: 28px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--player-control-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 7px;
+  cursor: pointer;
+}
+
+.torrent-inline-icon-btn.is-active {
+  color: var(--player-control-accent);
+  box-shadow: none;
+}
+
+.torrent-inline-settings-wrap {
+  position: relative;
+}
+
+.torrent-inline-settings-menu {
+  position: absolute;
+  right: 0;
+  bottom: 34px;
+  width: min(320px, calc(100vw - 40px));
+  max-height: min(60vh, 380px);
+  overflow: auto;
+  border-radius: 10px;
+  border: 1px solid rgba(170, 191, 235, 0.34);
+  background: var(--player-control-surface);
+  box-shadow: 0 14px 32px rgba(3, 7, 16, 0.55);
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.torrent-player-stage-shell.is-fullscreen .torrent-inline-controls {
+  padding-bottom: 14px;
+}
+
+.torrent-inline-settings-section {
+  display: grid;
+  gap: 8px;
+}
+
+.torrent-inline-settings-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--player-control-text);
+}
+
+.torrent-inline-rate-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.torrent-inline-rate-btn {
+  height: 28px;
+  border-radius: 7px;
+  border: none;
+  background: rgba(17, 24, 38, 0.76);
+  color: var(--player-control-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.torrent-inline-rate-btn.is-active {
+  color: var(--player-control-accent);
+  background: rgba(44, 31, 17, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(255, 175, 85, 0.35);
+}
+
+.torrent-inline-subtitle-list {
+  display: grid;
+  gap: 6px;
+  max-height: 150px;
+  overflow: auto;
+}
+
+.torrent-inline-subtitle-btn {
+  width: 100%;
+  min-height: 28px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: none;
+  background: rgba(17, 24, 38, 0.72);
+  color: var(--player-control-text);
+  text-align: left;
+  line-height: 1.25;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.torrent-inline-subtitle-btn.is-active {
+  color: var(--player-control-accent);
+  background: rgba(44, 31, 17, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(255, 175, 85, 0.35);
+}
+
+.torrent-inline-manage-btn {
+  height: 30px;
+  border-radius: 7px;
+  border: none;
+  background: rgba(22, 31, 48, 0.8);
+  color: var(--player-control-text);
+  cursor: pointer;
+}
+
+.torrent-subtitle-item-card {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--card-border) 84%, transparent);
+  background: color-mix(in srgb, var(--card-bg) 86%, var(--muted-surface));
+}
+
+.torrent-subtitle-item-title {
+  overflow-wrap: anywhere;
+}
+
+.torrent-subtitle-upload-input {
+  display: none;
+}
+
+.torrent-player-hint {
+  padding-left: 2px;
+  margin-top: 2px;
+}
+
+.torrent-player-control-surface {
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.torrent-modern-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 4px;
+}
+
+.torrent-control-btn {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  border-radius: 999px !important;
+}
+
+.torrent-modern-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--page-text) 90%, #d2dcf4);
+}
+
+.torrent-volume-slider {
+  width: 120px;
+}
+
+.torrent-volume-slider .mantine-Slider-trackContainer {
+  border-radius: 999px;
+}
+
+.torrent-volume-slider .mantine-Slider-track {
+  background: linear-gradient(90deg, rgba(58, 138, 255, 0.86), rgba(255, 122, 0, 0.86));
+}
+
+.torrent-volume-slider .mantine-Slider-bar {
+  background: linear-gradient(90deg, rgba(58, 138, 255, 0.98), rgba(255, 122, 0, 0.98));
+}
+
+.torrent-volume-slider .mantine-Slider-thumb {
+  border-color: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 2px rgba(58, 138, 255, 0.24);
+}
+
+.torrent-player-control-surface .mantine-Input-input,
+.torrent-player-control-surface .mantine-Select-input,
+.torrent-player-control-surface .mantine-FileInput-input {
+  border-radius: 12px;
+  border-color: color-mix(in srgb, var(--card-border) 88%, transparent);
+  background: color-mix(in srgb, var(--card-bg) 84%, var(--muted-surface));
+}
+
+.torrent-player-control-surface .mantine-Input-label {
+  font-weight: 700;
+  color: color-mix(in srgb, var(--page-text) 86%, #a8b1cc);
+}
+
+.torrent-seek-shell {
+  display: grid;
+  gap: 8px;
+}
+
+.torrent-seek-track {
+  position: relative;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(6, 9, 15, 0.98), rgba(14, 19, 30, 0.96)),
+    #0a0f19;
+  border: 1px solid rgba(116, 134, 170, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.torrent-seek-downloaded-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, rgba(56, 85, 146, 0.6), rgba(78, 112, 180, 0.66));
+  pointer-events: none;
+}
+
+.torrent-seek-contiguous-fill {
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(43, 140, 255, 0.7), rgba(96, 177, 255, 0.78));
+  pointer-events: none;
+  box-shadow: 0 0 14px rgba(74, 158, 255, 0.28);
+}
+
+.torrent-seek-availability {
+  position: absolute;
+  inset: 2px 0;
+}
+
+.torrent-seek-availability-range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(82, 164, 255, 0.46), rgba(131, 210, 255, 0.5));
+}
+
+.torrent-seek-playhead {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin-left: 0;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffffff, #e2ecff);
+  box-shadow:
+    0 0 0 2px rgba(9, 14, 24, 0.88),
+    0 0 0 4px rgba(88, 161, 255, 0.32),
+    0 1px 10px rgba(88, 161, 255, 0.42);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.torrent-seek-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.torrent-seek-meta {
+  min-height: 24px;
+}
+
+.torrent-seek-inline-badges {
+  flex: 1;
+  justify-content: center;
+}
+
+.torrent-player-controls-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  align-items: start;
+}
+
+.torrent-player-subtitle-dropdown {
+  min-width: min(560px, calc(100vw - 32px));
+}
+
+.torrent-player-subtitle-option {
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.torrent-diagnostics-scroll {
+  border: 1px solid color-mix(in srgb, var(--card-border) 80%, transparent);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  background: color-mix(in srgb, var(--card-bg) 84%, var(--muted-surface));
+}
+
+.torrent-diagnostic-item {
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--card-bg) 82%, var(--muted-surface));
+}
+
+.torrent-diagnostic-line {
+  overflow-wrap: anywhere;
+}
+
+.torrent-diagnostic-details {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 768px) {
+  .torrent-player-video {
+    height: 100%;
+    max-height: none;
+  }
+
+  .torrent-player-plyr-wrap {
+    width: 100%;
+    margin: 0;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .torrent-player-control-surface {
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .torrent-player-controls-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .torrent-modern-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .torrent-volume-slider {
+    width: 100%;
+  }
+
+  .torrent-seek-inline-badges {
+    display: none;
+  }
+
+  .torrent-inline-controls {
+    padding: 8px 8px 9px;
+  }
+
+  .torrent-inline-controls-row {
+    grid-template-columns: auto minmax(88px, 1fr) auto;
+    gap: 6px;
+  }
+
+  .torrent-inline-time:first-of-type {
+    display: none;
+  }
+
+  .torrent-inline-actions {
+    gap: 4px;
+  }
+
+  .torrent-inline-icon-btn {
+    min-width: 26px;
+    height: 26px;
+    padding: 0 6px;
+  }
+
+  .torrent-inline-settings-menu {
+    width: min(300px, calc(100vw - 20px));
+    bottom: 32px;
+    right: -4px;
+  }
+
+  .torrent-inline-rate-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }

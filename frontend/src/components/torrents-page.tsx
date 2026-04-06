@@ -604,7 +604,7 @@ export function TorrentsPage() {
                       key={field}
                       size="xs"
                       variant={orderBy === field ? "light" : "subtle"}
-                      color={orderBy === field ? "cyan" : "gray"}
+                      color={orderBy === field ? "cyan" : "slate"}
                       onClick={() => {
                         updateQuery({ order: field, page: null });
                       }}
@@ -617,7 +617,7 @@ export function TorrentsPage() {
                   <Button
                     size="xs"
                     variant={descending ? "light" : "subtle"}
-                    color={descending ? "cyan" : "gray"}
+                    color={descending ? "cyan" : "slate"}
                     onClick={() => {
                       updateQuery({ desc: true, page: null });
                     }}
@@ -627,7 +627,7 @@ export function TorrentsPage() {
                   <Button
                     size="xs"
                     variant={!descending ? "light" : "subtle"}
-                    color={!descending ? "cyan" : "gray"}
+                    color={!descending ? "cyan" : "slate"}
                     onClick={() => {
                       updateQuery({ desc: false, page: null });
                     }}

@@ -20,7 +20,8 @@ export function useTabsUnderline() {
       return;
     }
 
-    let tabs = Array.from(root.querySelectorAll<HTMLElement>('[role="tab"]'));
+    const queryTabsInList = () => Array.from(list.querySelectorAll<HTMLElement>('[role="tab"]'));
+    let tabs = queryTabsInList();
     if (tabs.length === 0) {
       return;
     }
@@ -119,7 +120,7 @@ export function useTabsUnderline() {
 
       if (shouldRebindTabs) {
         unbindTabEvents();
-        tabs = Array.from(root.querySelectorAll<HTMLElement>('[role="tab"]'));
+        tabs = queryTabsInList();
         bindTabEvents();
       }
 

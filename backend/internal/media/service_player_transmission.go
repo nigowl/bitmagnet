@@ -1,0 +1,1769 @@
+package media
+
+import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"math"
+	"mime"
+	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/nigowl/bitmagnet/internal/model"
+	"github.com/nigowl/bitmagnet/internal/protocol"
+	"gorm.io/gorm"
+)
+
+const defaultPlayerStreamProbeChunkBytes int64 = 16 * 1024 * 1024
+const defaultPlayerStreamMaxRangeBytes int64 = 64 * 1024 * 1024
+const defaultPlayerStreamPollInterval = 700 * time.Millisecond
+
+var playerVideoExtensions = []string{
+	".mp4", ".m4v", ".webm", ".mkv", ".mov", ".avi", ".flv", ".ts", ".m2ts", ".mpeg", ".mpg",
+	".wmv", ".asf", ".3gp", ".3g2", ".f4v", ".rm", ".rmvb", ".vob", ".mxf", ".divx", ".xvid",
+}
+
+type playerTransmissionRPCRequest struct {
+	Method    string                         `json:"method"`
+	Arguments playerTransmissionRPCArguments `json:"arguments,omitempty"`
+}
+
+type playerTransmissionRPCArguments struct {
+	IDs             []any    `json:"ids,omitempty"`
+	Fields          []string `json:"fields,omitempty"`
+	Filename        string   `json:"filename,omitempty"`
+	Paused          *bool    `json:"paused,omitempty"`
+	FilesWanted     []int    `json:"files-wanted,omitempty"`
+	FilesUnwanted   []int    `json:"files-unwanted,omitempty"`
+	PriorityHigh    []int    `json:"priority-high,omitempty"`
+	PriorityLow     []int    `json:"priority-low,omitempty"`
+	PriorityNormal  []int    `json:"priority-normal,omitempty"`
+	Sequential      *bool    `json:"sequential_download,omitempty"`
+	DeleteLocalData *bool    `json:"delete-local-data,omitempty"`
+}
+
+type playerTransmissionRPCResponse struct {
+	Result    string                            `json:"result"`
+	Arguments playerTransmissionRPCResponseArgs `json:"arguments"`
+}
+
+type playerTransmissionRPCResponseArgs struct {
+	Torrents         []playerTransmissionRPCTorrent `json:"torrents"`
+	TorrentAdded     *playerTransmissionRPCAddItem  `json:"torrent-added"`
+	TorrentDuplicate *playerTransmissionRPCAddItem  `json:"torrent-duplicate"`
+}
+
+type playerTransmissionRPCAddItem struct {
+	ID         int64  `json:"id"`
+	HashString string `json:"hashString"`
+	Name       string `json:"name"`
+}
+
+type playerTransmissionRPCTorrent struct {
+	ID             int64                           `json:"id"`
+	HashString     string                          `json:"hashString"`
+	Name           string                          `json:"name"`
+	Status         int                             `json:"status"`
+	PercentDone    float64                         `json:"percentDone"`
+	RateDownload   int64                           `json:"rateDownload"`
+	RateUpload     int64                           `json:"rateUpload"`
+	PeersConnected int                             `json:"peersConnected"`
+	Error          int                             `json:"error"`
+	ErrorString    string                          `json:"errorString"`
+	LeftUntilDone  int64                           `json:"leftUntilDone"`
+	SizeWhenDone   int64                           `json:"sizeWhenDone"`
+	AddedDate      int64                           `json:"addedDate"`
+	ActivityDate   int64                           `json:"activityDate"`
+	IsFinished     bool                            `json:"isFinished"`
+	DownloadDir    string                          `json:"downloadDir"`
+	PieceSize      int64                           `json:"pieceSize"`
+	Pieces         string                          `json:"pieces"`
+	Files          []playerTransmissionRPCFile     `json:"files"`
+	FileStats      []playerTransmissionRPCFileStat `json:"fileStats"`
+	Sequential     bool                            `json:"sequential_download"`
+}
+
+type playerTransmissionRPCSessionResponse struct {
+	Result    string                                   `json:"result"`
+	Arguments playerTransmissionRPCSessionResponseArgs `json:"arguments"`
+}
+
+type playerTransmissionRPCSessionResponseArgs struct {
+	DownloadDirFreeSpace int64  `json:"download-dir-free-space"`
+	DownloadDir          string `json:"download-dir"`
+	IncompleteDir        string `json:"incomplete-dir"`
+	IncompleteDirEnabled bool   `json:"incomplete-dir-enabled"`
+}
+
+type playerTransmissionRPCFile struct {
+	Name   string `json:"name"`
+	Length int64  `json:"length"`
+}
+
+type playerTransmissionRPCFileStat struct {
+	BytesCompleted int64 `json:"bytesCompleted"`
+	Wanted         bool  `json:"wanted"`
+	Priority       int   `json:"priority"`
+}
+
+func (s *service) PlayerTransmissionBootstrap(
+	ctx context.Context,
+	input PlayerTransmissionBootstrapInput,
+) (PlayerTransmissionBootstrapResult, error) {
+	infoHash, _, torrent, settings, err := s.loadPlayerTransmissionBase(ctx, input.InfoHash)
+	if err != nil {
+		return PlayerTransmissionBootstrapResult{}, err
+	}
+	_ = s.playerTransmissionAutoCleanup(ctx, settings, infoHash)
+
+	snapshot, err := s.playerTransmissionEnsureTorrent(ctx, settings, infoHash, torrent.MagnetURI())
+	if err != nil {
+		return PlayerTransmissionBootstrapResult{}, err
+	}
+	if len(snapshot.Files) == 0 {
+		return PlayerTransmissionBootstrapResult{}, ErrPlayerFileNotFound
+	}
+
+	selected := playerTransmissionDefaultFileIndex(snapshot.Files)
+	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, selected, len(snapshot.Files)); err != nil {
+		return PlayerTransmissionBootstrapResult{}, err
+	}
+	_ = s.playerTransmissionTryStart(ctx, settings, infoHash)
+
+	status, err := s.playerTransmissionLoadStatus(ctx, settings, infoHash, true)
+	if err != nil {
+		return PlayerTransmissionBootstrapResult{}, err
+	}
+
+	return PlayerTransmissionBootstrapResult{
+		InfoHash:                     infoHash,
+		TorrentID:                    status.TorrentID,
+		SelectedFileIndex:            status.SelectedFileIndex,
+		StreamURL:                    playerTransmissionBuildStreamURL(infoHash, status.SelectedFileIndex),
+		TranscodeEnabled:             settings.FFmpeg.Enabled,
+		TranscodePreferredExtensions: append([]string(nil), settings.FFmpeg.ForceTranscodeExtensions...),
+		Status:                       status,
+	}, nil
+}
+
+func (s *service) PlayerTransmissionSelectFile(
+	ctx context.Context,
+	input PlayerTransmissionSelectFileInput,
+) (PlayerTransmissionSelectFileResult, error) {
+	infoHash, _, torrent, settings, err := s.loadPlayerTransmissionBase(ctx, input.InfoHash)
+	if err != nil {
+		return PlayerTransmissionSelectFileResult{}, err
+	}
+
+	snapshot, err := s.playerTransmissionEnsureTorrent(ctx, settings, infoHash, torrent.MagnetURI())
+	if err != nil {
+		return PlayerTransmissionSelectFileResult{}, err
+	}
+	if input.FileIndex < 0 || input.FileIndex >= len(snapshot.Files) {
+		return PlayerTransmissionSelectFileResult{}, ErrPlayerFileNotFound
+	}
+
+	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, input.FileIndex, len(snapshot.Files)); err != nil {
+		return PlayerTransmissionSelectFileResult{}, err
+	}
+	_ = s.playerTransmissionTryStart(ctx, settings, infoHash)
+
+	status, err := s.playerTransmissionLoadStatus(ctx, settings, infoHash, true)
+	if err != nil {
+		return PlayerTransmissionSelectFileResult{}, err
+	}
+
+	return PlayerTransmissionSelectFileResult{
+		InfoHash:                     infoHash,
+		SelectedFileIndex:            status.SelectedFileIndex,
+		StreamURL:                    playerTransmissionBuildStreamURL(infoHash, status.SelectedFileIndex),
+		TranscodeEnabled:             settings.FFmpeg.Enabled,
+		TranscodePreferredExtensions: append([]string(nil), settings.FFmpeg.ForceTranscodeExtensions...),
+		Status:                       status,
+	}, nil
+}
+
+func (s *service) PlayerTransmissionStatus(
+	ctx context.Context,
+	input PlayerTransmissionStatusInput,
+) (PlayerTransmissionStatusResult, error) {
+	infoHash, _, torrent, settings, err := s.loadPlayerTransmissionBase(ctx, input.InfoHash)
+	if err != nil {
+		return PlayerTransmissionStatusResult{}, err
+	}
+	if _, err := s.playerTransmissionEnsureTorrent(ctx, settings, infoHash, torrent.MagnetURI()); err != nil {
+		return PlayerTransmissionStatusResult{}, err
+	}
+	return s.playerTransmissionLoadStatus(ctx, settings, infoHash, true)
+}
+
+func (s *service) PlayerTransmissionBatchStatus(
+	ctx context.Context,
+	input PlayerTransmissionBatchStatusInput,
+) (PlayerTransmissionBatchStatusResult, error) {
+	q, err := s.dao.Get()
+	if err != nil {
+		return PlayerTransmissionBatchStatusResult{}, err
+	}
+	db := q.Torrent.WithContext(ctx).UnderlyingDB()
+	settings, err := s.loadPlayerBootstrapSettings(ctx, db)
+	if err != nil {
+		return PlayerTransmissionBatchStatusResult{}, err
+	}
+	if !settings.TransmissionEnabled {
+		return PlayerTransmissionBatchStatusResult{}, ErrPlayerTransmissionDisabled
+	}
+
+	infoHashes := make([]string, 0, len(input.InfoHashes))
+	seen := make(map[string]struct{}, len(input.InfoHashes))
+	for _, raw := range input.InfoHashes {
+		infoHash := strings.TrimSpace(strings.ToLower(raw))
+		if infoHash == "" {
+			continue
+		}
+		if _, parseErr := protocol.ParseID(infoHash); parseErr != nil {
+			continue
+		}
+		if _, ok := seen[infoHash]; ok {
+			continue
+		}
+		seen[infoHash] = struct{}{}
+		infoHashes = append(infoHashes, infoHash)
+	}
+	if len(infoHashes) == 0 {
+		return PlayerTransmissionBatchStatusResult{Items: []PlayerTransmissionTaskStatus{}}, nil
+	}
+
+	snapshots, err := s.playerTransmissionFetchTorrents(ctx, settings, infoHashes)
+	if err != nil {
+		return PlayerTransmissionBatchStatusResult{}, err
+	}
+
+	items := make([]PlayerTransmissionTaskStatus, 0, len(infoHashes))
+	for _, infoHash := range infoHashes {
+		snapshot, ok := snapshots[infoHash]
+		if !ok {
+			items = append(items, PlayerTransmissionTaskStatus{
+				InfoHash: infoHash,
+				Exists:   false,
+				State:    "missing",
+				Progress: 0,
+			})
+			continue
+		}
+		items = append(items, PlayerTransmissionTaskStatus{
+			InfoHash:  infoHash,
+			Exists:    true,
+			TorrentID: snapshot.ID,
+			State:     playerTransmissionStatusLabel(snapshot.Status),
+			Progress:  clampRatio(snapshot.PercentDone),
+		})
+	}
+
+	return PlayerTransmissionBatchStatusResult{Items: items}, nil
+}
+
+func (s *service) PlayerTransmissionResolveStream(
+	ctx context.Context,
+	input PlayerTransmissionResolveStreamInput,
+) (PlayerTransmissionResolveStreamResult, error) {
+	infoHash, _, torrent, settings, err := s.loadPlayerTransmissionBase(ctx, input.InfoHash)
+	if err != nil {
+		return PlayerTransmissionResolveStreamResult{}, err
+	}
+
+	if input.FileIndex < 0 {
+		return PlayerTransmissionResolveStreamResult{}, ErrPlayerFileNotFound
+	}
+	if input.StartSeconds < 0 || math.IsNaN(input.StartSeconds) || math.IsInf(input.StartSeconds, 0) {
+		input.StartSeconds = 0
+	}
+	if input.StartBytes < 0 {
+		input.StartBytes = 0
+	}
+
+	snapshot, err := s.playerTransmissionEnsureTorrent(ctx, settings, infoHash, torrent.MagnetURI())
+	if err != nil {
+		return PlayerTransmissionResolveStreamResult{}, err
+	}
+	if input.FileIndex >= len(snapshot.Files) {
+		return PlayerTransmissionResolveStreamResult{}, ErrPlayerFileNotFound
+	}
+
+	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, input.FileIndex, len(snapshot.Files)); err != nil {
+		return PlayerTransmissionResolveStreamResult{}, err
+	}
+	_ = s.playerTransmissionTryStart(ctx, settings, infoHash)
+
+	fileLength := snapshot.Files[input.FileIndex].Length
+	if fileLength > 0 && input.StartBytes >= fileLength {
+		input.StartBytes = fileLength - 1
+	}
+	rangeStart, rangeEnd, partial, err := parsePlayerByteRange(input.RangeHeader, fileLength)
+	if err != nil {
+		return PlayerTransmissionResolveStreamResult{}, err
+	}
+
+	waitSeconds := settings.HardTimeoutSeconds
+	if waitSeconds <= 0 {
+		waitSeconds = defaultPlayerHardTimeoutSeconds
+	}
+	if waitSeconds > 180 {
+		waitSeconds = 180
+	}
+	deadline := time.Now().Add(time.Duration(waitSeconds) * time.Second)
+
+	var readySnapshot *playerTransmissionRPCTorrent
+	for {
+		current, loadErr := s.playerTransmissionFetchTorrent(ctx, settings, infoHash, true)
+		if loadErr != nil {
+			return PlayerTransmissionResolveStreamResult{}, loadErr
+		}
+		if input.FileIndex >= len(current.Files) {
+			return PlayerTransmissionResolveStreamResult{}, ErrPlayerFileNotFound
+		}
+		if playerTransmissionRangeAvailable(current, input.FileIndex, rangeStart, rangeEnd) {
+			readySnapshot = current
+			break
+		}
+		if time.Now().After(deadline) {
+			return PlayerTransmissionResolveStreamResult{}, ErrPlayerStreamUnavailable
+		}
+		time.Sleep(defaultPlayerStreamPollInterval)
+	}
+
+	dirCandidates := []string{strings.TrimSpace(readySnapshot.DownloadDir)}
+	if sessionDirs, sessionErr := s.playerTransmissionLoadSessionDirs(ctx, settings); sessionErr == nil {
+		for _, sessionDir := range sessionDirs {
+			trimmed := strings.TrimSpace(sessionDir)
+			if trimmed == "" || strings.EqualFold(trimmed, strings.TrimSpace(readySnapshot.DownloadDir)) {
+				continue
+			}
+			dirCandidates = append(dirCandidates, trimmed)
+		}
+	}
+
+	fileName := strings.TrimSpace(readySnapshot.Files[input.FileIndex].Name)
+
+	targetPath := ""
+	var resolveErr error
+	for _, dir := range dirCandidates {
+		targetPath, resolveErr = playerTransmissionResolveFilePath(
+			dir,
+			fileName,
+			settings.TransmissionLocalDownloadDir,
+		)
+		if resolveErr == nil {
+			break
+		}
+	}
+	if resolveErr != nil {
+		localDirProbe := playerTransmissionDescribeLocalDir(settings.TransmissionLocalDownloadDir)
+		return PlayerTransmissionResolveStreamResult{}, fmt.Errorf(
+			"%w: transmission download dir is not accessible from bitmagnet server; please configure player transmission local download directory mapping (downloadDir=%s, file=%s, localDirProbe=%s, details=%s)",
+			ErrPlayerStorageUnavailable,
+			strings.TrimSpace(readySnapshot.DownloadDir),
+			fileName,
+			localDirProbe,
+			resolveErr.Error(),
+		)
+	}
+
+	contentType := mime.TypeByExtension(strings.ToLower(filepath.Ext(targetPath)))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	return PlayerTransmissionResolveStreamResult{
+		FilePath:    targetPath,
+		ContentType: contentType,
+		RangeStart:  rangeStart,
+		RangeEnd:    rangeEnd,
+		TotalLength: fileLength,
+		Partial:     partial,
+		Transcode: PlayerFFmpegTranscodeSettings{
+			Enabled:                  input.PreferTranscode && settings.FFmpeg.Enabled,
+			BinaryPath:               settings.FFmpeg.BinaryPath,
+			Preset:                   settings.FFmpeg.Preset,
+			CRF:                      settings.FFmpeg.CRF,
+			AudioBitrateKbps:         settings.FFmpeg.AudioBitrateKbps,
+			Threads:                  settings.FFmpeg.Threads,
+			ExtraArgs:                settings.FFmpeg.ExtraArgs,
+			ForceTranscodeExtensions: append([]string(nil), settings.FFmpeg.ForceTranscodeExtensions...),
+		},
+		StartSeconds: input.StartSeconds,
+		StartBytes:   input.StartBytes,
+	}, nil
+}
+
+func (s *service) loadPlayerTransmissionBase(
+	ctx context.Context,
+	infoHashInput string,
+) (string, *gorm.DB, model.Torrent, playerBootstrapSettings, error) {
+	q, err := s.dao.Get()
+	if err != nil {
+		return "", nil, model.Torrent{}, playerBootstrapSettings{}, err
+	}
+
+	infoHash := strings.TrimSpace(strings.ToLower(infoHashInput))
+	if infoHash == "" {
+		return "", nil, model.Torrent{}, playerBootstrapSettings{}, ErrInvalidInfoHash
+	}
+	parsed, err := protocol.ParseID(infoHash)
+	if err != nil {
+		return "", nil, model.Torrent{}, playerBootstrapSettings{}, ErrInvalidInfoHash
+	}
+
+	db := q.Torrent.WithContext(ctx).UnderlyingDB()
+	var torrent model.Torrent
+	if err := db.WithContext(ctx).
+		Table(model.TableNameTorrent).
+		Where("info_hash = ?", parsed).
+		Take(&torrent).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", nil, model.Torrent{}, playerBootstrapSettings{}, ErrNotFound
+		}
+		return "", nil, model.Torrent{}, playerBootstrapSettings{}, err
+	}
+
+	settings, err := s.loadPlayerBootstrapSettings(ctx, db)
+	if err != nil {
+		return "", nil, model.Torrent{}, playerBootstrapSettings{}, err
+	}
+	if !settings.TransmissionEnabled {
+		return "", nil, model.Torrent{}, playerBootstrapSettings{}, ErrPlayerTransmissionDisabled
+	}
+
+	return infoHash, db, torrent, settings, nil
+}
+
+func (s *service) playerTransmissionEnsureTorrent(
+	ctx context.Context,
+	settings playerBootstrapSettings,
+	infoHash string,
+	magnetURI string,
+) (*playerTransmissionRPCTorrent, error) {
+	existing, err := s.playerTransmissionFetchTorrent(ctx, settings, infoHash, false)
+	if err == nil {
+		return existing, nil
+	}
+	if !errors.Is(err, ErrNotFound) {
+		return nil, err
+	}
+	if strings.TrimSpace(magnetURI) == "" {
+		return nil, ErrNotFound
+	}
+
+	paused := false
+	addPayload, _ := json.Marshal(playerTransmissionRPCRequest{
+		Method: "torrent-add",
+		Arguments: playerTransmissionRPCArguments{
+			Filename: strings.TrimSpace(magnetURI),
+			Paused:   &paused,
+		},
+	})
+
+	addResponseRaw, err := callTransmissionRPC(
+		ctx,
+		settings.TransmissionURL,
+		settings.TransmissionUsername,
+		settings.TransmissionPassword,
+		settings.TransmissionInsecureTLS,
+		settings.TransmissionTimeoutSeconds,
+		addPayload,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var addResponse playerTransmissionRPCResponse
+	if err := json.Unmarshal(addResponseRaw, &addResponse); err != nil {
+		return nil, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(addResponse.Result), "success") {
+		return nil, fmt.Errorf("transmission torrent-add result=%q", strings.TrimSpace(addResponse.Result))
+	}
+
+	_ = s.playerTransmissionTryStart(ctx, settings, infoHash)
+
+	for attempt := 0; attempt < 20; attempt++ {
+		current, fetchErr := s.playerTransmissionFetchTorrent(ctx, settings, infoHash, false)
+		if fetchErr == nil {
+			return current, nil
+		}
+		if !errors.Is(fetchErr, ErrNotFound) {
+			return nil, fetchErr
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	return nil, ErrNotFound
+}
+
+func (s *service) playerTransmissionFetchTorrent(
+	ctx context.Context,
+	settings playerBootstrapSettings,
+	infoHash string,
+	includePieces bool,
+) (*playerTransmissionRPCTorrent, error) {
+	fields := []string{
+		"id",
+		"hashString",
+		"name",
+		"status",
+		"percentDone",
+		"rateDownload",
+		"rateUpload",
+		"peersConnected",
+		"error",
+		"errorString",
+		"leftUntilDone",
+		"downloadDir",
+		"files",
+		"fileStats",
+		"sequential_download",
+	}
+	if includePieces {
+		fields = append(fields, "pieces", "pieceSize")
+	}
+
+	reqPayload, _ := json.Marshal(playerTransmissionRPCRequest{
+		Method: "torrent-get",
+		Arguments: playerTransmissionRPCArguments{
+			IDs:    []any{infoHash},
+			Fields: fields,
+		},
+	})
+
+	raw, err := callTransmissionRPC(
+		ctx,
+		settings.TransmissionURL,
+		settings.TransmissionUsername,
+		settings.TransmissionPassword,
+		settings.TransmissionInsecureTLS,
+		settings.TransmissionTimeoutSeconds,
+		reqPayload,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var response playerTransmissionRPCResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return nil, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
+		return nil, fmt.Errorf("transmission torrent-get result=%q", strings.TrimSpace(response.Result))
+	}
+
+	for _, item := range response.Arguments.Torrents {
+		if strings.EqualFold(strings.TrimSpace(item.HashString), infoHash) {
+			copied := item
+			return &copied, nil
+		}
+	}
+	if len(response.Arguments.Torrents) > 0 {
+		copied := response.Arguments.Torrents[0]
+		return &copied, nil
+	}
+	return nil, ErrNotFound
+}
+
+func (s *service) playerTransmissionFetchTorrents(
+	ctx context.Context,
+	settings playerBootstrapSettings,
+	infoHashes []string,
+) (map[string]playerTransmissionRPCTorrent, error) {
+	if len(infoHashes) == 0 {
+		return map[string]playerTransmissionRPCTorrent{}, nil
+	}
+
+	ids := make([]any, 0, len(infoHashes))
+	for _, infoHash := range infoHashes {
+		ids = append(ids, infoHash)
+	}
+	reqPayload, _ := json.Marshal(playerTransmissionRPCRequest{
+		Method: "torrent-get",
+		Arguments: playerTransmissionRPCArguments{
+			IDs: ids,
+			Fields: []string{
+				"id",
+				"hashString",
+				"status",
+				"percentDone",
+			},
+		},
+	})
+
+	raw, err := callTransmissionRPC(
+		ctx,
+		settings.TransmissionURL,
+		settings.TransmissionUsername,
+		settings.TransmissionPassword,
+		settings.TransmissionInsecureTLS,
+		settings.TransmissionTimeoutSeconds,
+		reqPayload,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var response playerTransmissionRPCResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return nil, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
+		return nil, fmt.Errorf("transmission torrent-get result=%q", strings.TrimSpace(response.Result))
+	}
+
+	result := make(map[string]playerTransmissionRPCTorrent, len(response.Arguments.Torrents))
+	for _, item := range response.Arguments.Torrents {
+		key := strings.TrimSpace(strings.ToLower(item.HashString))
+		if key == "" {
+			continue
+		}
+		result[key] = item
+	}
+	return result, nil
+}
+
+func (s *service) playerTransmissionSetOnlyWantedFile(
+	ctx context.Context,
+	settings playerBootstrapSettings,
+	infoHash string,
+	fileIndex int,
+	fileCount int,
+) error {
+	if fileIndex < 0 || fileIndex >= fileCount {
+		return ErrPlayerFileNotFound
+	}
+
+	unwanted := make([]int, 0, fileCount-1)
+	for idx := 0; idx < fileCount; idx++ {
+		if idx == fileIndex {
+			continue
+		}
+		unwanted = append(unwanted, idx)
+	}
+
+	payload, _ := json.Marshal(playerTransmissionRPCRequest{
+		Method: "torrent-set",
+		Arguments: playerTransmissionRPCArguments{
+			IDs:            []any{infoHash},
+			FilesWanted:    []int{fileIndex},
+			FilesUnwanted:  unwanted,
+			PriorityHigh:   []int{fileIndex},
+			PriorityNormal: []int{},
+			PriorityLow:    []int{},
+			Sequential:     boolPtr(settings.TransmissionSequential),
+		},
+	})
+
+	raw, err := callTransmissionRPC(
+		ctx,
+		settings.TransmissionURL,
+		settings.TransmissionUsername,
+		settings.TransmissionPassword,
+		settings.TransmissionInsecureTLS,
+		settings.TransmissionTimeoutSeconds,
+		payload,
+	)
+	if err != nil {
+		return err
+	}
+
+	var response playerTransmissionRPCResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return err
+	}
+	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
+		return fmt.Errorf("transmission torrent-set result=%q", strings.TrimSpace(response.Result))
+	}
+
+	return nil
+}
+
+func (s *service) playerTransmissionTryStart(
+	ctx context.Context,
+	settings playerBootstrapSettings,
+	infoHash string,
+) error {
+	methods := []string{"torrent-start-now", "torrent-start"}
+	var lastErr error
+	for _, method := range methods {
+		payload, _ := json.Marshal(playerTransmissionRPCRequest{
+			Method: method,
+			Arguments: playerTransmissionRPCArguments{
+				IDs: []any{infoHash},
+			},
+		})
+		raw, err := callTransmissionRPC(
+			ctx,
+			settings.TransmissionURL,
+			settings.TransmissionUsername,
+			settings.TransmissionPassword,
+			settings.TransmissionInsecureTLS,
+			settings.TransmissionTimeoutSeconds,
+			payload,
+		)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		var response playerTransmissionRPCResponse
+		if err := json.Unmarshal(raw, &response); err != nil {
+			lastErr = err
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(response.Result), "success") {
+			return nil
+		}
+		lastErr = fmt.Errorf("transmission %s result=%q", method, strings.TrimSpace(response.Result))
+	}
+	return lastErr
+}
+
+func (s *service) playerTransmissionAutoCleanup(
+	ctx context.Context,
+	settings playerBootstrapSettings,
+	preserveInfoHash string,
+) error {
+	if !settings.TransmissionCleanupEnabled {
+		return nil
+	}
+	slowCleanupEnabled := settings.TransmissionCleanupSlowTaskEnabled
+	storageCleanupEnabled := settings.TransmissionCleanupStorageEnabled
+	if !slowCleanupEnabled && !storageCleanupEnabled {
+		return nil
+	}
+
+	torrents, err := s.playerTransmissionLoadAllTorrents(ctx, settings)
+	if err != nil {
+		return err
+	}
+	if len(torrents) == 0 {
+		return nil
+	}
+
+	preserveHash := strings.TrimSpace(strings.ToLower(preserveInfoHash))
+	toRemove := make(map[int64]struct{})
+	estimatedFreeGain := int64(0)
+	markRemove := func(item playerTransmissionRPCTorrent) {
+		if item.ID <= 0 {
+			return
+		}
+		if preserveHash != "" && strings.EqualFold(strings.TrimSpace(item.HashString), preserveHash) {
+			return
+		}
+		if _, ok := toRemove[item.ID]; ok {
+			return
+		}
+		toRemove[item.ID] = struct{}{}
+		estimatedFreeGain += maxInt64(item.SizeWhenDone, item.LeftUntilDone)
+	}
+
+	if storageCleanupEnabled && settings.TransmissionCleanupMaxTasks > 0 && len(torrents) > settings.TransmissionCleanupMaxTasks {
+		ordered := append([]playerTransmissionRPCTorrent(nil), torrents...)
+		sort.Slice(ordered, func(i, j int) bool {
+			left := maxInt64(ordered[i].ActivityDate, ordered[i].AddedDate)
+			right := maxInt64(ordered[j].ActivityDate, ordered[j].AddedDate)
+			if left == right {
+				return ordered[i].ID < ordered[j].ID
+			}
+			return left < right
+		})
+		need := len(torrents) - settings.TransmissionCleanupMaxTasks
+		for _, item := range ordered {
+			if need <= 0 {
+				break
+			}
+			if preserveHash != "" && strings.EqualFold(strings.TrimSpace(item.HashString), preserveHash) {
+				continue
+			}
+			if _, ok := toRemove[item.ID]; ok {
+				continue
+			}
+			markRemove(item)
+			need--
+		}
+	}
+
+	if slowCleanupEnabled && settings.TransmissionCleanupSlowRateKbps > 0 && settings.TransmissionCleanupSlowWindowMinutes >= 5 {
+		nowUnix := time.Now().Unix()
+		windowSeconds := int64(settings.TransmissionCleanupSlowWindowMinutes) * 60
+		rateThreshold := int64(settings.TransmissionCleanupSlowRateKbps) * 1024
+		for _, item := range torrents {
+			if item.LeftUntilDone <= 0 || item.IsFinished {
+				continue
+			}
+			lastActive := maxInt64(item.ActivityDate, item.AddedDate)
+			if lastActive <= 0 || nowUnix-lastActive < windowSeconds {
+				continue
+			}
+			if item.RateDownload >= rateThreshold {
+				continue
+			}
+			markRemove(item)
+		}
+	}
+
+	if storageCleanupEnabled && settings.TransmissionCleanupMinFreeSpaceGB > 0 {
+		freeBytes, freeErr := s.playerTransmissionLoadFreeSpace(ctx, settings)
+		if freeErr == nil {
+			threshold := int64(settings.TransmissionCleanupMinFreeSpaceGB) * 1024 * 1024 * 1024
+			if freeBytes+estimatedFreeGain < threshold {
+				needGain := threshold - (freeBytes + estimatedFreeGain)
+				ordered := append([]playerTransmissionRPCTorrent(nil), torrents...)
+				sort.Slice(ordered, func(i, j int) bool {
+					iFinished := ordered[i].IsFinished || ordered[i].LeftUntilDone <= 0
+					jFinished := ordered[j].IsFinished || ordered[j].LeftUntilDone <= 0
+					if iFinished != jFinished {
+						return iFinished
+					}
+					left := maxInt64(ordered[i].ActivityDate, ordered[i].AddedDate)
+					right := maxInt64(ordered[j].ActivityDate, ordered[j].AddedDate)
+					if left == right {
+						return ordered[i].ID < ordered[j].ID
+					}
+					return left < right
+				})
+				collected := int64(0)
+				for _, item := range ordered {
+					if collected >= needGain {
+						break
+					}
+					if preserveHash != "" && strings.EqualFold(strings.TrimSpace(item.HashString), preserveHash) {
+						continue
+					}
+					if _, ok := toRemove[item.ID]; ok {
+						collected += maxInt64(item.SizeWhenDone, item.LeftUntilDone)
+						continue
+					}
+					markRemove(item)
+					collected += maxInt64(item.SizeWhenDone, item.LeftUntilDone)
+				}
+			}
+		}
+	}
+
+	if len(toRemove) == 0 {
+		return nil
+	}
+	ids := make([]int64, 0, len(toRemove))
+	for id := range toRemove {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	return s.playerTransmissionRemoveTorrents(ctx, settings, ids, settings.TransmissionCleanupDeleteData)
+}
+
+func (s *service) playerTransmissionLoadAllTorrents(
+	ctx context.Context,
+	settings playerBootstrapSettings,
+) ([]playerTransmissionRPCTorrent, error) {
+	payload, _ := json.Marshal(playerTransmissionRPCRequest{
+		Method: "torrent-get",
+		Arguments: playerTransmissionRPCArguments{
+			Fields: []string{
+				"id",
+				"hashString",
+				"name",
+				"status",
+				"percentDone",
+				"rateDownload",
+				"rateUpload",
+				"leftUntilDone",
+				"sizeWhenDone",
+				"addedDate",
+				"activityDate",
+				"isFinished",
+			},
+		},
+	})
+	raw, err := callTransmissionRPC(
+		ctx,
+		settings.TransmissionURL,
+		settings.TransmissionUsername,
+		settings.TransmissionPassword,
+		settings.TransmissionInsecureTLS,
+		settings.TransmissionTimeoutSeconds,
+		payload,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var response playerTransmissionRPCResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return nil, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
+		return nil, fmt.Errorf("transmission torrent-get result=%q", strings.TrimSpace(response.Result))
+	}
+	return response.Arguments.Torrents, nil
+}
+
+func (s *service) playerTransmissionLoadFreeSpace(
+	ctx context.Context,
+	settings playerBootstrapSettings,
+) (int64, error) {
+	payload, _ := json.Marshal(playerTransmissionRPCRequest{
+		Method: "session-get",
+	})
+	raw, err := callTransmissionRPC(
+		ctx,
+		settings.TransmissionURL,
+		settings.TransmissionUsername,
+		settings.TransmissionPassword,
+		settings.TransmissionInsecureTLS,
+		settings.TransmissionTimeoutSeconds,
+		payload,
+	)
+	if err != nil {
+		return 0, err
+	}
+	var response playerTransmissionRPCSessionResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return 0, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
+		return 0, fmt.Errorf("transmission session-get result=%q", strings.TrimSpace(response.Result))
+	}
+	return response.Arguments.DownloadDirFreeSpace, nil
+}
+
+func (s *service) playerTransmissionLoadSessionDirs(
+	ctx context.Context,
+	settings playerBootstrapSettings,
+) ([]string, error) {
+	payload, _ := json.Marshal(playerTransmissionRPCRequest{
+		Method: "session-get",
+	})
+	raw, err := callTransmissionRPC(
+		ctx,
+		settings.TransmissionURL,
+		settings.TransmissionUsername,
+		settings.TransmissionPassword,
+		settings.TransmissionInsecureTLS,
+		settings.TransmissionTimeoutSeconds,
+		payload,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var response playerTransmissionRPCSessionResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return nil, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
+		return nil, fmt.Errorf("transmission session-get result=%q", strings.TrimSpace(response.Result))
+	}
+
+	dirs := make([]string, 0, 2)
+	if downloadDir := strings.TrimSpace(response.Arguments.DownloadDir); downloadDir != "" {
+		dirs = append(dirs, downloadDir)
+	}
+	if response.Arguments.IncompleteDirEnabled {
+		if incompleteDir := strings.TrimSpace(response.Arguments.IncompleteDir); incompleteDir != "" {
+			dirs = append(dirs, incompleteDir)
+		}
+	}
+	return dirs, nil
+}
+
+func (s *service) playerTransmissionRemoveTorrents(
+	ctx context.Context,
+	settings playerBootstrapSettings,
+	ids []int64,
+	deleteData bool,
+) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	idValues := make([]any, 0, len(ids))
+	for _, id := range ids {
+		idValues = append(idValues, id)
+	}
+	payload, _ := json.Marshal(playerTransmissionRPCRequest{
+		Method: "torrent-remove",
+		Arguments: playerTransmissionRPCArguments{
+			IDs:             idValues,
+			DeleteLocalData: boolPtr(deleteData),
+		},
+	})
+	raw, err := callTransmissionRPC(
+		ctx,
+		settings.TransmissionURL,
+		settings.TransmissionUsername,
+		settings.TransmissionPassword,
+		settings.TransmissionInsecureTLS,
+		settings.TransmissionTimeoutSeconds,
+		payload,
+	)
+	if err != nil {
+		return err
+	}
+	var response playerTransmissionRPCResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return err
+	}
+	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
+		return fmt.Errorf("transmission torrent-remove result=%q", strings.TrimSpace(response.Result))
+	}
+	return nil
+}
+
+func (s *service) playerTransmissionLoadStatus(
+	ctx context.Context,
+	settings playerBootstrapSettings,
+	infoHash string,
+	includePieces bool,
+) (PlayerTransmissionStatusResult, error) {
+	snapshot, err := s.playerTransmissionFetchTorrent(ctx, settings, infoHash, includePieces)
+	if err != nil {
+		return PlayerTransmissionStatusResult{}, err
+	}
+	return playerTransmissionBuildStatus(infoHash, snapshot), nil
+}
+
+func playerTransmissionBuildStatus(
+	infoHash string,
+	snapshot *playerTransmissionRPCTorrent,
+) PlayerTransmissionStatusResult {
+	files := make([]PlayerTransmissionFile, 0, len(snapshot.Files))
+	selectedIndex := -1
+	for idx, file := range snapshot.Files {
+		stats := playerTransmissionRPCFileStat{}
+		if idx < len(snapshot.FileStats) {
+			stats = snapshot.FileStats[idx]
+		}
+		item := PlayerTransmissionFile{
+			Index:          idx,
+			Name:           file.Name,
+			Length:         file.Length,
+			BytesCompleted: stats.BytesCompleted,
+			Wanted:         stats.Wanted,
+			Priority:       stats.Priority,
+			IsVideo:        playerTransmissionIsVideoFile(file.Name),
+		}
+		files = append(files, item)
+		if selectedIndex < 0 && item.Wanted {
+			selectedIndex = idx
+		}
+	}
+	if selectedIndex < 0 && len(snapshot.Files) > 0 {
+		selectedIndex = playerTransmissionDefaultFileIndex(snapshot.Files)
+	}
+
+	selectedBytes := int64(0)
+	selectedLength := int64(0)
+	if selectedIndex >= 0 && selectedIndex < len(files) {
+		selectedBytes = files[selectedIndex].BytesCompleted
+		selectedLength = files[selectedIndex].Length
+	}
+	selectedReady := 0.0
+	if selectedLength > 0 {
+		selectedReady = clampRatio(float64(selectedBytes) / float64(selectedLength))
+	}
+	selectedContiguousBytes := playerTransmissionContiguousBytesFromStart(snapshot, selectedIndex)
+	selectedContiguousRatio := 0.0
+	if selectedLength > 0 {
+		selectedContiguousRatio = clampRatio(float64(selectedContiguousBytes) / float64(selectedLength))
+	}
+	selectedAvailableRanges := playerTransmissionAvailableRanges(snapshot, selectedIndex)
+
+	return PlayerTransmissionStatusResult{
+		InfoHash:                    infoHash,
+		TorrentID:                   snapshot.ID,
+		Name:                        snapshot.Name,
+		State:                       playerTransmissionStatusLabel(snapshot.Status),
+		Progress:                    clampRatio(snapshot.PercentDone),
+		DownloadRate:                snapshot.RateDownload,
+		UploadRate:                  snapshot.RateUpload,
+		PeersConnected:              snapshot.PeersConnected,
+		ErrorCode:                   snapshot.Error,
+		ErrorMessage:                strings.TrimSpace(snapshot.ErrorString),
+		SelectedFileIndex:           selectedIndex,
+		SelectedFileBytesCompleted:  selectedBytes,
+		SelectedFileLength:          selectedLength,
+		SelectedFileReadyRatio:      selectedReady,
+		SelectedFileContiguousBytes: selectedContiguousBytes,
+		SelectedFileContiguousRatio: selectedContiguousRatio,
+		SelectedFileAvailableRanges: selectedAvailableRanges,
+		SequentialDownload:          snapshot.Sequential,
+		Files:                       files,
+		UpdatedAt:                   time.Now(),
+	}
+}
+
+func boolPtr(value bool) *bool {
+	v := value
+	return &v
+}
+
+func maxInt64(left int64, right int64) int64 {
+	if left > right {
+		return left
+	}
+	return right
+}
+
+func playerTransmissionBuildStreamURL(infoHash string, fileIndex int) string {
+	query := url.Values{}
+	query.Set("infoHash", infoHash)
+	query.Set("fileIndex", strconv.Itoa(fileIndex))
+	return "/api/media/player/transmission/stream?" + query.Encode()
+}
+
+func playerTransmissionDefaultFileIndex(files []playerTransmissionRPCFile) int {
+	if len(files) == 0 {
+		return -1
+	}
+	for idx, file := range files {
+		if playerTransmissionIsVideoFile(file.Name) {
+			return idx
+		}
+	}
+	return 0
+}
+
+func playerTransmissionIsVideoFile(name string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	for _, ext := range playerVideoExtensions {
+		if strings.HasSuffix(normalized, ext) {
+			return true
+		}
+	}
+	return false
+}
+
+func playerTransmissionStatusLabel(value int) string {
+	switch value {
+	case 0:
+		return "stopped"
+	case 1:
+		return "check_wait"
+	case 2:
+		return "checking"
+	case 3:
+		return "download_wait"
+	case 4:
+		return "downloading"
+	case 5:
+		return "seed_wait"
+	case 6:
+		return "seeding"
+	default:
+		return fmt.Sprintf("unknown_%d", value)
+	}
+}
+
+func clampRatio(value float64) float64 {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0
+	}
+	if value < 0 {
+		return 0
+	}
+	if value > 1 {
+		return 1
+	}
+	return value
+}
+
+func playerTransmissionContiguousBytesFromStart(
+	snapshot *playerTransmissionRPCTorrent,
+	fileIndex int,
+) int64 {
+	if snapshot == nil || fileIndex < 0 || fileIndex >= len(snapshot.Files) {
+		return 0
+	}
+	fileLength := snapshot.Files[fileIndex].Length
+	if fileLength <= 0 || snapshot.PieceSize <= 0 || strings.TrimSpace(snapshot.Pieces) == "" {
+		return 0
+	}
+
+	pieceBits, err := base64.StdEncoding.DecodeString(snapshot.Pieces)
+	if err != nil || len(pieceBits) == 0 {
+		return 0
+	}
+
+	fileOffset := int64(0)
+	for idx := 0; idx < fileIndex; idx++ {
+		fileOffset += snapshot.Files[idx].Length
+	}
+	fileEndGlobal := fileOffset + fileLength - 1
+	if fileEndGlobal < fileOffset {
+		return 0
+	}
+
+	firstPiece := int(fileOffset / snapshot.PieceSize)
+	lastPiece := int(fileEndGlobal / snapshot.PieceSize)
+	missingPiece := -1
+	for piece := firstPiece; piece <= lastPiece; piece++ {
+		if !playerTransmissionHasPiece(pieceBits, piece) {
+			missingPiece = piece
+			break
+		}
+	}
+
+	if missingPiece < 0 {
+		return fileLength
+	}
+
+	contiguousGlobalEnd := int64(missingPiece)*snapshot.PieceSize - 1
+	if contiguousGlobalEnd < fileOffset {
+		return 0
+	}
+	if contiguousGlobalEnd > fileEndGlobal {
+		contiguousGlobalEnd = fileEndGlobal
+	}
+	return contiguousGlobalEnd - fileOffset + 1
+}
+
+func playerTransmissionAvailableRanges(
+	snapshot *playerTransmissionRPCTorrent,
+	fileIndex int,
+) []PlayerFileRange {
+	if snapshot == nil || fileIndex < 0 || fileIndex >= len(snapshot.Files) {
+		return nil
+	}
+	fileLength := snapshot.Files[fileIndex].Length
+	if fileLength <= 0 || snapshot.PieceSize <= 0 || strings.TrimSpace(snapshot.Pieces) == "" {
+		return nil
+	}
+
+	pieceBits, err := base64.StdEncoding.DecodeString(snapshot.Pieces)
+	if err != nil || len(pieceBits) == 0 {
+		return nil
+	}
+
+	fileOffset := int64(0)
+	for idx := 0; idx < fileIndex; idx++ {
+		fileOffset += snapshot.Files[idx].Length
+	}
+	fileEndGlobal := fileOffset + fileLength - 1
+	if fileEndGlobal < fileOffset {
+		return nil
+	}
+
+	firstPiece := int(fileOffset / snapshot.PieceSize)
+	lastPiece := int(fileEndGlobal / snapshot.PieceSize)
+	if firstPiece < 0 || lastPiece < firstPiece {
+		return nil
+	}
+
+	const maxRanges = 1200
+	ranges := make([]PlayerFileRange, 0, 64)
+	currentStart := -1
+	flush := func(runStart int, runEnd int) {
+		if runStart < 0 || runEnd < runStart || len(ranges) >= maxRanges {
+			return
+		}
+		globalStart := int64(runStart) * snapshot.PieceSize
+		globalEnd := int64(runEnd+1)*snapshot.PieceSize - 1
+		if globalStart < fileOffset {
+			globalStart = fileOffset
+		}
+		if globalEnd > fileEndGlobal {
+			globalEnd = fileEndGlobal
+		}
+		if globalEnd < globalStart {
+			return
+		}
+		start := clampRatio(float64(globalStart-fileOffset) / float64(fileLength))
+		end := clampRatio(float64(globalEnd-fileOffset+1) / float64(fileLength))
+		if end <= start {
+			return
+		}
+		ranges = append(ranges, PlayerFileRange{
+			StartRatio: start,
+			EndRatio:   end,
+		})
+	}
+
+	for piece := firstPiece; piece <= lastPiece; piece++ {
+		hasPiece := playerTransmissionHasPiece(pieceBits, piece)
+		if hasPiece {
+			if currentStart < 0 {
+				currentStart = piece
+			}
+			continue
+		}
+		if currentStart >= 0 {
+			flush(currentStart, piece-1)
+			currentStart = -1
+		}
+		if len(ranges) >= maxRanges {
+			break
+		}
+	}
+	if currentStart >= 0 && len(ranges) < maxRanges {
+		flush(currentStart, lastPiece)
+	}
+
+	return ranges
+}
+
+func playerTransmissionHasPiece(pieceBits []byte, piece int) bool {
+	byteIndex := piece / 8
+	if byteIndex < 0 || byteIndex >= len(pieceBits) {
+		return false
+	}
+	bitIndex := uint(7 - (piece % 8))
+	return (pieceBits[byteIndex] & (1 << bitIndex)) != 0
+}
+
+func parsePlayerByteRange(header string, total int64) (int64, int64, bool, error) {
+	if total <= 0 {
+		return 0, 0, false, ErrPlayerInvalidRange
+	}
+
+	if strings.TrimSpace(header) == "" {
+		end := total - 1
+		limit := defaultPlayerStreamProbeChunkBytes - 1
+		if end > limit {
+			end = limit
+		}
+		return 0, end, true, nil
+	}
+
+	trimmed := strings.TrimSpace(header)
+	if !strings.HasPrefix(strings.ToLower(trimmed), "bytes=") {
+		return 0, 0, false, ErrPlayerInvalidRange
+	}
+	spec := strings.TrimSpace(trimmed[6:])
+	if spec == "" {
+		return 0, 0, false, ErrPlayerInvalidRange
+	}
+	if comma := strings.Index(spec, ","); comma >= 0 {
+		spec = strings.TrimSpace(spec[:comma])
+	}
+
+	parts := strings.SplitN(spec, "-", 2)
+	if len(parts) != 2 {
+		return 0, 0, false, ErrPlayerInvalidRange
+	}
+
+	left := strings.TrimSpace(parts[0])
+	right := strings.TrimSpace(parts[1])
+
+	var start int64
+	var end int64
+	if left == "" {
+		suffixLen, err := strconv.ParseInt(right, 10, 64)
+		if err != nil || suffixLen <= 0 {
+			return 0, 0, false, ErrPlayerInvalidRange
+		}
+		if suffixLen >= total {
+			start = 0
+		} else {
+			start = total - suffixLen
+		}
+		end = total - 1
+		return start, end, true, nil
+	}
+
+	parsedStart, err := strconv.ParseInt(left, 10, 64)
+	if err != nil || parsedStart < 0 || parsedStart >= total {
+		return 0, 0, false, ErrPlayerInvalidRange
+	}
+	start = parsedStart
+
+	if right == "" {
+		end = total - 1
+		limit := start + defaultPlayerStreamProbeChunkBytes - 1
+		if end > limit {
+			end = limit
+		}
+	} else {
+		parsedEnd, endErr := strconv.ParseInt(right, 10, 64)
+		if endErr != nil || parsedEnd < start {
+			return 0, 0, false, ErrPlayerInvalidRange
+		}
+		if parsedEnd >= total {
+			end = total - 1
+		} else {
+			end = parsedEnd
+		}
+	}
+	maxEnd := start + defaultPlayerStreamMaxRangeBytes - 1
+	if end > maxEnd {
+		end = maxEnd
+	}
+
+	return start, end, true, nil
+}
+
+func playerTransmissionRangeAvailable(
+	snapshot *playerTransmissionRPCTorrent,
+	fileIndex int,
+	start int64,
+	end int64,
+) bool {
+	if snapshot == nil || fileIndex < 0 || fileIndex >= len(snapshot.Files) {
+		return false
+	}
+	if start < 0 || end < start {
+		return false
+	}
+	if snapshot.PieceSize <= 0 {
+		return false
+	}
+
+	pieceBits, err := base64.StdEncoding.DecodeString(snapshot.Pieces)
+	if err != nil || len(pieceBits) == 0 {
+		return false
+	}
+
+	fileOffset := int64(0)
+	for idx := 0; idx < fileIndex; idx++ {
+		fileOffset += snapshot.Files[idx].Length
+	}
+
+	globalStart := fileOffset + start
+	globalEnd := fileOffset + end
+	if globalStart < 0 || globalEnd < globalStart {
+		return false
+	}
+
+	firstPiece := int(globalStart / snapshot.PieceSize)
+	lastPiece := int(globalEnd / snapshot.PieceSize)
+	for piece := firstPiece; piece <= lastPiece; piece++ {
+		if !playerTransmissionHasPiece(pieceBits, piece) {
+			return false
+		}
+	}
+	return true
+}
+
+func playerTransmissionResolveFilePath(downloadDir string, fileName string, localDownloadDir string) (string, error) {
+	relative := filepath.Clean(filepath.FromSlash(strings.TrimSpace(fileName)))
+	if relative == "." || strings.HasPrefix(relative, "..") || filepath.IsAbs(relative) {
+		return "", ErrNotFound
+	}
+
+	baseDirs := buildTransmissionPathCandidates(downloadDir, localDownloadDir)
+	basename := filepath.Base(relative)
+	for _, baseDir := range baseDirs {
+		if baseDir == "" {
+			continue
+		}
+		candidates := []string{
+			filepath.Join(baseDir, relative),
+			filepath.Join(baseDir, basename),
+			filepath.Join(baseDir, "complete", relative),
+			filepath.Join(baseDir, "complete", basename),
+			filepath.Join(baseDir, "incomplete", relative),
+			filepath.Join(baseDir, "incomplete", basename),
+		}
+		for _, candidate := range candidates {
+			relCheck, err := filepath.Rel(baseDir, candidate)
+			if err != nil || strings.HasPrefix(relCheck, "..") {
+				continue
+			}
+			if _, err := os.Stat(candidate); err == nil {
+				return candidate, nil
+			}
+			partialCandidate := candidate + ".part"
+			if _, err := os.Stat(partialCandidate); err == nil {
+				return partialCandidate, nil
+			}
+		}
+	}
+
+	for _, baseDir := range baseDirs {
+		if baseDir == "" {
+			continue
+		}
+		if looseMatch, matchErr := playerTransmissionFindFileLoosely(baseDir, relative); matchErr == nil && strings.TrimSpace(looseMatch) != "" {
+			return looseMatch, nil
+		}
+	}
+
+	return "", fmt.Errorf("stream file not found (downloadDir=%s, file=%s, baseCandidates=%s): %w",
+		strings.TrimSpace(downloadDir),
+		strings.TrimSpace(fileName),
+		strings.Join(baseDirs, " | "),
+		ErrNotFound,
+	)
+}
+
+func buildTransmissionPathCandidates(downloadDir string, localDownloadDir string) []string {
+	normalized := filepath.Clean(strings.TrimSpace(downloadDir))
+	if normalized == "" {
+		return nil
+	}
+	candidates := make([]string, 0, 8)
+	appendCandidate := func(path string) {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return
+		}
+		if !filepath.IsAbs(path) {
+			if absPath, err := filepath.Abs(path); err == nil {
+				path = absPath
+			}
+		}
+		path = filepath.Clean(path)
+		for _, existing := range candidates {
+			if strings.EqualFold(existing, path) {
+				return
+			}
+		}
+		candidates = append(candidates, path)
+	}
+
+	appendCandidate(normalized)
+	if baseName := strings.ToLower(strings.TrimSpace(filepath.Base(normalized))); baseName == "complete" || baseName == "incomplete" {
+		appendCandidate(filepath.Dir(normalized))
+	}
+	if override := strings.TrimSpace(os.Getenv("BITMAGNET_PLAYER_TRANSMISSION_LOCAL_DOWNLOAD_DIR")); override != "" {
+		appendCandidate(override)
+	}
+	if override := strings.TrimSpace(localDownloadDir); override != "" {
+		appendCandidate(override)
+	}
+	for _, mapped := range mapTransmissionRemotePathToLocal(normalized) {
+		appendCandidate(mapped)
+	}
+
+	localRoots := make([]string, 0, 8)
+	appendLocalRoot := func(path string) {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return
+		}
+		localRoots = append(localRoots, path)
+		appendCandidate(path)
+	}
+	appendLocalRoot("/root/.local/share/bitmagnet/transmission/downloads")
+	appendLocalRoot("/var/lib/bitmagnet/transmission/downloads")
+	if homeDir, err := os.UserHomeDir(); err == nil && strings.TrimSpace(homeDir) != "" {
+		appendLocalRoot(filepath.Join(homeDir, ".local/share/bitmagnet/transmission/downloads"))
+	}
+	if wd, err := os.Getwd(); err == nil && strings.TrimSpace(wd) != "" {
+		appendLocalRoot(filepath.Join(wd, "data/transmission/downloads"))
+		appendLocalRoot(filepath.Join(wd, "../data/transmission/downloads"))
+		appendLocalRoot(filepath.Join(wd, "../backend/data/transmission/downloads"))
+		appendLocalRoot(filepath.Join(wd, "backend/data/transmission/downloads"))
+	}
+
+	remoteSuffixes := transmissionCandidateSuffixes(normalized)
+	for _, root := range localRoots {
+		for _, suffix := range remoteSuffixes {
+			appendCandidate(filepath.Join(root, suffix))
+		}
+	}
+
+	remotePrefix := "/downloads"
+	if strings.HasPrefix(normalized, remotePrefix) {
+		suffix := strings.TrimPrefix(normalized, remotePrefix)
+		appendCandidate(filepath.Join("/root/.local/share/bitmagnet/transmission/downloads"))
+		appendCandidate(filepath.Join("/var/lib/bitmagnet/transmission/downloads"))
+		if homeDir, err := os.UserHomeDir(); err == nil && strings.TrimSpace(homeDir) != "" {
+			appendCandidate(filepath.Join(homeDir, ".local/share/bitmagnet/transmission/downloads"))
+		}
+		if wd, err := os.Getwd(); err == nil && strings.TrimSpace(wd) != "" {
+			appendCandidate(filepath.Join(wd, "data/transmission/downloads"))
+			appendCandidate(filepath.Join(wd, "../data/transmission/downloads"))
+			appendCandidate(filepath.Join(wd, "../backend/data/transmission/downloads"))
+			appendCandidate(filepath.Join(wd, "backend/data/transmission/downloads"))
+		}
+		appendCandidate(filepath.Join("/root/.local/share/bitmagnet/transmission/downloads", suffix))
+		appendCandidate(filepath.Join("/var/lib/bitmagnet/transmission/downloads", suffix))
+		if homeDir, err := os.UserHomeDir(); err == nil && strings.TrimSpace(homeDir) != "" {
+			appendCandidate(filepath.Join(homeDir, ".local/share/bitmagnet/transmission/downloads", suffix))
+		}
+		if wd, err := os.Getwd(); err == nil && strings.TrimSpace(wd) != "" {
+			appendCandidate(filepath.Join(wd, "data/transmission/downloads", suffix))
+			appendCandidate(filepath.Join(wd, "../data/transmission/downloads", suffix))
+			appendCandidate(filepath.Join(wd, "../backend/data/transmission/downloads", suffix))
+			appendCandidate(filepath.Join(wd, "backend/data/transmission/downloads", suffix))
+		}
+	}
+
+	return candidates
+}
+
+func transmissionCandidateSuffixes(downloadDir string) []string {
+	normalized := strings.ToLower(filepath.ToSlash(strings.TrimSpace(downloadDir)))
+	if normalized == "" || normalized == "." || normalized == "/" {
+		return nil
+	}
+	markers := []string{"/incomplete", "/complete", "/downloads"}
+	suffixes := make([]string, 0, 3)
+	seen := map[string]struct{}{}
+	for _, marker := range markers {
+		index := strings.Index(normalized, marker)
+		if index < 0 {
+			continue
+		}
+		suffix := strings.TrimPrefix(normalized[index:], "/")
+		suffix = strings.TrimSpace(suffix)
+		if suffix == "" || suffix == "." {
+			continue
+		}
+		if _, ok := seen[suffix]; ok {
+			continue
+		}
+		seen[suffix] = struct{}{}
+		suffixes = append(suffixes, filepath.FromSlash(suffix))
+	}
+	return suffixes
+}
+
+func mapTransmissionRemotePathToLocal(remotePath string) []string {
+	rulesRaw := strings.TrimSpace(os.Getenv("BITMAGNET_PLAYER_TRANSMISSION_PATH_MAP"))
+	if rulesRaw == "" {
+		return nil
+	}
+	normalizedRemote := filepath.Clean(strings.TrimSpace(remotePath))
+	if normalizedRemote == "" {
+		return nil
+	}
+
+	type mapRule struct {
+		remote string
+		local  string
+	}
+	rules := make([]mapRule, 0, 4)
+	for _, item := range strings.Split(rulesRaw, ";") {
+		part := strings.TrimSpace(item)
+		if part == "" {
+			continue
+		}
+		separator := "="
+		if strings.Contains(part, "=>") {
+			separator = "=>"
+		}
+		pairs := strings.SplitN(part, separator, 2)
+		if len(pairs) != 2 {
+			continue
+		}
+		remote := filepath.Clean(strings.TrimSpace(pairs[0]))
+		local := filepath.Clean(strings.TrimSpace(pairs[1]))
+		if remote == "" || remote == "." || local == "" || local == "." {
+			continue
+		}
+		rules = append(rules, mapRule{remote: remote, local: local})
+	}
+	if len(rules) == 0 {
+		return nil
+	}
+
+	mapped := make([]string, 0, len(rules)*2)
+	for _, rule := range rules {
+		if strings.EqualFold(normalizedRemote, rule.remote) {
+			mapped = append(mapped, rule.local)
+			continue
+		}
+		prefix := rule.remote
+		if !strings.HasSuffix(prefix, string(os.PathSeparator)) {
+			prefix += string(os.PathSeparator)
+		}
+		if strings.HasPrefix(normalizedRemote, prefix) {
+			suffix := strings.TrimPrefix(normalizedRemote, prefix)
+			mapped = append(mapped, filepath.Join(rule.local, suffix))
+		}
+	}
+	return mapped
+}
+
+func playerTransmissionFindFileLoosely(baseDir string, relative string) (string, error) {
+	base := strings.TrimSpace(baseDir)
+	if base == "" {
+		return "", ErrNotFound
+	}
+
+	relativeLower := strings.ToLower(filepath.ToSlash(relative))
+	baseNameLower := strings.ToLower(filepath.Base(relative))
+	if baseNameLower == "" || baseNameLower == "." {
+		return "", ErrNotFound
+	}
+
+	type match struct {
+		path  string
+		score int
+	}
+	const maxVisited = 60000
+	visited := 0
+	matches := make([]match, 0, 4)
+	stopWalk := errors.New("stop walk")
+
+	walkErr := filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if visited >= maxVisited {
+			return stopWalk
+		}
+		visited++
+		if d.IsDir() {
+			return nil
+		}
+
+		nameLower := strings.ToLower(d.Name())
+		trimmedPart := strings.TrimSuffix(nameLower, ".part")
+		if nameLower != baseNameLower && trimmedPart != baseNameLower {
+			return nil
+		}
+		relativePath, relErr := filepath.Rel(base, path)
+		if relErr != nil {
+			return nil
+		}
+		relLower := strings.ToLower(filepath.ToSlash(relativePath))
+		score := 60
+		if strings.HasSuffix(relLower, relativeLower) {
+			score = 0
+		} else if strings.HasSuffix(relLower, "/"+baseNameLower) {
+			score = 20
+		}
+		matches = append(matches, match{
+			path:  path,
+			score: score,
+		})
+		return nil
+	})
+	if walkErr != nil && !errors.Is(walkErr, stopWalk) {
+		return "", walkErr
+	}
+	if len(matches) == 0 {
+		return "", ErrNotFound
+	}
+	sort.Slice(matches, func(i, j int) bool {
+		if matches[i].score != matches[j].score {
+			return matches[i].score < matches[j].score
+		}
+		return len(matches[i].path) < len(matches[j].path)
+	})
+	return matches[0].path, nil
+}
+
+func playerTransmissionDescribeLocalDir(localDownloadDir string) string {
+	trimmed := strings.TrimSpace(localDownloadDir)
+	if trimmed == "" {
+		return "unset"
+	}
+
+	info, err := os.Stat(trimmed)
+	if err != nil {
+		return fmt.Sprintf("%s (stat error: %v)", trimmed, err)
+	}
+	if !info.IsDir() {
+		return fmt.Sprintf("%s (exists=true,isDir=false)", trimmed)
+	}
+
+	entries, readErr := os.ReadDir(trimmed)
+	if readErr != nil {
+		return fmt.Sprintf("%s (exists=true,isDir=true,readable=false,error=%v)", trimmed, readErr)
+	}
+	return fmt.Sprintf("%s (exists=true,isDir=true,readable=true,entries=%d)", trimmed, len(entries))
+}

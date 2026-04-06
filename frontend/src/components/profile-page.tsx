@@ -196,7 +196,7 @@ export function ProfilePage() {
         <Group justify="space-between" align="flex-start">
           <Stack gap={4}>
             <Title order={2}>{t("profile.title")}</Title>
-            <Text c="dimmed">{t("profile.subtitle")}</Text>
+            <Text c="dimmed" className="page-subtitle">{t("profile.subtitle")}</Text>
           </Stack>
           <Button variant="default" leftSection={<RefreshCw size={14} />} onClick={() => void refreshFavorites()}>
             {t("common.refresh")}

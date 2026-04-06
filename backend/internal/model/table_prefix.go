@@ -5,6 +5,9 @@ import "strings"
 var TableNameBloomFilter = "bloom_filters"
 var TableNameUser = "users"
 var TableNameUserFavorite = "user_favorites"
+var TableNameUserInviteCode = "user_invite_codes"
+var TableNameUserSession = "user_sessions"
+var TableNamePlayerSubtitle = "player_subtitles"
 
 var defaultTableNames = map[*string]string{
 	&TableNameContent:                  "content",
@@ -27,6 +30,9 @@ var defaultTableNames = map[*string]string{
 	&TableNameBloomFilter:              "bloom_filters",
 	&TableNameUser:                     "users",
 	&TableNameUserFavorite:             "user_favorites",
+	&TableNameUserInviteCode:           "user_invite_codes",
+	&TableNameUserSession:              "user_sessions",
+	&TableNamePlayerSubtitle:           "player_subtitles",
 }
 
 func ApplyTablePrefix(prefix string) {

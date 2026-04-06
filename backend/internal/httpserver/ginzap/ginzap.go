@@ -3,6 +3,8 @@
 package ginzap
 
 import (
+	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -85,9 +87,22 @@ func WithConfig(logger ZapLogger, conf *Config) gin.HandlerFunc {
 			}
 
 			if len(c.Errors) > 0 {
-				// Append error field if this is an erroneous request.
-				for _, e := range c.Errors.Errors() {
-					logger.Error(e, fields...)
+				nonBenignCount := 0
+				benignCount := 0
+				for _, e := range c.Errors {
+					if isBenignClientDisconnectError(e.Err, e.Error()) {
+						benignCount += 1
+						continue
+					}
+					nonBenignCount += 1
+					logger.Error(e.Error(), fields...)
+				}
+				if nonBenignCount == 0 {
+					if benignCount > 0 {
+						logger.Debug(path, append(fields, zap.Int("suppressed_error_count", benignCount))...)
+					} else {
+						logger.Debug(path, fields...)
+					}
 				}
 			} else {
 				logger.Debug(path, fields...)
@@ -138,7 +153,7 @@ func CustomRecoveryWithZap(logger ZapLogger, stack bool, recovery gin.RecoveryFu
 
 				httpRequest, _ := httputil.DumpRequest(c.Request, false)
 				if brokenPipe {
-					logger.Error(c.Request.URL.Path,
+					logger.Debug(c.Request.URL.Path,
 						zap.Any("error", err),
 						zap.String("request", string(httpRequest)),
 					)
@@ -169,4 +184,25 @@ func CustomRecoveryWithZap(logger ZapLogger, stack bool, recovery gin.RecoveryFu
 		}()
 		c.Next()
 	}
+}
+
+func isBenignClientDisconnectError(err error, fallback string) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	messageParts := make([]string, 0, 2)
+	if err != nil {
+		messageParts = append(messageParts, err.Error())
+	}
+	if fallback != "" {
+		messageParts = append(messageParts, fallback)
+	}
+	if len(messageParts) == 0 {
+		return false
+	}
+	message := strings.ToLower(strings.Join(messageParts, " "))
+	return strings.Contains(message, "broken pipe") ||
+		strings.Contains(message, "connection reset by peer") ||
+		strings.Contains(message, "context canceled") ||
+		strings.Contains(message, "client disconnected")
 }

@@ -1,9 +1,20 @@
 package mediaapi
 
 import (
+	"bufio"
+	"bytes"
+	"context"
 	"errors"
+	"fmt"
+	"io"
+	"math"
+	"net"
 	"net/http"
+	"os"
+	"os/exec"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nigowl/bitmagnet/internal/httpserver"
@@ -36,6 +47,18 @@ func (b *builder) Key() string {
 func (b *builder) Apply(e *gin.Engine) error {
 	e.GET("/api/media", b.list)
 	e.GET("/api/media/:id", b.detail)
+	e.POST("/api/media/player/transmission/bootstrap", b.playerTransmissionBootstrap)
+	e.POST("/api/media/player/transmission/select-file", b.playerTransmissionSelectFile)
+	e.GET("/api/media/player/transmission/status", b.playerTransmissionStatus)
+	e.GET("/api/media/player/transmission/status/batch", b.playerTransmissionBatchStatus)
+	e.GET("/api/media/player/transmission/stream", b.playerTransmissionStream)
+	e.HEAD("/api/media/player/transmission/stream", b.playerTransmissionStream)
+	e.GET("/api/media/player/subtitles", b.playerSubtitleList)
+	e.POST("/api/media/player/subtitles", b.playerSubtitleCreate)
+	e.PUT("/api/media/player/subtitles/:subtitleId", b.playerSubtitleUpdate)
+	e.DELETE("/api/media/player/subtitles/:subtitleId", b.playerSubtitleDelete)
+	e.GET("/api/media/player/subtitles/:subtitleId/content", b.playerSubtitleContent)
+	e.HEAD("/api/media/player/subtitles/:subtitleId/content", b.playerSubtitleContent)
 	e.GET("/api/media/:id/cover/:kind/:size", b.cover)
 	e.HEAD("/api/media/:id/cover/:kind/:size", b.cover)
 	return nil
@@ -83,6 +106,565 @@ func (b *builder) detail(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) playerTransmissionBootstrap(c *gin.Context) {
+	var req media.PlayerTransmissionBootstrapInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	result, err := b.service.PlayerTransmissionBootstrap(c.Request.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrInvalidInfoHash):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid infoHash"})
+		case errors.Is(err, media.ErrPlayerTransmissionDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player transmission disabled"})
+		case errors.Is(err, media.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "torrent not found"})
+		case errors.Is(err, media.ErrPlayerFileNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "playable file not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) playerTransmissionSelectFile(c *gin.Context) {
+	var req media.PlayerTransmissionSelectFileInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	result, err := b.service.PlayerTransmissionSelectFile(c.Request.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrInvalidInfoHash):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid infoHash"})
+		case errors.Is(err, media.ErrPlayerTransmissionDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player transmission disabled"})
+		case errors.Is(err, media.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "torrent not found"})
+		case errors.Is(err, media.ErrPlayerFileNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) playerTransmissionStatus(c *gin.Context) {
+	infoHash := strings.TrimSpace(c.Query("infoHash"))
+	result, err := b.service.PlayerTransmissionStatus(c.Request.Context(), media.PlayerTransmissionStatusInput{
+		InfoHash: infoHash,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrInvalidInfoHash):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid infoHash"})
+		case errors.Is(err, media.ErrPlayerTransmissionDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player transmission disabled"})
+		case errors.Is(err, media.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "torrent not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) playerTransmissionBatchStatus(c *gin.Context) {
+	infoHashes := parseStringListQuery(c, "infoHash", "infoHashes")
+	result, err := b.service.PlayerTransmissionBatchStatus(c.Request.Context(), media.PlayerTransmissionBatchStatusInput{
+		InfoHashes: infoHashes,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrPlayerTransmissionDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player transmission disabled"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) playerTransmissionStream(c *gin.Context) {
+	infoHash := strings.TrimSpace(c.Query("infoHash"))
+	fileIndex := parseInt(c.Query("fileIndex"), -1)
+	preferTranscode := parseBool(c.Query("transcode"), false)
+	startSeconds := parseFloat(c.Query("start"), 0)
+	startBytes := parseInt64(c.Query("startBytes"), 0)
+
+	resolveResult, err := b.service.PlayerTransmissionResolveStream(c.Request.Context(), media.PlayerTransmissionResolveStreamInput{
+		InfoHash:        infoHash,
+		FileIndex:       fileIndex,
+		RangeHeader:     c.GetHeader("Range"),
+		PreferTranscode: preferTranscode,
+		StartSeconds:    startSeconds,
+		StartBytes:      startBytes,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrInvalidInfoHash), errors.Is(err, media.ErrPlayerInvalidRange):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrPlayerTransmissionDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player transmission disabled"})
+		case errors.Is(err, media.ErrPlayerStreamUnavailable):
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "stream data not ready yet"})
+		case errors.Is(err, media.ErrPlayerStorageUnavailable):
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrNotFound), errors.Is(err, media.ErrPlayerFileNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	if resolveResult.Transcode.Enabled {
+		b.playerTransmissionStreamTranscoded(c, resolveResult)
+		return
+	}
+
+	file, err := os.Open(resolveResult.FilePath)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": fmt.Sprintf("stream file not found: %s (%v)", resolveResult.FilePath, err),
+		})
+		return
+	}
+	defer file.Close()
+
+	if _, err := file.Seek(resolveResult.RangeStart, io.SeekStart); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	contentLength := resolveResult.RangeEnd - resolveResult.RangeStart + 1
+	if contentLength < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid range"})
+		return
+	}
+
+	c.Header("Accept-Ranges", "bytes")
+	c.Header("Content-Type", resolveResult.ContentType)
+	c.Header("Content-Length", strconv.FormatInt(contentLength, 10))
+	c.Header("X-Bitmagnet-Stream-Source", "local")
+	c.Header("X-Bitmagnet-Stream-Path", resolveResult.FilePath)
+	if resolveResult.Partial {
+		c.Header(
+			"Content-Range",
+			"bytes "+strconv.FormatInt(resolveResult.RangeStart, 10)+
+				"-"+strconv.FormatInt(resolveResult.RangeEnd, 10)+
+				"/"+strconv.FormatInt(resolveResult.TotalLength, 10),
+		)
+	}
+
+	statusCode := http.StatusOK
+	if resolveResult.Partial {
+		statusCode = http.StatusPartialContent
+	}
+	c.Status(statusCode)
+
+	if c.Request.Method == http.MethodHead {
+		return
+	}
+
+	if _, err := io.CopyN(c.Writer, file, contentLength); err != nil && !errors.Is(err, io.EOF) && !isBenignStreamingError(err) {
+		c.Error(err)
+	}
+}
+
+func (b *builder) playerSubtitleList(c *gin.Context) {
+	infoHash := strings.TrimSpace(c.Query("infoHash"))
+	result, err := b.service.PlayerSubtitleList(c.Request.Context(), media.PlayerSubtitleListInput{
+		InfoHash: infoHash,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrInvalidInfoHash):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid infoHash"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": result})
+}
+
+func (b *builder) playerSubtitleCreate(c *gin.Context) {
+	var req media.PlayerSubtitleCreateInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	result, err := b.service.PlayerSubtitleCreate(c.Request.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrInvalidInfoHash), errors.Is(err, media.ErrPlayerSubtitleInvalid):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"item": result})
+}
+
+func (b *builder) playerSubtitleUpdate(c *gin.Context) {
+	subtitleID := parseInt64(c.Param("subtitleId"), 0)
+	if subtitleID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid subtitleId"})
+		return
+	}
+	var req media.PlayerSubtitleUpdateInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	req.ID = subtitleID
+	result, err := b.service.PlayerSubtitleUpdate(c.Request.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrInvalidInfoHash), errors.Is(err, media.ErrPlayerSubtitleInvalid):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrPlayerSubtitleNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"item": result})
+}
+
+func (b *builder) playerSubtitleDelete(c *gin.Context) {
+	subtitleID := parseInt64(c.Param("subtitleId"), 0)
+	if subtitleID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid subtitleId"})
+		return
+	}
+	infoHash := strings.TrimSpace(c.Query("infoHash"))
+	err := b.service.PlayerSubtitleDelete(c.Request.Context(), media.PlayerSubtitleDeleteInput{
+		InfoHash: infoHash,
+		ID:       subtitleID,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrInvalidInfoHash), errors.Is(err, media.ErrPlayerSubtitleInvalid):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrPlayerSubtitleNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (b *builder) playerSubtitleContent(c *gin.Context) {
+	subtitleID := parseInt64(c.Param("subtitleId"), 0)
+	if subtitleID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid subtitleId"})
+		return
+	}
+	infoHash := strings.TrimSpace(c.Query("infoHash"))
+	result, err := b.service.PlayerSubtitleContent(c.Request.Context(), media.PlayerSubtitleContentInput{
+		InfoHash: infoHash,
+		ID:       subtitleID,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrInvalidInfoHash), errors.Is(err, media.ErrPlayerSubtitleInvalid):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrPlayerSubtitleNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.Header("Content-Type", "text/vtt; charset=utf-8")
+	c.Header("Cache-Control", "no-store, max-age=0")
+	c.Header("Last-Modified", result.UpdatedAt.UTC().Format(http.TimeFormat))
+	if c.Request.Method == http.MethodHead {
+		c.Status(http.StatusOK)
+		return
+	}
+	c.String(http.StatusOK, result.ContentVTT)
+}
+
+func (b *builder) playerTransmissionStreamTranscoded(c *gin.Context, resolveResult media.PlayerTransmissionResolveStreamResult) {
+	binaryPath := strings.TrimSpace(resolveResult.Transcode.BinaryPath)
+	if binaryPath == "" {
+		binaryPath = "ffmpeg"
+	}
+	inputPath := resolveResult.FilePath
+	streamSource := "local+ffmpeg"
+	streamPath := strings.TrimSpace(resolveResult.FilePath)
+	transcodeStartSeconds := resolveResult.StartSeconds
+	transcodeSeekStartBytes := resolveResult.StartBytes
+
+	args := buildPlayerFFmpegArgs(inputPath, resolveResult.Transcode, transcodeStartSeconds)
+	cmd := exec.CommandContext(c.Request.Context(), binaryPath, args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	c.Header("Cache-Control", "no-store, max-age=0")
+	c.Header("Content-Type", "video/mp4")
+	c.Header("Accept-Ranges", "none")
+	c.Header("X-Bitmagnet-Transcode", "ffmpeg")
+	c.Header("X-Bitmagnet-Transcode-Binary", binaryPath)
+	c.Header("X-Bitmagnet-Transcode-Start", strconv.FormatFloat(transcodeStartSeconds, 'f', 3, 64))
+	c.Header("X-Bitmagnet-Transcode-Seek-Bytes", strconv.FormatInt(transcodeSeekStartBytes, 10))
+	c.Header("X-Bitmagnet-Stream-Source", streamSource)
+	if streamPath != "" {
+		c.Header("X-Bitmagnet-Stream-Path", streamPath)
+	}
+	if c.Request.Method == http.MethodHead {
+		c.Status(http.StatusOK)
+		return
+	}
+
+	if err := cmd.Start(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer stdout.Close()
+
+	reader := bufio.NewReaderSize(stdout, 64*1024)
+	firstChunk := make([]byte, 32*1024)
+	type firstReadResult struct {
+		n   int
+		err error
+	}
+	firstReadCh := make(chan firstReadResult, 1)
+	go func() {
+		n, err := reader.Read(firstChunk)
+		firstReadCh <- firstReadResult{n: n, err: err}
+	}()
+
+	var firstRead firstReadResult
+	firstChunkTimeout := 15 * time.Second
+	if transcodeStartSeconds > 0 {
+		firstChunkTimeout += 20 * time.Second
+	}
+	select {
+	case firstRead = <-firstReadCh:
+	case <-time.After(firstChunkTimeout):
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+		message := strings.TrimSpace(stderr.String())
+		if message == "" {
+			message = fmt.Sprintf(
+				"ffmpeg produced no output within %ds (source=%s,start=%.3fs,input=%s)",
+				int(firstChunkTimeout.Seconds()),
+				streamSource,
+				transcodeStartSeconds,
+				inputPath,
+			)
+		}
+		c.JSON(http.StatusGatewayTimeout, gin.H{"error": message})
+		return
+	}
+
+	if firstRead.n <= 0 {
+		if waitErr := cmd.Wait(); waitErr != nil {
+			message := strings.TrimSpace(stderr.String())
+			if isExpectedFFmpegExit(waitErr, c.Request.Context(), message) {
+				return
+			}
+			if message == "" {
+				message = waitErr.Error()
+			}
+			if isTransientFFmpegStartupFailure(message) {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("ffmpeg startup pending: %s", message)})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("ffmpeg stream failed: %s", message)})
+			return
+		}
+		if firstRead.err != nil && !errors.Is(firstRead.err, io.EOF) {
+			message := strings.TrimSpace(firstRead.err.Error())
+			if isTransientFFmpegStartupFailure(message) {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("ffmpeg startup pending: %s", message)})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": firstRead.err.Error()})
+			return
+		}
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "ffmpeg startup pending: empty output"})
+		return
+	}
+
+	c.Status(http.StatusOK)
+	if _, err := c.Writer.Write(firstChunk[:firstRead.n]); err != nil && !isBenignStreamingError(err) {
+		c.Error(err)
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+		return
+	}
+	if flusher, ok := c.Writer.(http.Flusher); ok {
+		flusher.Flush()
+	}
+
+	if firstRead.err != nil && !errors.Is(firstRead.err, io.EOF) && !isBenignStreamingError(firstRead.err) {
+		c.Error(firstRead.err)
+	}
+	if firstRead.err == nil {
+		if _, err := io.Copy(c.Writer, reader); err != nil && !errors.Is(err, io.EOF) && !isBenignStreamingError(err) {
+			c.Error(err)
+		}
+	}
+	if err := cmd.Wait(); err != nil {
+		message := strings.TrimSpace(stderr.String())
+		if isExpectedFFmpegExit(err, c.Request.Context(), message) {
+			return
+		}
+		if message == "" {
+			message = err.Error()
+		}
+		c.Error(fmt.Errorf("ffmpeg stream failed: %s", message))
+	}
+}
+
+func isBenignStreamingError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "broken pipe") ||
+		strings.Contains(message, "connection reset by peer") ||
+		strings.Contains(message, "client disconnected")
+}
+
+func isExpectedFFmpegExit(waitErr error, requestCtx context.Context, stderrText string) bool {
+	if waitErr == nil {
+		return true
+	}
+	if errors.Is(waitErr, context.Canceled) || errors.Is(requestCtx.Err(), context.Canceled) {
+		return true
+	}
+	message := strings.ToLower(strings.TrimSpace(waitErr.Error()))
+	stderrNormalized := strings.ToLower(strings.TrimSpace(stderrText))
+	if strings.Contains(message, "signal: killed") {
+		if stderrNormalized == "" ||
+			strings.Contains(stderrNormalized, "broken pipe") ||
+			strings.Contains(stderrNormalized, "connection reset by peer") {
+			return true
+		}
+	}
+	return false
+}
+
+func isTransientFFmpegStartupFailure(message string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	if normalized == "" {
+		return true
+	}
+	transientTokens := []string{
+		"moov atom not found",
+		"invalid data found when processing input",
+		"error reading header",
+		"could not find codec parameters",
+		"could not find stream information",
+		"cannot determine format of input stream",
+		"end of file",
+		"input/output error",
+	}
+	for _, token := range transientTokens {
+		if strings.Contains(normalized, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func buildPlayerFFmpegArgs(filePath string, options media.PlayerFFmpegTranscodeSettings, startSeconds float64) []string {
+	preset := strings.TrimSpace(options.Preset)
+	if preset == "" {
+		preset = "veryfast"
+	}
+	crf := options.CRF
+	if crf < 16 || crf > 38 {
+		crf = 23
+	}
+	audioBitrate := options.AudioBitrateKbps
+	if audioBitrate < 64 || audioBitrate > 320 {
+		audioBitrate = 128
+	}
+
+	args := []string{
+		"-hide_banner",
+		"-loglevel", "error",
+		"-nostdin",
+		"-fflags", "+genpts",
+		"-avoid_negative_ts", "make_zero",
+	}
+	if startSeconds > 0 {
+		startValue := strconv.FormatFloat(startSeconds, 'f', 3, 64)
+		// For local file input, place -ss before -i for faster seek.
+		if filePath != "pipe:0" {
+			args = append(args, "-ss", startValue)
+		}
+	}
+	args = append(args, "-i", filePath)
+	if startSeconds > 0 && filePath == "pipe:0" {
+		// pipe input is not seekable; place -ss after -i for decode-side seek.
+		args = append(args, "-ss", strconv.FormatFloat(startSeconds, 'f', 3, 64))
+	}
+	args = append(args,
+		"-map", "0:v:0",
+		"-map", "0:a?",
+		"-sn",
+		"-dn",
+		"-c:v", "libx264",
+		"-preset", preset,
+		"-crf", strconv.Itoa(crf),
+		"-pix_fmt", "yuv420p",
+		"-profile:v", "main",
+		"-level", "4.1",
+		"-g", "48",
+		"-keyint_min", "48",
+		"-sc_threshold", "0",
+		"-c:a", "aac",
+		"-b:a", fmt.Sprintf("%dk", audioBitrate),
+		"-muxpreload", "0",
+		"-muxdelay", "0",
+		"-max_interleave_delta", "0",
+		"-max_muxing_queue_size", "4096",
+	)
+	if options.Threads > 0 {
+		args = append(args, "-threads", strconv.Itoa(options.Threads))
+	}
+	if extra := strings.TrimSpace(options.ExtraArgs); extra != "" {
+		args = append(args, strings.Fields(extra)...)
+	}
+	args = append(args, "-movflags", "+frag_keyframe+empty_moov+default_base_moof", "-f", "mp4", "pipe:1")
+	return args
 }
 
 func (b *builder) cover(c *gin.Context) {
@@ -178,4 +760,57 @@ func parseBool(raw string, fallback bool) bool {
 	default:
 		return fallback
 	}
+}
+
+func parseFloat(raw string, fallback float64) float64 {
+	if strings.TrimSpace(raw) == "" {
+		return fallback
+	}
+	value, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+		return fallback
+	}
+	return value
+}
+
+func parseInt64(raw string, fallback int64) int64 {
+	if strings.TrimSpace(raw) == "" {
+		return fallback
+	}
+	value, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil {
+		return fallback
+	}
+	return value
+}
+
+func parseStringListQuery(c *gin.Context, keys ...string) []string {
+	if len(keys) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	result := make([]string, 0, len(keys))
+	for _, key := range keys {
+		values := c.QueryArray(key)
+		if len(values) == 0 {
+			if raw := c.Query(key); raw != "" {
+				values = []string{raw}
+			}
+		}
+		for _, raw := range values {
+			parts := strings.Split(raw, ",")
+			for _, part := range parts {
+				value := strings.TrimSpace(part)
+				if value == "" {
+					continue
+				}
+				if _, ok := seen[value]; ok {
+					continue
+				}
+				seen[value] = struct{}{}
+				result = append(result, value)
+			}
+		}
+	}
+	return result
 }

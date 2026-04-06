@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nigowl/bitmagnet/internal/auth"
 	"github.com/nigowl/bitmagnet/internal/dhtcrawler"
 	"github.com/nigowl/bitmagnet/internal/lazy"
 	"github.com/nigowl/bitmagnet/internal/logging"
@@ -30,6 +31,10 @@ var ErrUnsupportedPlugin = errors.New("unsupported plugin")
 var ErrWorkerRegistryUnavailable = errors.New("worker registry unavailable")
 var ErrWorkerNotFound = errors.New("worker not found")
 
+const (
+	downloadMappingModeDirectory = "directory"
+)
+
 type mediaRuntimeCacheInvalidator interface {
 	InvalidateRuntimeSettingsCache()
 }
@@ -46,6 +51,8 @@ type Settings struct {
 	DoubanReferer        string              `json:"doubanReferer"`
 	Performance          PerformanceSettings `json:"performance"`
 	Home                 HomeSettings        `json:"home"`
+	Player               PlayerSettings      `json:"player"`
+	Auth                 AuthSettings        `json:"auth"`
 }
 
 type PerformanceSettings struct {
@@ -105,6 +112,50 @@ type HomeHighScoreSettings struct {
 	Window    float64 `json:"window"`
 }
 
+type PlayerSettings struct {
+	MetadataTimeoutSeconds int                  `json:"metadataTimeoutSeconds"`
+	HardTimeoutSeconds     int                  `json:"hardTimeoutSeconds"`
+	Transmission           TransmissionSettings `json:"transmission"`
+	FFmpeg                 FFmpegSettings       `json:"ffmpeg"`
+}
+
+type TransmissionSettings struct {
+	Enabled                      bool   `json:"enabled"`
+	URL                          string `json:"url"`
+	LocalDownloadDir             string `json:"localDownloadDir"`
+	DownloadMappingDirectory     string `json:"downloadMappingDirectory"`
+	Username                     string `json:"username"`
+	Password                     string `json:"password"`
+	InsecureTLS                  bool   `json:"insecureTls"`
+	TimeoutSeconds               int    `json:"timeoutSeconds"`
+	SequentialDownload           bool   `json:"sequentialDownload"`
+	AutoCleanupEnabled           bool   `json:"autoCleanupEnabled"`
+	AutoCleanupSlowTaskEnabled   bool   `json:"autoCleanupSlowTaskEnabled"`
+	AutoCleanupStorageEnabled    bool   `json:"autoCleanupStorageEnabled"`
+	AutoCleanupMaxTasks          int    `json:"autoCleanupMaxTasks"`
+	AutoCleanupMinFreeSpaceGB    int    `json:"autoCleanupMinFreeSpaceGB"`
+	AutoCleanupSlowWindowMinutes int    `json:"autoCleanupSlowWindowMinutes"`
+	AutoCleanupSlowRateKbps      int    `json:"autoCleanupSlowRateKbps"`
+	AutoCleanupDeleteData        bool   `json:"autoCleanupDeleteData"`
+}
+
+type FFmpegSettings struct {
+	Enabled                  bool   `json:"enabled"`
+	BinaryPath               string `json:"binaryPath"`
+	Preset                   string `json:"preset"`
+	CRF                      int    `json:"crf"`
+	AudioBitrateKbps         int    `json:"audioBitrateKbps"`
+	Threads                  int    `json:"threads"`
+	ExtraArgs                string `json:"extraArgs"`
+	ForceTranscodeExtensions string `json:"forceTranscodeExtensions"`
+}
+
+type AuthSettings struct {
+	MembershipEnabled   bool `json:"membershipEnabled"`
+	RegistrationEnabled bool `json:"registrationEnabled"`
+	InviteRequired      bool `json:"inviteRequired"`
+}
+
 type UpdateInput struct {
 	LogLevel             *string                   `json:"logLevel"`
 	TMDBEnabled          *bool                     `json:"tmdbEnabled"`
@@ -117,6 +168,8 @@ type UpdateInput struct {
 	DoubanReferer        *string                   `json:"doubanReferer"`
 	Performance          *PerformanceSettingsInput `json:"performance"`
 	Home                 *HomeSettingsInput        `json:"home"`
+	Player               *PlayerSettingsInput      `json:"player"`
+	Auth                 *AuthSettingsInput        `json:"auth"`
 }
 
 type PerformanceSettingsInput struct {
@@ -176,6 +229,86 @@ type HomeHighScoreSettingsInput struct {
 	Window    *float64 `json:"window"`
 }
 
+type PlayerSettingsInput struct {
+	MetadataTimeoutSeconds *int                       `json:"metadataTimeoutSeconds"`
+	HardTimeoutSeconds     *int                       `json:"hardTimeoutSeconds"`
+	Transmission           *TransmissionSettingsInput `json:"transmission"`
+	FFmpeg                 *FFmpegSettingsInput       `json:"ffmpeg"`
+}
+
+type TransmissionSettingsInput struct {
+	Enabled                      *bool   `json:"enabled"`
+	URL                          *string `json:"url"`
+	LocalDownloadDir             *string `json:"localDownloadDir"`
+	DownloadMappingDirectory     *string `json:"downloadMappingDirectory"`
+	Username                     *string `json:"username"`
+	Password                     *string `json:"password"`
+	InsecureTLS                  *bool   `json:"insecureTls"`
+	TimeoutSeconds               *int    `json:"timeoutSeconds"`
+	SequentialDownload           *bool   `json:"sequentialDownload"`
+	AutoCleanupEnabled           *bool   `json:"autoCleanupEnabled"`
+	AutoCleanupSlowTaskEnabled   *bool   `json:"autoCleanupSlowTaskEnabled"`
+	AutoCleanupStorageEnabled    *bool   `json:"autoCleanupStorageEnabled"`
+	AutoCleanupMaxTasks          *int    `json:"autoCleanupMaxTasks"`
+	AutoCleanupMinFreeSpaceGB    *int    `json:"autoCleanupMinFreeSpaceGB"`
+	AutoCleanupSlowWindowMinutes *int    `json:"autoCleanupSlowWindowMinutes"`
+	AutoCleanupSlowRateKbps      *int    `json:"autoCleanupSlowRateKbps"`
+	AutoCleanupDeleteData        *bool   `json:"autoCleanupDeleteData"`
+}
+
+type TransmissionTask struct {
+	ID             int64   `json:"id"`
+	HashString     string  `json:"hashString"`
+	Name           string  `json:"name"`
+	Status         int     `json:"status"`
+	PercentDone    float64 `json:"percentDone"`
+	RateDownload   int64   `json:"rateDownload"`
+	RateUpload     int64   `json:"rateUpload"`
+	LeftUntilDone  int64   `json:"leftUntilDone"`
+	SizeWhenDone   int64   `json:"sizeWhenDone"`
+	AddedAtUnix    int64   `json:"addedAtUnix"`
+	ActivityAtUnix int64   `json:"activityAtUnix"`
+	IsFinished     bool    `json:"isFinished"`
+	DownloadDir    string  `json:"downloadDir"`
+	ErrorString    string  `json:"errorString"`
+}
+
+type TransmissionTaskDeleteInput struct {
+	ID         int64 `json:"id"`
+	DeleteData bool  `json:"deleteData"`
+}
+
+type TransmissionTaskDeleteResult struct {
+	Success bool  `json:"success"`
+	ID      int64 `json:"id"`
+}
+
+type TransmissionCleanupResult struct {
+	Success           bool     `json:"success"`
+	TotalBefore       int      `json:"totalBefore"`
+	RemovedCount      int      `json:"removedCount"`
+	RemovedIDs        []int64  `json:"removedIds"`
+	Reasons           []string `json:"reasons"`
+	EstimatedFreeGain int64    `json:"estimatedFreeGain"`
+}
+
+type FFmpegSettingsInput struct {
+	Enabled                  *bool   `json:"enabled"`
+	BinaryPath               *string `json:"binaryPath"`
+	Preset                   *string `json:"preset"`
+	CRF                      *int    `json:"crf"`
+	AudioBitrateKbps         *int    `json:"audioBitrateKbps"`
+	Threads                  *int    `json:"threads"`
+	ExtraArgs                *string `json:"extraArgs"`
+	ForceTranscodeExtensions *string `json:"forceTranscodeExtensions"`
+}
+
+type AuthSettingsInput struct {
+	MembershipEnabled   *bool `json:"membershipEnabled"`
+	RegistrationEnabled *bool `json:"registrationEnabled"`
+	InviteRequired      *bool `json:"inviteRequired"`
+}
+
 type RuntimeStatus struct {
 	CheckedAt time.Time              `json:"checkedAt"`
 	Settings  []RuntimeSettingStatus `json:"settings"`
@@ -202,6 +335,12 @@ type Service interface {
 	Update(ctx context.Context, input UpdateInput) (Settings, error)
 	SyncRuntime(ctx context.Context) error
 	TestPlugin(ctx context.Context, pluginKey string, input PluginTestInput) (PluginTestResult, error)
+	TestPlayerTransmission(ctx context.Context, input TransmissionTestInput) (TransmissionTestResult, error)
+	TestPlayerDownloadMapping(ctx context.Context, input DownloadMappingTestInput) (DownloadMappingTestResult, error)
+	TestPlayerFFmpeg(ctx context.Context, input FFmpegTestInput) (FFmpegTestResult, error)
+	ListPlayerTransmissionTasks(ctx context.Context) ([]TransmissionTask, error)
+	DeletePlayerTransmissionTask(ctx context.Context, input TransmissionTaskDeleteInput) (TransmissionTaskDeleteResult, error)
+	RunPlayerTransmissionCleanup(ctx context.Context) (TransmissionCleanupResult, error)
 	ListSubtitleTemplates(ctx context.Context) ([]subtitles.Template, error)
 	CreateSubtitleTemplate(ctx context.Context, input subtitles.Input) (subtitles.Template, error)
 	UpdateSubtitleTemplate(ctx context.Context, id string, input subtitles.Input) (subtitles.Template, error)
@@ -216,6 +355,7 @@ type Params struct {
 	fx.In
 	DB               lazy.Lazy[*gorm.DB]
 	LogConfig        logging.Config
+	AuthConfig       auth.Config
 	MediaConfig      media.Config
 	DHTCrawlerConfig dhtcrawler.Config
 	MediaService     media.Service
@@ -269,6 +409,44 @@ func NewService(p Params) Service {
 				MaxScore:  9.9,
 				Window:    1.0,
 			},
+		},
+		Player: PlayerSettings{
+			MetadataTimeoutSeconds: 25,
+			HardTimeoutSeconds:     45,
+			Transmission: TransmissionSettings{
+				Enabled:                      false,
+				URL:                          "http://127.0.0.1:9091/transmission/rpc",
+				LocalDownloadDir:             "",
+				DownloadMappingDirectory:     "",
+				Username:                     "",
+				Password:                     "",
+				InsecureTLS:                  false,
+				TimeoutSeconds:               8,
+				SequentialDownload:           true,
+				AutoCleanupEnabled:           false,
+				AutoCleanupSlowTaskEnabled:   true,
+				AutoCleanupStorageEnabled:    true,
+				AutoCleanupMaxTasks:          60,
+				AutoCleanupMinFreeSpaceGB:    20,
+				AutoCleanupSlowWindowMinutes: 30,
+				AutoCleanupSlowRateKbps:      64,
+				AutoCleanupDeleteData:        true,
+			},
+			FFmpeg: FFmpegSettings{
+				Enabled:                  false,
+				BinaryPath:               "ffmpeg",
+				Preset:                   "veryfast",
+				CRF:                      23,
+				AudioBitrateKbps:         128,
+				Threads:                  0,
+				ExtraArgs:                "",
+				ForceTranscodeExtensions: ".mkv,.avi,.flv,.wmv,.rm,.rmvb,.ts,.m2ts,.mpeg,.mpg,.vob,.mxf,.divx,.xvid,.3gp,.3g2,.f4v",
+			},
+		},
+		Auth: AuthSettings{
+			MembershipEnabled:   false,
+			RegistrationEnabled: p.AuthConfig.AllowRegistration,
+			InviteRequired:      false,
 		},
 	}
 
@@ -596,6 +774,16 @@ func (s *service) Update(ctx context.Context, input UpdateInput) (Settings, erro
 			return Settings{}, err
 		}
 	}
+	if input.Player != nil {
+		if err := applyPlayerUpdate(input.Player, &effective, updates, s.defaults.Player); err != nil {
+			return Settings{}, err
+		}
+	}
+	if input.Auth != nil {
+		if err := applyAuthUpdate(input.Auth, &effective, updates); err != nil {
+			return Settings{}, err
+		}
+	}
 
 	if len(updates) == 0 {
 		return effective, nil
@@ -757,6 +945,8 @@ func (s *service) merge(values map[string]string) Settings {
 	applyQueuePerformanceMerge(&result, values)
 	applyMediaPerformanceMerge(&result, values)
 	applyHomeMerge(&result, values)
+	applyPlayerMerge(&result, values)
+	applyAuthMerge(&result, values)
 
 	return result
 }
@@ -1175,6 +1365,423 @@ func applyHomeMerge(result *Settings, values map[string]string) {
 	}
 }
 
+func applyPlayerUpdate(
+	input *PlayerSettingsInput,
+	effective *Settings,
+	updates map[string]*string,
+	defaults PlayerSettings,
+) error {
+	if input == nil {
+		return nil
+	}
+
+	if input.MetadataTimeoutSeconds != nil {
+		if *input.MetadataTimeoutSeconds < 5 || *input.MetadataTimeoutSeconds > 300 {
+			return fmt.Errorf("%w: player.metadataTimeoutSeconds", ErrInvalidInput)
+		}
+		value := strconv.Itoa(*input.MetadataTimeoutSeconds)
+		updates[runtimeconfig.KeyPlayerMetadataTimeoutSeconds] = &value
+		effective.Player.MetadataTimeoutSeconds = *input.MetadataTimeoutSeconds
+	}
+
+	if input.HardTimeoutSeconds != nil {
+		if *input.HardTimeoutSeconds < 10 || *input.HardTimeoutSeconds > 900 {
+			return fmt.Errorf("%w: player.hardTimeoutSeconds", ErrInvalidInput)
+		}
+		value := strconv.Itoa(*input.HardTimeoutSeconds)
+		updates[runtimeconfig.KeyPlayerHardTimeoutSeconds] = &value
+		effective.Player.HardTimeoutSeconds = *input.HardTimeoutSeconds
+	}
+
+	if effective.Player.HardTimeoutSeconds < effective.Player.MetadataTimeoutSeconds {
+		return fmt.Errorf("%w: player.hardTimeoutSeconds", ErrInvalidInput)
+	}
+
+	if input.Transmission != nil {
+		if input.Transmission.Enabled != nil {
+			value := strconv.FormatBool(*input.Transmission.Enabled)
+			updates[runtimeconfig.KeyPlayerTransmissionEnabled] = &value
+			effective.Player.Transmission.Enabled = *input.Transmission.Enabled
+		}
+		if input.Transmission.URL != nil {
+			normalized := strings.TrimSpace(*input.Transmission.URL)
+			if normalized == "" {
+				updates[runtimeconfig.KeyPlayerTransmissionURL] = nil
+				effective.Player.Transmission.URL = defaults.Transmission.URL
+			} else {
+				updates[runtimeconfig.KeyPlayerTransmissionURL] = &normalized
+				effective.Player.Transmission.URL = normalized
+			}
+		}
+		if input.Transmission.LocalDownloadDir != nil {
+			normalized := strings.TrimSpace(*input.Transmission.LocalDownloadDir)
+			if normalized == "" {
+				updates[runtimeconfig.KeyPlayerTransmissionLocalDownloadDir] = nil
+				effective.Player.Transmission.LocalDownloadDir = defaults.Transmission.LocalDownloadDir
+				effective.Player.Transmission.DownloadMappingDirectory = defaults.Transmission.DownloadMappingDirectory
+			} else {
+				updates[runtimeconfig.KeyPlayerTransmissionLocalDownloadDir] = &normalized
+				effective.Player.Transmission.LocalDownloadDir = normalized
+				effective.Player.Transmission.DownloadMappingDirectory = normalized
+			}
+		}
+		if input.Transmission.DownloadMappingDirectory != nil {
+			normalized := strings.TrimSpace(*input.Transmission.DownloadMappingDirectory)
+			if normalized == "" {
+				updates[runtimeconfig.KeyPlayerTransmissionLocalDownloadDir] = nil
+				effective.Player.Transmission.LocalDownloadDir = defaults.Transmission.LocalDownloadDir
+				effective.Player.Transmission.DownloadMappingDirectory = defaults.Transmission.DownloadMappingDirectory
+			} else {
+				updates[runtimeconfig.KeyPlayerTransmissionLocalDownloadDir] = &normalized
+				effective.Player.Transmission.LocalDownloadDir = normalized
+				effective.Player.Transmission.DownloadMappingDirectory = normalized
+			}
+		}
+		if input.Transmission.Username != nil {
+			normalized := strings.TrimSpace(*input.Transmission.Username)
+			if normalized == "" {
+				updates[runtimeconfig.KeyPlayerTransmissionUsername] = nil
+				effective.Player.Transmission.Username = defaults.Transmission.Username
+			} else {
+				updates[runtimeconfig.KeyPlayerTransmissionUsername] = &normalized
+				effective.Player.Transmission.Username = normalized
+			}
+		}
+		if input.Transmission.Password != nil {
+			normalized := strings.TrimSpace(*input.Transmission.Password)
+			if normalized == "" {
+				updates[runtimeconfig.KeyPlayerTransmissionPassword] = nil
+				effective.Player.Transmission.Password = defaults.Transmission.Password
+			} else {
+				updates[runtimeconfig.KeyPlayerTransmissionPassword] = &normalized
+				effective.Player.Transmission.Password = normalized
+			}
+		}
+		if input.Transmission.InsecureTLS != nil {
+			value := strconv.FormatBool(*input.Transmission.InsecureTLS)
+			updates[runtimeconfig.KeyPlayerTransmissionInsecure] = &value
+			effective.Player.Transmission.InsecureTLS = *input.Transmission.InsecureTLS
+		}
+		if input.Transmission.TimeoutSeconds != nil {
+			if *input.Transmission.TimeoutSeconds < 2 || *input.Transmission.TimeoutSeconds > 60 {
+				return fmt.Errorf("%w: player.transmission.timeoutSeconds", ErrInvalidInput)
+			}
+			value := strconv.Itoa(*input.Transmission.TimeoutSeconds)
+			updates[runtimeconfig.KeyPlayerTransmissionTimeoutSec] = &value
+			effective.Player.Transmission.TimeoutSeconds = *input.Transmission.TimeoutSeconds
+		}
+		if input.Transmission.SequentialDownload != nil {
+			value := strconv.FormatBool(*input.Transmission.SequentialDownload)
+			updates[runtimeconfig.KeyPlayerTransmissionSequential] = &value
+			effective.Player.Transmission.SequentialDownload = *input.Transmission.SequentialDownload
+		}
+		if input.Transmission.AutoCleanupEnabled != nil {
+			value := strconv.FormatBool(*input.Transmission.AutoCleanupEnabled)
+			updates[runtimeconfig.KeyPlayerTransmissionCleanupEnabled] = &value
+			effective.Player.Transmission.AutoCleanupEnabled = *input.Transmission.AutoCleanupEnabled
+		}
+		if input.Transmission.AutoCleanupSlowTaskEnabled != nil {
+			value := strconv.FormatBool(*input.Transmission.AutoCleanupSlowTaskEnabled)
+			updates[runtimeconfig.KeyPlayerTransmissionCleanupSlowTaskEnabled] = &value
+			effective.Player.Transmission.AutoCleanupSlowTaskEnabled = *input.Transmission.AutoCleanupSlowTaskEnabled
+		}
+		if input.Transmission.AutoCleanupStorageEnabled != nil {
+			value := strconv.FormatBool(*input.Transmission.AutoCleanupStorageEnabled)
+			updates[runtimeconfig.KeyPlayerTransmissionCleanupStorageEnabled] = &value
+			effective.Player.Transmission.AutoCleanupStorageEnabled = *input.Transmission.AutoCleanupStorageEnabled
+		}
+		if input.Transmission.AutoCleanupMaxTasks != nil {
+			if *input.Transmission.AutoCleanupMaxTasks < 0 || *input.Transmission.AutoCleanupMaxTasks > 5000 {
+				return fmt.Errorf("%w: player.transmission.autoCleanupMaxTasks", ErrInvalidInput)
+			}
+			value := strconv.Itoa(*input.Transmission.AutoCleanupMaxTasks)
+			updates[runtimeconfig.KeyPlayerTransmissionCleanupMaxTasks] = &value
+			effective.Player.Transmission.AutoCleanupMaxTasks = *input.Transmission.AutoCleanupMaxTasks
+		}
+		if input.Transmission.AutoCleanupMinFreeSpaceGB != nil {
+			if *input.Transmission.AutoCleanupMinFreeSpaceGB < 0 || *input.Transmission.AutoCleanupMinFreeSpaceGB > 8192 {
+				return fmt.Errorf("%w: player.transmission.autoCleanupMinFreeSpaceGB", ErrInvalidInput)
+			}
+			value := strconv.Itoa(*input.Transmission.AutoCleanupMinFreeSpaceGB)
+			updates[runtimeconfig.KeyPlayerTransmissionCleanupMinFreeSpaceGB] = &value
+			effective.Player.Transmission.AutoCleanupMinFreeSpaceGB = *input.Transmission.AutoCleanupMinFreeSpaceGB
+		}
+		if input.Transmission.AutoCleanupSlowWindowMinutes != nil {
+			if *input.Transmission.AutoCleanupSlowWindowMinutes < 5 || *input.Transmission.AutoCleanupSlowWindowMinutes > 1440 {
+				return fmt.Errorf("%w: player.transmission.autoCleanupSlowWindowMinutes", ErrInvalidInput)
+			}
+			value := strconv.Itoa(*input.Transmission.AutoCleanupSlowWindowMinutes)
+			updates[runtimeconfig.KeyPlayerTransmissionCleanupSlowWindowMinutes] = &value
+			effective.Player.Transmission.AutoCleanupSlowWindowMinutes = *input.Transmission.AutoCleanupSlowWindowMinutes
+		}
+		if input.Transmission.AutoCleanupSlowRateKbps != nil {
+			if *input.Transmission.AutoCleanupSlowRateKbps < 0 || *input.Transmission.AutoCleanupSlowRateKbps > 102400 {
+				return fmt.Errorf("%w: player.transmission.autoCleanupSlowRateKbps", ErrInvalidInput)
+			}
+			value := strconv.Itoa(*input.Transmission.AutoCleanupSlowRateKbps)
+			updates[runtimeconfig.KeyPlayerTransmissionCleanupSlowRateKbps] = &value
+			effective.Player.Transmission.AutoCleanupSlowRateKbps = *input.Transmission.AutoCleanupSlowRateKbps
+		}
+		if input.Transmission.AutoCleanupDeleteData != nil {
+			value := strconv.FormatBool(*input.Transmission.AutoCleanupDeleteData)
+			updates[runtimeconfig.KeyPlayerTransmissionCleanupDeleteData] = &value
+			effective.Player.Transmission.AutoCleanupDeleteData = *input.Transmission.AutoCleanupDeleteData
+		}
+	}
+
+	if input.FFmpeg != nil {
+		if input.FFmpeg.Enabled != nil {
+			value := strconv.FormatBool(*input.FFmpeg.Enabled)
+			updates[runtimeconfig.KeyPlayerFFmpegEnabled] = &value
+			effective.Player.FFmpeg.Enabled = *input.FFmpeg.Enabled
+		}
+		if input.FFmpeg.BinaryPath != nil {
+			normalized := strings.TrimSpace(*input.FFmpeg.BinaryPath)
+			if normalized == "" {
+				updates[runtimeconfig.KeyPlayerFFmpegBinaryPath] = nil
+				effective.Player.FFmpeg.BinaryPath = defaults.FFmpeg.BinaryPath
+			} else {
+				updates[runtimeconfig.KeyPlayerFFmpegBinaryPath] = &normalized
+				effective.Player.FFmpeg.BinaryPath = normalized
+			}
+		}
+		if input.FFmpeg.Preset != nil {
+			normalized := strings.TrimSpace(*input.FFmpeg.Preset)
+			if normalized == "" {
+				updates[runtimeconfig.KeyPlayerFFmpegPreset] = nil
+				effective.Player.FFmpeg.Preset = defaults.FFmpeg.Preset
+			} else {
+				updates[runtimeconfig.KeyPlayerFFmpegPreset] = &normalized
+				effective.Player.FFmpeg.Preset = normalized
+			}
+		}
+		if input.FFmpeg.CRF != nil {
+			if *input.FFmpeg.CRF < 16 || *input.FFmpeg.CRF > 38 {
+				return fmt.Errorf("%w: player.ffmpeg.crf", ErrInvalidInput)
+			}
+			value := strconv.Itoa(*input.FFmpeg.CRF)
+			updates[runtimeconfig.KeyPlayerFFmpegCRF] = &value
+			effective.Player.FFmpeg.CRF = *input.FFmpeg.CRF
+		}
+		if input.FFmpeg.AudioBitrateKbps != nil {
+			if *input.FFmpeg.AudioBitrateKbps < 64 || *input.FFmpeg.AudioBitrateKbps > 320 {
+				return fmt.Errorf("%w: player.ffmpeg.audioBitrateKbps", ErrInvalidInput)
+			}
+			value := strconv.Itoa(*input.FFmpeg.AudioBitrateKbps)
+			updates[runtimeconfig.KeyPlayerFFmpegAudioBitrateKbps] = &value
+			effective.Player.FFmpeg.AudioBitrateKbps = *input.FFmpeg.AudioBitrateKbps
+		}
+		if input.FFmpeg.Threads != nil {
+			if *input.FFmpeg.Threads < 0 || *input.FFmpeg.Threads > 32 {
+				return fmt.Errorf("%w: player.ffmpeg.threads", ErrInvalidInput)
+			}
+			value := strconv.Itoa(*input.FFmpeg.Threads)
+			updates[runtimeconfig.KeyPlayerFFmpegThreads] = &value
+			effective.Player.FFmpeg.Threads = *input.FFmpeg.Threads
+		}
+		if input.FFmpeg.ExtraArgs != nil {
+			normalized := strings.TrimSpace(*input.FFmpeg.ExtraArgs)
+			if normalized == "" {
+				updates[runtimeconfig.KeyPlayerFFmpegExtraArgs] = nil
+				effective.Player.FFmpeg.ExtraArgs = defaults.FFmpeg.ExtraArgs
+			} else {
+				updates[runtimeconfig.KeyPlayerFFmpegExtraArgs] = &normalized
+				effective.Player.FFmpeg.ExtraArgs = normalized
+			}
+		}
+		if input.FFmpeg.ForceTranscodeExtensions != nil {
+			normalized := normalizeFFmpegExtensionList(*input.FFmpeg.ForceTranscodeExtensions)
+			if normalized == "" {
+				updates[runtimeconfig.KeyPlayerFFmpegForceTranscodeExtensions] = nil
+				effective.Player.FFmpeg.ForceTranscodeExtensions = defaults.FFmpeg.ForceTranscodeExtensions
+			} else {
+				updates[runtimeconfig.KeyPlayerFFmpegForceTranscodeExtensions] = &normalized
+				effective.Player.FFmpeg.ForceTranscodeExtensions = normalized
+			}
+		}
+	}
+
+	return nil
+}
+
+func applyPlayerMerge(result *Settings, values map[string]string) {
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionURL]; ok {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed != "" {
+			result.Player.Transmission.URL = trimmed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionLocalDownloadDir]; ok {
+		normalized := strings.TrimSpace(raw)
+		result.Player.Transmission.LocalDownloadDir = normalized
+		result.Player.Transmission.DownloadMappingDirectory = normalized
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionUsername]; ok {
+		result.Player.Transmission.Username = strings.TrimSpace(raw)
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionPassword]; ok {
+		result.Player.Transmission.Password = strings.TrimSpace(raw)
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionEnabled]; ok {
+		if parsed, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+			result.Player.Transmission.Enabled = parsed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionInsecure]; ok {
+		if parsed, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+			result.Player.Transmission.InsecureTLS = parsed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionSequential]; ok {
+		if parsed, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+			result.Player.Transmission.SequentialDownload = parsed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupEnabled]; ok {
+		if parsed, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+			result.Player.Transmission.AutoCleanupEnabled = parsed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupSlowTaskEnabled]; ok {
+		if parsed, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+			result.Player.Transmission.AutoCleanupSlowTaskEnabled = parsed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupStorageEnabled]; ok {
+		if parsed, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+			result.Player.Transmission.AutoCleanupStorageEnabled = parsed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupDeleteData]; ok {
+		if parsed, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+			result.Player.Transmission.AutoCleanupDeleteData = parsed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegEnabled]; ok {
+		if parsed, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+			result.Player.FFmpeg.Enabled = parsed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegBinaryPath]; ok {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed != "" {
+			result.Player.FFmpeg.BinaryPath = trimmed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegPreset]; ok {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed != "" {
+			result.Player.FFmpeg.Preset = trimmed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegExtraArgs]; ok {
+		result.Player.FFmpeg.ExtraArgs = strings.TrimSpace(raw)
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegForceTranscodeExtensions]; ok {
+		normalized := normalizeFFmpegExtensionList(raw)
+		if normalized != "" {
+			result.Player.FFmpeg.ForceTranscodeExtensions = normalized
+		}
+	}
+
+	applyInt := func(key string, min, max int, setter func(v int)) {
+		raw, ok := values[key]
+		if !ok {
+			return
+		}
+		parsed, err := strconv.Atoi(strings.TrimSpace(raw))
+		if err != nil || parsed < min || parsed > max {
+			return
+		}
+		setter(parsed)
+	}
+
+	applyInt(runtimeconfig.KeyPlayerMetadataTimeoutSeconds, 5, 300, func(v int) {
+		result.Player.MetadataTimeoutSeconds = v
+	})
+	applyInt(runtimeconfig.KeyPlayerHardTimeoutSeconds, 10, 900, func(v int) {
+		result.Player.HardTimeoutSeconds = v
+	})
+	applyInt(runtimeconfig.KeyPlayerTransmissionTimeoutSec, 2, 60, func(v int) {
+		result.Player.Transmission.TimeoutSeconds = v
+	})
+	applyInt(runtimeconfig.KeyPlayerTransmissionCleanupMaxTasks, 0, 5000, func(v int) {
+		result.Player.Transmission.AutoCleanupMaxTasks = v
+	})
+	applyInt(runtimeconfig.KeyPlayerTransmissionCleanupMinFreeSpaceGB, 0, 8192, func(v int) {
+		result.Player.Transmission.AutoCleanupMinFreeSpaceGB = v
+	})
+	applyInt(runtimeconfig.KeyPlayerTransmissionCleanupSlowWindowMinutes, 5, 1440, func(v int) {
+		result.Player.Transmission.AutoCleanupSlowWindowMinutes = v
+	})
+	applyInt(runtimeconfig.KeyPlayerTransmissionCleanupSlowRateKbps, 0, 102400, func(v int) {
+		result.Player.Transmission.AutoCleanupSlowRateKbps = v
+	})
+	applyInt(runtimeconfig.KeyPlayerFFmpegCRF, 16, 38, func(v int) {
+		result.Player.FFmpeg.CRF = v
+	})
+	applyInt(runtimeconfig.KeyPlayerFFmpegAudioBitrateKbps, 64, 320, func(v int) {
+		result.Player.FFmpeg.AudioBitrateKbps = v
+	})
+	applyInt(runtimeconfig.KeyPlayerFFmpegThreads, 0, 32, func(v int) {
+		result.Player.FFmpeg.Threads = v
+	})
+
+	if result.Player.HardTimeoutSeconds < result.Player.MetadataTimeoutSeconds {
+		result.Player.HardTimeoutSeconds = result.Player.MetadataTimeoutSeconds
+	}
+	if result.Player.Transmission.DownloadMappingDirectory == "" && result.Player.Transmission.LocalDownloadDir != "" {
+		result.Player.Transmission.DownloadMappingDirectory = result.Player.Transmission.LocalDownloadDir
+	}
+	if result.Player.Transmission.LocalDownloadDir == "" && result.Player.Transmission.DownloadMappingDirectory != "" {
+		result.Player.Transmission.LocalDownloadDir = result.Player.Transmission.DownloadMappingDirectory
+	}
+}
+
+func applyAuthUpdate(
+	input *AuthSettingsInput,
+	effective *Settings,
+	updates map[string]*string,
+) error {
+	if input == nil {
+		return nil
+	}
+	if input.MembershipEnabled != nil {
+		value := strconv.FormatBool(*input.MembershipEnabled)
+		updates[runtimeconfig.KeyAuthMembershipEnabled] = &value
+		effective.Auth.MembershipEnabled = *input.MembershipEnabled
+	}
+	if input.RegistrationEnabled != nil {
+		value := strconv.FormatBool(*input.RegistrationEnabled)
+		updates[runtimeconfig.KeyAuthRegistrationEnabled] = &value
+		effective.Auth.RegistrationEnabled = *input.RegistrationEnabled
+	}
+	if input.InviteRequired != nil {
+		value := strconv.FormatBool(*input.InviteRequired)
+		updates[runtimeconfig.KeyAuthInviteRequired] = &value
+		effective.Auth.InviteRequired = *input.InviteRequired
+	}
+	return nil
+}
+
+func applyAuthMerge(result *Settings, values map[string]string) {
+	if raw, ok := values[runtimeconfig.KeyAuthMembershipEnabled]; ok {
+		if parsed, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+			result.Auth.MembershipEnabled = parsed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyAuthRegistrationEnabled]; ok {
+		if parsed, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+			result.Auth.RegistrationEnabled = parsed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyAuthInviteRequired]; ok {
+		if parsed, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+			result.Auth.InviteRequired = parsed
+		}
+	}
+}
+
 func hasUpdateWithPrefix(updates map[string]*string, prefix string) bool {
 	for key := range updates {
 		if strings.HasPrefix(key, prefix) {
@@ -1213,6 +1820,11 @@ func newQueuePerformanceSettingsDefaults(cfg queue.PerformanceConfig) QueuePerfo
 }
 
 func settingsToRuntimeValueMap(settings Settings) map[string]string {
+	mappingDir := strings.TrimSpace(settings.Player.Transmission.DownloadMappingDirectory)
+	if mappingDir == "" {
+		mappingDir = strings.TrimSpace(settings.Player.Transmission.LocalDownloadDir)
+	}
+
 	return map[string]string{
 		runtimeconfig.KeySystemLogLevel: settings.LogLevel,
 
@@ -1260,7 +1872,86 @@ func settingsToRuntimeValueMap(settings Settings) map[string]string {
 		runtimeconfig.KeyHomeHighScoreMin:       strconv.FormatFloat(settings.Home.HighScore.MinScore, 'f', 4, 64),
 		runtimeconfig.KeyHomeHighScoreMax:       strconv.FormatFloat(settings.Home.HighScore.MaxScore, 'f', 4, 64),
 		runtimeconfig.KeyHomeHighScoreWindow:    strconv.FormatFloat(settings.Home.HighScore.Window, 'f', 4, 64),
+
+		runtimeconfig.KeyPlayerMetadataTimeoutSeconds:               strconv.Itoa(settings.Player.MetadataTimeoutSeconds),
+		runtimeconfig.KeyPlayerHardTimeoutSeconds:                   strconv.Itoa(settings.Player.HardTimeoutSeconds),
+		runtimeconfig.KeyPlayerTransmissionEnabled:                  strconv.FormatBool(settings.Player.Transmission.Enabled),
+		runtimeconfig.KeyPlayerTransmissionURL:                      settings.Player.Transmission.URL,
+		runtimeconfig.KeyPlayerTransmissionLocalDownloadDir:         mappingDir,
+		runtimeconfig.KeyPlayerTransmissionUsername:                 settings.Player.Transmission.Username,
+		runtimeconfig.KeyPlayerTransmissionPassword:                 settings.Player.Transmission.Password,
+		runtimeconfig.KeyPlayerTransmissionInsecure:                 strconv.FormatBool(settings.Player.Transmission.InsecureTLS),
+		runtimeconfig.KeyPlayerTransmissionTimeoutSec:               strconv.Itoa(settings.Player.Transmission.TimeoutSeconds),
+		runtimeconfig.KeyPlayerTransmissionSequential:               strconv.FormatBool(settings.Player.Transmission.SequentialDownload),
+		runtimeconfig.KeyPlayerTransmissionCleanupEnabled:           strconv.FormatBool(settings.Player.Transmission.AutoCleanupEnabled),
+		runtimeconfig.KeyPlayerTransmissionCleanupSlowTaskEnabled:   strconv.FormatBool(settings.Player.Transmission.AutoCleanupSlowTaskEnabled),
+		runtimeconfig.KeyPlayerTransmissionCleanupStorageEnabled:    strconv.FormatBool(settings.Player.Transmission.AutoCleanupStorageEnabled),
+		runtimeconfig.KeyPlayerTransmissionCleanupMaxTasks:          strconv.Itoa(settings.Player.Transmission.AutoCleanupMaxTasks),
+		runtimeconfig.KeyPlayerTransmissionCleanupMinFreeSpaceGB:    strconv.Itoa(settings.Player.Transmission.AutoCleanupMinFreeSpaceGB),
+		runtimeconfig.KeyPlayerTransmissionCleanupSlowWindowMinutes: strconv.Itoa(settings.Player.Transmission.AutoCleanupSlowWindowMinutes),
+		runtimeconfig.KeyPlayerTransmissionCleanupSlowRateKbps:      strconv.Itoa(settings.Player.Transmission.AutoCleanupSlowRateKbps),
+		runtimeconfig.KeyPlayerTransmissionCleanupDeleteData:        strconv.FormatBool(settings.Player.Transmission.AutoCleanupDeleteData),
+		runtimeconfig.KeyPlayerFFmpegEnabled:                        strconv.FormatBool(settings.Player.FFmpeg.Enabled),
+		runtimeconfig.KeyPlayerFFmpegBinaryPath:                     settings.Player.FFmpeg.BinaryPath,
+		runtimeconfig.KeyPlayerFFmpegPreset:                         settings.Player.FFmpeg.Preset,
+		runtimeconfig.KeyPlayerFFmpegCRF:                            strconv.Itoa(settings.Player.FFmpeg.CRF),
+		runtimeconfig.KeyPlayerFFmpegAudioBitrateKbps:               strconv.Itoa(settings.Player.FFmpeg.AudioBitrateKbps),
+		runtimeconfig.KeyPlayerFFmpegThreads:                        strconv.Itoa(settings.Player.FFmpeg.Threads),
+		runtimeconfig.KeyPlayerFFmpegExtraArgs:                      settings.Player.FFmpeg.ExtraArgs,
+		runtimeconfig.KeyPlayerFFmpegForceTranscodeExtensions:       settings.Player.FFmpeg.ForceTranscodeExtensions,
+
+		runtimeconfig.KeyAuthMembershipEnabled:   strconv.FormatBool(settings.Auth.MembershipEnabled),
+		runtimeconfig.KeyAuthRegistrationEnabled: strconv.FormatBool(settings.Auth.RegistrationEnabled),
+		runtimeconfig.KeyAuthInviteRequired:      strconv.FormatBool(settings.Auth.InviteRequired),
 	}
+}
+
+func normalizeFFmpegExtensionList(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+
+	parts := strings.FieldsFunc(trimmed, func(r rune) bool {
+		return r == ',' || r == '\n' || r == '\r' || r == '\t' || r == ';'
+	})
+	if len(parts) == 0 {
+		return ""
+	}
+
+	seen := make(map[string]struct{}, len(parts))
+	normalized := make([]string, 0, len(parts))
+	for _, part := range parts {
+		item := strings.ToLower(strings.TrimSpace(part))
+		item = strings.TrimPrefix(item, "*")
+		if item == "" {
+			continue
+		}
+		if !strings.HasPrefix(item, ".") {
+			item = "." + item
+		}
+		valid := true
+		for _, ch := range item {
+			if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '.' || ch == '_' || ch == '-' {
+				continue
+			}
+			valid = false
+			break
+		}
+		if !valid || len(item) < 2 || len(item) > 16 {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		normalized = append(normalized, item)
+	}
+	if len(normalized) == 0 {
+		return ""
+	}
+	sort.Strings(normalized)
+	return strings.Join(normalized, ",")
 }
 
 func namedLogger(logger *zap.Logger, name string) *zap.Logger {

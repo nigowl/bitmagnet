@@ -255,7 +255,7 @@ export function FavoritesPage() {
         <Group justify="space-between" align="flex-start">
           <Stack gap={4}>
             <Title order={2}>{t("favorites.title")}</Title>
-            <Text c="dimmed">{t("favorites.subtitle")}</Text>
+            <Text c="dimmed" className="page-subtitle">{t("favorites.subtitle")}</Text>
           </Stack>
           <Button variant="default" leftSection={<RefreshCw size={14} />} onClick={() => void refreshFavorites()}>
             {t("common.refresh")}

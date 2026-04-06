@@ -160,7 +160,7 @@ export function LogsPage() {
         <Group justify="space-between" align="flex-start" wrap="wrap">
           <Stack gap={4}>
             <Title order={2}>{t("logs.title")}</Title>
-            <Text c="dimmed">{t("logs.subtitle")}</Text>
+            <Text c="dimmed" className="page-subtitle">{t("logs.subtitle")}</Text>
           </Stack>
           <Tooltip label={t("common.refresh")} withArrow>
             <ActionIcon

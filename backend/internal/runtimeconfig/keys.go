@@ -8,15 +8,45 @@ const (
 	KeyMediaTMDBEnabled = "system.media.site_plugins.tmdb.enabled"
 	KeyMediaIMDbEnabled = "system.media.site_plugins.imdb.enabled"
 
-	KeyMediaDoubanEnabled        = "system.media.douban.enabled"
-	KeyMediaDoubanMinScore       = "system.media.douban.min_score"
-	KeyMediaDoubanCookie         = "system.media.douban.cookie"
-	KeyMediaDoubanUserAgent      = "system.media.douban.user_agent"
-	KeyMediaDoubanAcceptLanguage = "system.media.douban.accept_language"
-	KeyMediaDoubanReferer        = "system.media.douban.referer"
-	KeyMediaAutoCacheCover       = "system.performance.media.auto_cache_cover"
-	KeyMediaAutoFetchBilingual   = "system.performance.media.auto_fetch_bilingual"
-	KeyMediaWarmupTimeoutSeconds = "system.performance.media.warmup_timeout_seconds"
+	KeyMediaDoubanEnabled                         = "system.media.douban.enabled"
+	KeyMediaDoubanMinScore                        = "system.media.douban.min_score"
+	KeyMediaDoubanCookie                          = "system.media.douban.cookie"
+	KeyMediaDoubanUserAgent                       = "system.media.douban.user_agent"
+	KeyMediaDoubanAcceptLanguage                  = "system.media.douban.accept_language"
+	KeyMediaDoubanReferer                         = "system.media.douban.referer"
+	KeyMediaAutoCacheCover                        = "system.performance.media.auto_cache_cover"
+	KeyMediaAutoFetchBilingual                    = "system.performance.media.auto_fetch_bilingual"
+	KeyMediaWarmupTimeoutSeconds                  = "system.performance.media.warmup_timeout_seconds"
+	KeyPlayerMetadataTimeoutSeconds               = "system.player.metadata_timeout_seconds"
+	KeyPlayerHardTimeoutSeconds                   = "system.player.hard_timeout_seconds"
+	KeyPlayerTransmissionEnabled                  = "system.player.transmission.enabled"
+	KeyPlayerTransmissionURL                      = "system.player.transmission.url"
+	KeyPlayerTransmissionUsername                 = "system.player.transmission.username"
+	KeyPlayerTransmissionPassword                 = "system.player.transmission.password"
+	KeyPlayerTransmissionLocalDownloadDir         = "system.player.transmission.local_download_dir"
+	KeyPlayerTransmissionInsecure                 = "system.player.transmission.insecure_tls"
+	KeyPlayerTransmissionTimeoutSec               = "system.player.transmission.timeout_seconds"
+	KeyPlayerTransmissionSequential               = "system.player.transmission.sequential_download"
+	KeyPlayerTransmissionCleanupEnabled           = "system.player.transmission.cleanup.enabled"
+	KeyPlayerTransmissionCleanupSlowTaskEnabled   = "system.player.transmission.cleanup.slow_task.enabled"
+	KeyPlayerTransmissionCleanupStorageEnabled    = "system.player.transmission.cleanup.storage.enabled"
+	KeyPlayerTransmissionCleanupMaxTasks          = "system.player.transmission.cleanup.max_tasks"
+	KeyPlayerTransmissionCleanupMinFreeSpaceGB    = "system.player.transmission.cleanup.min_free_space_gb"
+	KeyPlayerTransmissionCleanupSlowWindowMinutes = "system.player.transmission.cleanup.slow_window_minutes"
+	KeyPlayerTransmissionCleanupSlowRateKbps      = "system.player.transmission.cleanup.slow_rate_kbps"
+	KeyPlayerTransmissionCleanupDeleteData        = "system.player.transmission.cleanup.delete_data"
+	KeyPlayerFFmpegEnabled                        = "system.player.ffmpeg.enabled"
+	KeyPlayerFFmpegBinaryPath                     = "system.player.ffmpeg.binary_path"
+	KeyPlayerFFmpegPreset                         = "system.player.ffmpeg.preset"
+	KeyPlayerFFmpegCRF                            = "system.player.ffmpeg.crf"
+	KeyPlayerFFmpegAudioBitrateKbps               = "system.player.ffmpeg.audio_bitrate_kbps"
+	KeyPlayerFFmpegThreads                        = "system.player.ffmpeg.threads"
+	KeyPlayerFFmpegExtraArgs                      = "system.player.ffmpeg.extra_args"
+	KeyPlayerFFmpegForceTranscodeExtensions       = "system.player.ffmpeg.force_transcode_extensions"
+
+	KeyAuthMembershipEnabled   = "system.auth.membership.enabled"
+	KeyAuthRegistrationEnabled = "system.auth.registration.enabled"
+	KeyAuthInviteRequired      = "system.auth.invite.required"
 
 	KeyHomeDailyRefreshHour   = "system.home.daily.refresh_hour"
 	KeyHomeDailyPoolLimit     = "system.home.daily.pool_limit"
@@ -62,7 +92,7 @@ func AdminEditableKeys() []string {
 		KeyMediaDoubanUserAgent,
 		KeyMediaDoubanAcceptLanguage,
 		KeyMediaDoubanReferer,
-	}, PerformanceKeys()...), HomeKeys()...)
+	}, PerformanceKeys()...), append(append(HomeKeys(), PlayerKeys()...), AuthKeys()...)...)
 }
 
 func DoubanKeys() []string {
@@ -135,5 +165,44 @@ func HomeKeys() []string {
 		KeyHomeHighScoreMin,
 		KeyHomeHighScoreMax,
 		KeyHomeHighScoreWindow,
+	}
+}
+
+func PlayerKeys() []string {
+	return []string{
+		KeyPlayerMetadataTimeoutSeconds,
+		KeyPlayerHardTimeoutSeconds,
+		KeyPlayerTransmissionEnabled,
+		KeyPlayerTransmissionURL,
+		KeyPlayerTransmissionUsername,
+		KeyPlayerTransmissionPassword,
+		KeyPlayerTransmissionLocalDownloadDir,
+		KeyPlayerTransmissionInsecure,
+		KeyPlayerTransmissionTimeoutSec,
+		KeyPlayerTransmissionSequential,
+		KeyPlayerTransmissionCleanupEnabled,
+		KeyPlayerTransmissionCleanupSlowTaskEnabled,
+		KeyPlayerTransmissionCleanupStorageEnabled,
+		KeyPlayerTransmissionCleanupMaxTasks,
+		KeyPlayerTransmissionCleanupMinFreeSpaceGB,
+		KeyPlayerTransmissionCleanupSlowWindowMinutes,
+		KeyPlayerTransmissionCleanupSlowRateKbps,
+		KeyPlayerTransmissionCleanupDeleteData,
+		KeyPlayerFFmpegEnabled,
+		KeyPlayerFFmpegBinaryPath,
+		KeyPlayerFFmpegPreset,
+		KeyPlayerFFmpegCRF,
+		KeyPlayerFFmpegAudioBitrateKbps,
+		KeyPlayerFFmpegThreads,
+		KeyPlayerFFmpegExtraArgs,
+		KeyPlayerFFmpegForceTranscodeExtensions,
+	}
+}
+
+func AuthKeys() []string {
+	return []string{
+		KeyAuthMembershipEnabled,
+		KeyAuthRegistrationEnabled,
+		KeyAuthInviteRequired,
 	}
 }

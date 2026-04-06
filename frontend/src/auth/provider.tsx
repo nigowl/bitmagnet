@@ -12,15 +12,25 @@ export type AuthUser = {
   createdAt: string;
 };
 
+export type RememberFor = "1d" | "1w" | "1m";
+
+export type AccessSettings = {
+  membershipEnabled: boolean;
+  registrationEnabled: boolean;
+  inviteRequired: boolean;
+};
+
 type AuthContextValue = {
   user: AuthUser | null;
   loading: boolean;
+  accessSettings: AccessSettings;
   favorites: string[];
   isAdmin: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, rememberFor?: RememberFor) => Promise<void>;
+  register: (username: string, password: string, inviteCode?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshMe: () => Promise<void>;
+  refreshAccessSettings: () => Promise<void>;
   refreshFavorites: () => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
   hasFavorite: (infoHash: string) => boolean;
@@ -32,12 +42,34 @@ type AuthResult = {
   user: AuthUser;
 };
 
+type AccessSettingsResponse = {
+  settings: AccessSettings;
+};
+
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [accessSettings, setAccessSettings] = useState<AccessSettings>({
+    membershipEnabled: false,
+    registrationEnabled: true,
+    inviteRequired: false
+  });
   const [favorites, setFavorites] = useState<string[]>([]);
+
+  const refreshAccessSettings = useCallback(async () => {
+    try {
+      const data = await apiRequest<AccessSettingsResponse>("/api/auth/settings");
+      setAccessSettings(data.settings);
+    } catch {
+      setAccessSettings({
+        membershipEnabled: false,
+        registrationEnabled: true,
+        inviteRequired: false
+      });
+    }
+  }, []);
 
   const refreshFavorites = useCallback(async () => {
     if (!user) {
@@ -63,11 +95,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hydrateAuth = useCallback(async () => {
     setLoading(true);
     try {
-      await refreshMe();
+      await Promise.all([refreshMe(), refreshAccessSettings()]);
     } finally {
       setLoading(false);
     }
-  }, [refreshMe]);
+  }, [refreshAccessSettings, refreshMe]);
 
   useEffect(() => {
     void hydrateAuth();
@@ -81,10 +113,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void refreshFavorites();
   }, [refreshFavorites, user]);
 
-  const login = useCallback(async (username: string, password: string) => {
+  const login = useCallback(async (username: string, password: string, rememberFor?: RememberFor) => {
     const result = await apiRequest<AuthResult>("/api/auth/login", {
       method: "POST",
-      data: { username, password }
+      data: {
+        username,
+        password,
+        rememberFor
+      }
     });
     setAuthToken(result.token);
     setUser(result.user);
@@ -92,10 +128,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setFavorites(fav.items || []);
   }, []);
 
-  const register = useCallback(async (username: string, password: string) => {
+  const register = useCallback(async (username: string, password: string, inviteCode?: string) => {
     const result = await apiRequest<AuthResult>("/api/auth/register", {
       method: "POST",
-      data: { username, password }
+      data: { username, password, inviteCode }
     });
     setAuthToken(result.token);
     setUser(result.user);
@@ -146,18 +182,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       user,
       loading,
+      accessSettings,
       favorites,
       isAdmin: user?.role === "admin",
       login,
       register,
       logout,
       refreshMe,
+      refreshAccessSettings,
       refreshFavorites,
       changePassword,
       hasFavorite,
       toggleFavorite
     }),
-    [changePassword, favorites, hasFavorite, loading, login, logout, refreshFavorites, refreshMe, register, toggleFavorite, user]
+    [
+      accessSettings,
+      changePassword,
+      favorites,
+      hasFavorite,
+      loading,
+      login,
+      logout,
+      refreshAccessSettings,
+      refreshFavorites,
+      refreshMe,
+      register,
+      toggleFavorite,
+      user
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

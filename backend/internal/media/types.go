@@ -194,6 +194,166 @@ type DetailTorrent struct {
 	} `json:"torrent"`
 }
 
+type PlayerTransmissionBootstrapInput struct {
+	InfoHash string `json:"infoHash"`
+}
+
+type PlayerTransmissionBootstrapResult struct {
+	InfoHash                     string                         `json:"infoHash"`
+	TorrentID                    int64                          `json:"torrentId"`
+	SelectedFileIndex            int                            `json:"selectedFileIndex"`
+	StreamURL                    string                         `json:"streamUrl"`
+	TranscodeEnabled             bool                           `json:"transcodeEnabled"`
+	TranscodePreferredExtensions []string                       `json:"transcodePreferredExtensions"`
+	Status                       PlayerTransmissionStatusResult `json:"status"`
+}
+
+type PlayerTransmissionSelectFileInput struct {
+	InfoHash  string `json:"infoHash"`
+	FileIndex int    `json:"fileIndex"`
+}
+
+type PlayerTransmissionSelectFileResult struct {
+	InfoHash                     string                         `json:"infoHash"`
+	SelectedFileIndex            int                            `json:"selectedFileIndex"`
+	StreamURL                    string                         `json:"streamUrl"`
+	TranscodeEnabled             bool                           `json:"transcodeEnabled"`
+	TranscodePreferredExtensions []string                       `json:"transcodePreferredExtensions"`
+	Status                       PlayerTransmissionStatusResult `json:"status"`
+}
+
+type PlayerSubtitle struct {
+	ID        int64     `json:"id"`
+	InfoHash  string    `json:"infoHash"`
+	Label     string    `json:"label"`
+	Language  string    `json:"language"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type PlayerSubtitleListInput struct {
+	InfoHash string `json:"infoHash"`
+}
+
+type PlayerSubtitleCreateInput struct {
+	InfoHash   string `json:"infoHash"`
+	Label      string `json:"label"`
+	Language   string `json:"language"`
+	ContentVTT string `json:"contentVtt"`
+}
+
+type PlayerSubtitleUpdateInput struct {
+	InfoHash string  `json:"infoHash"`
+	ID       int64   `json:"id"`
+	Label    *string `json:"label"`
+	Language *string `json:"language"`
+}
+
+type PlayerSubtitleDeleteInput struct {
+	InfoHash string `json:"infoHash"`
+	ID       int64  `json:"id"`
+}
+
+type PlayerSubtitleContentInput struct {
+	InfoHash string `json:"infoHash"`
+	ID       int64  `json:"id"`
+}
+
+type PlayerSubtitleContentResult struct {
+	ContentVTT string `json:"contentVtt"`
+	UpdatedAt  time.Time
+}
+
+type PlayerFFmpegTranscodeSettings struct {
+	Enabled                  bool     `json:"enabled"`
+	BinaryPath               string   `json:"binaryPath"`
+	Preset                   string   `json:"preset"`
+	CRF                      int      `json:"crf"`
+	AudioBitrateKbps         int      `json:"audioBitrateKbps"`
+	Threads                  int      `json:"threads"`
+	ExtraArgs                string   `json:"extraArgs"`
+	ForceTranscodeExtensions []string `json:"forceTranscodeExtensions,omitempty"`
+}
+
+type PlayerTransmissionStatusInput struct {
+	InfoHash string `json:"infoHash"`
+}
+
+type PlayerTransmissionBatchStatusInput struct {
+	InfoHashes []string `json:"infoHashes"`
+}
+
+type PlayerTransmissionBatchStatusResult struct {
+	Items []PlayerTransmissionTaskStatus `json:"items"`
+}
+
+type PlayerTransmissionTaskStatus struct {
+	InfoHash  string  `json:"infoHash"`
+	Exists    bool    `json:"exists"`
+	TorrentID int64   `json:"torrentId"`
+	State     string  `json:"state"`
+	Progress  float64 `json:"progress"`
+}
+
+type PlayerTransmissionStatusResult struct {
+	InfoHash                    string                   `json:"infoHash"`
+	TorrentID                   int64                    `json:"torrentId"`
+	Name                        string                   `json:"name"`
+	State                       string                   `json:"state"`
+	Progress                    float64                  `json:"progress"`
+	DownloadRate                int64                    `json:"downloadRate"`
+	UploadRate                  int64                    `json:"uploadRate"`
+	PeersConnected              int                      `json:"peersConnected"`
+	ErrorCode                   int                      `json:"errorCode"`
+	ErrorMessage                string                   `json:"errorMessage"`
+	SelectedFileIndex           int                      `json:"selectedFileIndex"`
+	SelectedFileBytesCompleted  int64                    `json:"selectedFileBytesCompleted"`
+	SelectedFileLength          int64                    `json:"selectedFileLength"`
+	SelectedFileReadyRatio      float64                  `json:"selectedFileReadyRatio"`
+	SelectedFileContiguousBytes int64                    `json:"selectedFileContiguousBytes"`
+	SelectedFileContiguousRatio float64                  `json:"selectedFileContiguousRatio"`
+	SelectedFileAvailableRanges []PlayerFileRange        `json:"selectedFileAvailableRanges"`
+	SequentialDownload          bool                     `json:"sequentialDownload"`
+	Files                       []PlayerTransmissionFile `json:"files"`
+	UpdatedAt                   time.Time                `json:"updatedAt"`
+}
+
+type PlayerFileRange struct {
+	StartRatio float64 `json:"startRatio"`
+	EndRatio   float64 `json:"endRatio"`
+}
+
+type PlayerTransmissionFile struct {
+	Index          int    `json:"index"`
+	Name           string `json:"name"`
+	Length         int64  `json:"length"`
+	BytesCompleted int64  `json:"bytesCompleted"`
+	Wanted         bool   `json:"wanted"`
+	Priority       int    `json:"priority"`
+	IsVideo        bool   `json:"isVideo"`
+}
+
+type PlayerTransmissionResolveStreamInput struct {
+	InfoHash        string  `json:"infoHash"`
+	FileIndex       int     `json:"fileIndex"`
+	RangeHeader     string  `json:"rangeHeader"`
+	PreferTranscode bool    `json:"preferTranscode"`
+	StartSeconds    float64 `json:"startSeconds"`
+	StartBytes      int64   `json:"startBytes"`
+}
+
+type PlayerTransmissionResolveStreamResult struct {
+	FilePath     string                        `json:"filePath"`
+	ContentType  string                        `json:"contentType"`
+	RangeStart   int64                         `json:"rangeStart"`
+	RangeEnd     int64                         `json:"rangeEnd"`
+	TotalLength  int64                         `json:"totalLength"`
+	Partial      bool                          `json:"partial"`
+	Transcode    PlayerFFmpegTranscodeSettings `json:"transcode"`
+	StartSeconds float64                       `json:"startSeconds"`
+	StartBytes   int64                         `json:"startBytes"`
+}
+
 type CoverResult struct {
 	FilePath string `json:"filePath"`
 	Pending  bool   `json:"pending"`

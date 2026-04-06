@@ -36,10 +36,28 @@ const (
 )
 
 var ErrNotFound = errors.New("media not found")
+var ErrInvalidInfoHash = errors.New("invalid info hash")
+var ErrPlayerTransmissionDisabled = errors.New("player transmission is disabled")
+var ErrPlayerFileNotFound = errors.New("player file not found")
+var ErrPlayerStreamUnavailable = errors.New("player stream range unavailable")
+var ErrPlayerStorageUnavailable = errors.New("player storage unavailable")
+var ErrPlayerInvalidRange = errors.New("player invalid range")
+var ErrPlayerSubtitleInvalid = errors.New("player subtitle invalid")
+var ErrPlayerSubtitleNotFound = errors.New("player subtitle not found")
 
 type Service interface {
 	List(ctx context.Context, input ListInput) (ListResult, error)
 	Detail(ctx context.Context, id string, options ...DetailOptions) (DetailResult, error)
+	PlayerTransmissionBootstrap(ctx context.Context, input PlayerTransmissionBootstrapInput) (PlayerTransmissionBootstrapResult, error)
+	PlayerTransmissionSelectFile(ctx context.Context, input PlayerTransmissionSelectFileInput) (PlayerTransmissionSelectFileResult, error)
+	PlayerTransmissionStatus(ctx context.Context, input PlayerTransmissionStatusInput) (PlayerTransmissionStatusResult, error)
+	PlayerTransmissionBatchStatus(ctx context.Context, input PlayerTransmissionBatchStatusInput) (PlayerTransmissionBatchStatusResult, error)
+	PlayerTransmissionResolveStream(ctx context.Context, input PlayerTransmissionResolveStreamInput) (PlayerTransmissionResolveStreamResult, error)
+	PlayerSubtitleList(ctx context.Context, input PlayerSubtitleListInput) ([]PlayerSubtitle, error)
+	PlayerSubtitleCreate(ctx context.Context, input PlayerSubtitleCreateInput) (PlayerSubtitle, error)
+	PlayerSubtitleUpdate(ctx context.Context, input PlayerSubtitleUpdateInput) (PlayerSubtitle, error)
+	PlayerSubtitleDelete(ctx context.Context, input PlayerSubtitleDeleteInput) error
+	PlayerSubtitleContent(ctx context.Context, input PlayerSubtitleContentInput) (PlayerSubtitleContentResult, error)
 	Cover(ctx context.Context, id string, kind string, size string) (CoverResult, error)
 	GenerateCover(ctx context.Context, input GenerateCoverInput) error
 	BackfillLocalizedMetadata(ctx context.Context, input BackfillLocalizedInput) (BackfillLocalizedResult, error)

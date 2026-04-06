@@ -1,7 +1,7 @@
 # 说明：
 # 1) 该样例通过 frontend/backend 目录下的 Dockerfile 进行本地构建
 # 2) 三个服务都在 bitmagnet-net 虚拟网络内，容器间通过 hostname 互访
-# 3) 对外访问请使用主机端口（3333/3334/5432）
+# 3) 对外访问请使用主机端口（3333/3334/5432/9091）
 services:
   postgres:
     image: postgres:16-alpine
@@ -97,6 +97,32 @@ services:
       bitmagnet-net:
         aliases:
           - frontend
+
+  transmission:
+    image: linuxserver/transmission:latest
+    container_name: bitmagnet-transmission
+    hostname: transmission
+    restart: unless-stopped
+    ports:
+      - "9091:9091"
+      - "51413:51413"
+      - "51413:51413/udp"
+    environment:
+      # 请按需替换为宿主机实际时区
+      - TZ=Asia/Shanghai
+      - PUID=1000
+      - PGID=1000
+      # Web 管理账号（也用于 RPC 认证）
+      - USER=admin
+      - PASS=admin
+    volumes:
+      - ./backend/data/transmission/config:/config
+      - ./backend/data/transmission/downloads:/downloads
+      - ./backend/data/transmission/watch:/watch
+    networks:
+      bitmagnet-net:
+        aliases:
+          - transmission
 
 networks:
   bitmagnet-net:

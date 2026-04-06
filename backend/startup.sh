@@ -424,4 +424,21 @@ main() {
   run_backend
 }
 
+PORT=3333
+check_port() {
+    local port=$1
+    local pid=$(lsof -ti:$port)
+    if [ -n "$pid" ]; then
+        echo "Port $port is in use by PID $pid. Killing process..."
+        kill -9 $pid
+        sleep 1 # Wait for process to terminate
+        echo "Process killed."
+    else
+        echo "Port $port is free."
+    fi
+}
+
+echo "Checking port $PORT..."
+check_port $PORT
+
 main "$@"

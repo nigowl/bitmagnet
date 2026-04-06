@@ -3,6 +3,7 @@ package adminsettings
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nigowl/bitmagnet/internal/auth"
@@ -49,6 +50,12 @@ func (b *builder) Apply(e *gin.Engine) error {
 	e.PUT("/api/admin/settings/subtitle-templates/:templateId", b.authMiddleware(), b.requireAdmin(), b.updateSubtitleTemplate)
 	e.DELETE("/api/admin/settings/subtitle-templates/:templateId", b.authMiddleware(), b.requireAdmin(), b.deleteSubtitleTemplate)
 	e.POST("/api/admin/settings/plugins/:pluginKey/test", b.authMiddleware(), b.requireAdmin(), b.testPlugin)
+	e.POST("/api/admin/settings/player/transmission/test", b.authMiddleware(), b.requireAdmin(), b.testPlayerTransmission)
+	e.POST("/api/admin/settings/player/transmission/download-mapping/test", b.authMiddleware(), b.requireAdmin(), b.testPlayerDownloadMapping)
+	e.POST("/api/admin/settings/player/ffmpeg/test", b.authMiddleware(), b.requireAdmin(), b.testPlayerFFmpeg)
+	e.GET("/api/admin/settings/player/transmission/tasks", b.authMiddleware(), b.requireAdmin(), b.listPlayerTransmissionTasks)
+	e.DELETE("/api/admin/settings/player/transmission/tasks/:taskId", b.authMiddleware(), b.requireAdmin(), b.deletePlayerTransmissionTask)
+	e.POST("/api/admin/settings/player/transmission/tasks/cleanup", b.authMiddleware(), b.requireAdmin(), b.cleanupPlayerTransmissionTasks)
 	e.POST("/api/admin/settings/media/backfill-localized", b.authMiddleware(), b.requireAdmin(), b.backfillLocalizedMetadata)
 	e.POST("/api/admin/maintenance/tasks", b.authMiddleware(), b.requireAdmin(), b.startMaintenanceTask)
 	e.GET("/api/admin/maintenance/stats", b.authMiddleware(), b.requireAdmin(), b.getMaintenanceStats)
@@ -187,6 +194,122 @@ func (b *builder) testPlugin(c *gin.Context) {
 		return
 	}
 
+	c.JSON(http.StatusOK, gin.H{"result": result})
+}
+
+func (b *builder) testPlayerTransmission(c *gin.Context) {
+	var req TransmissionTestInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	result, err := b.service.TestPlayerTransmission(c.Request.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"result": result})
+}
+
+func (b *builder) testPlayerDownloadMapping(c *gin.Context) {
+	var req DownloadMappingTestInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	result, err := b.service.TestPlayerDownloadMapping(c.Request.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"result": result})
+}
+
+func (b *builder) testPlayerFFmpeg(c *gin.Context) {
+	var req FFmpegTestInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	result, err := b.service.TestPlayerFFmpeg(c.Request.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"result": result})
+}
+
+func (b *builder) listPlayerTransmissionTasks(c *gin.Context) {
+	tasks, err := b.service.ListPlayerTransmissionTasks(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"tasks": tasks})
+}
+
+func (b *builder) deletePlayerTransmissionTask(c *gin.Context) {
+	taskID, err := strconv.ParseInt(c.Param("taskId"), 10, 64)
+	if err != nil || taskID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+
+	deleteData := true
+	if raw := c.Query("deleteData"); raw != "" {
+		if parsed, parseErr := strconv.ParseBool(raw); parseErr == nil {
+			deleteData = parsed
+		}
+	}
+
+	result, deleteErr := b.service.DeletePlayerTransmissionTask(c.Request.Context(), TransmissionTaskDeleteInput{
+		ID:         taskID,
+		DeleteData: deleteData,
+	})
+	if deleteErr != nil {
+		switch {
+		case errors.Is(deleteErr, ErrInvalidInput):
+			c.JSON(http.StatusBadRequest, gin.H{"error": deleteErr.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": deleteErr.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"result": result})
+}
+
+func (b *builder) cleanupPlayerTransmissionTasks(c *gin.Context) {
+	result, err := b.service.RunPlayerTransmissionCleanup(c.Request.Context())
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"result": result})
 }
 

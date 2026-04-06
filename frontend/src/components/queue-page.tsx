@@ -201,8 +201,8 @@ export function QueuePage() {
   }, [normalizeQueueLabel, result?.aggregations.queue]);
 
   const metricsOption = useMemo(() => {
-    const chartTextColor = colorScheme === "dark" ? "#d8e1f0" : "#546072";
-    const chartLineColor = colorScheme === "dark" ? "rgba(216,225,240,0.14)" : "rgba(84,96,114,0.14)";
+    const chartTextColor = colorScheme === "dark" ? "#a9b9d2" : "#546072";
+    const chartLineColor = colorScheme === "dark" ? "rgba(169,185,210,0.2)" : "rgba(84,96,114,0.14)";
     const chartTooltipBackground = colorScheme === "dark" ? "rgba(23,29,39,0.96)" : "rgba(255,255,255,0.96)";
     const chartPalette = colorScheme === "dark"
       ? ["#6cb6ff", "#59c9a5", "#f2cc60", "#ff9233", "#ff7b72"]
@@ -582,7 +582,7 @@ export function QueuePage() {
       <Group justify="space-between">
         <div>
           <Title order={2}>{t("queue.title")}</Title>
-          <Text c="dimmed">{t("queue.subtitle")}</Text>
+          <Text c="dimmed" className="page-subtitle">{t("queue.subtitle")}</Text>
         </div>
         <Group>
           <Tooltip label={t("queue.enqueue")} withArrow>
@@ -701,7 +701,7 @@ export function QueuePage() {
                 key={value}
                 size="xs"
                 variant={orderBy === value ? "light" : "subtle"}
-                color={orderBy === value ? "cyan" : "gray"}
+                color={orderBy === value ? "cyan" : "slate"}
                 onClick={() => {
                   setOrderBy(value);
                   setPage(1);
@@ -715,7 +715,7 @@ export function QueuePage() {
             <Button
               size="xs"
               variant={descending ? "light" : "subtle"}
-              color={descending ? "cyan" : "gray"}
+              color={descending ? "cyan" : "slate"}
               onClick={() => {
                 setDescending(true);
                 setPage(1);
@@ -726,7 +726,7 @@ export function QueuePage() {
             <Button
               size="xs"
               variant={!descending ? "light" : "subtle"}
-              color={!descending ? "cyan" : "gray"}
+              color={!descending ? "cyan" : "slate"}
               onClick={() => {
                 setDescending(false);
                 setPage(1);

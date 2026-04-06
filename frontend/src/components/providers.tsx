@@ -14,6 +14,33 @@ import { I18nProvider, type Locale } from "@/languages/provider";
 
 const theme = createTheme({
   primaryColor: "orange",
+  colors: {
+    // Use a blue-slate neutral palette to avoid harsh light-gray accents in dark mode.
+    slate: [
+      "#f4f6fb",
+      "#e7edf7",
+      "#d2deee",
+      "#b6c7de",
+      "#94aacc",
+      "#748eb8",
+      "#5b739b",
+      "#495c7b",
+      "#3a4a61",
+      "#2d394a"
+    ],
+    gray: [
+      "#f4f6fb",
+      "#e7edf7",
+      "#d2deee",
+      "#b6c7de",
+      "#94aacc",
+      "#748eb8",
+      "#5b739b",
+      "#495c7b",
+      "#3a4a61",
+      "#2d394a"
+    ]
+  },
   defaultRadius: "md",
   radius: {
     xs: "6px",

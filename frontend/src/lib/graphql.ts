@@ -109,6 +109,7 @@ query TorrentContentSearch($input: TorrentContentSearchQueryInput!) {
           source
           id
           title
+          runtime
           releaseDate
           releaseYear
           overview

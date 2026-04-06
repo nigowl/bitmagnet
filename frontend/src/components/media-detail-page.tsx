@@ -9,18 +9,26 @@ import {
   Card,
   Group,
   Loader,
+  Pagination,
   ScrollArea,
   Stack,
   Table,
   Text,
-  Title
+  Title,
+  Tooltip
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { ArrowLeft, ExternalLink, Heart, RefreshCw } from "lucide-react";
+import { ArrowLeft, ExternalLink, Eye, Heart, Play, RefreshCw } from "lucide-react";
 import { useAuth } from "@/auth/provider";
 import { CoverImage } from "@/components/cover-image";
 import { useI18n } from "@/languages/provider";
-import { fetchMediaDetail, type MediaDetailResponse, type MediaDetailTorrent } from "@/lib/media-api";
+import {
+  fetchMediaDetail,
+  fetchPlayerTransmissionBatchStatus,
+  type MediaDetailResponse,
+  type MediaDetailTorrent,
+  type PlayerTransmissionTaskStatus
+} from "@/lib/media-api";
 import { buildMediaExternalLinks, extractMediaFacts, formatQualityTag, getBackdropUrl, getPosterUrl, pickRecommendedTorrent } from "@/lib/media";
 
 function formatBytes(size: number): string {
@@ -123,9 +131,40 @@ function applySubtitleTemplate(urlTemplate: string, title: string, releaseYear?:
   }
 }
 
-function TorrentRow({ item, t }: { item: MediaDetailTorrent; t: (key: string) => string }) {
+function resolvePlayerActionState(
+  status: PlayerTransmissionTaskStatus | undefined
+): { color: string; variant: "default" | "light" } {
+  if (!status?.exists) {
+    return { color: "slate", variant: "default" };
+  }
+  const state = status.state.trim().toLowerCase();
+  if (status.progress >= 0.999 || state === "seeding" || state === "seed_wait") {
+    return { color: "green", variant: "light" };
+  }
+  if (
+    status.progress > 0 ||
+    state === "downloading" ||
+    state === "download_wait" ||
+    state === "checking" ||
+    state === "check_wait"
+  ) {
+    return { color: "yellow", variant: "light" };
+  }
+  return { color: "slate", variant: "default" };
+}
+
+function TorrentRow({
+  item,
+  t,
+  playerStatus
+}: {
+  item: MediaDetailTorrent;
+  t: (key: string) => string;
+  playerStatus?: PlayerTransmissionTaskStatus;
+}) {
   const torrentTitle = item.title || item.torrent.name;
   const filesCount = item.filesCount ?? item.torrent.filesCount;
+  const playerStyle = resolvePlayerActionState(playerStatus);
 
   return (
     <Table.Tr>
@@ -141,24 +180,48 @@ function TorrentRow({ item, t }: { item: MediaDetailTorrent; t: (key: string) =>
       <Table.Td>{displayResolution(item.videoResolution)}</Table.Td>
       <Table.Td>
         <Group gap={6} wrap="nowrap">
-          <Button
-            size="xs"
-            variant="light"
-            renderRoot={(props) => <Link href={`/torrents/${item.infoHash}`} {...props} />}
-          >
-            {t("media.openTorrent")}
-          </Button>
-          <Button
-            size="xs"
-            variant="default"
-            component="a"
-            href={item.torrent.magnetUri}
-            target="_blank"
-            rel="noreferrer"
-            leftSection={<ExternalLink size={13} />}
-          >
-            Magnet
-          </Button>
+          <Tooltip label={t("media.openPlayer")}>
+            <ActionIcon
+              className="app-icon-btn"
+              size="sm"
+              variant={playerStyle.variant}
+              color={playerStyle.color}
+              aria-label={t("media.openPlayer")}
+              title={t("media.openPlayer")}
+              renderRoot={(props) => <Link href={`/player/${encodeURIComponent(item.infoHash)}`} {...props} />}
+            >
+              <Play size={14} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label={t("media.openTorrent")}>
+            <ActionIcon
+              className="app-icon-btn"
+              size="sm"
+              variant="default"
+              color="slate"
+              aria-label={t("media.openTorrent")}
+              title={t("media.openTorrent")}
+              renderRoot={(props) => <Link href={`/torrents/${item.infoHash}`} {...props} />}
+            >
+              <Eye size={14} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label={t("media.openMagnet")}>
+            <ActionIcon
+              className="app-icon-btn"
+              size="sm"
+              variant="default"
+              color="slate"
+              aria-label={t("media.openMagnet")}
+              title={t("media.openMagnet")}
+              component="a"
+              href={item.torrent.magnetUri}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <ExternalLink size={14} />
+            </ActionIcon>
+          </Tooltip>
         </Group>
       </Table.Td>
     </Table.Tr>
@@ -170,6 +233,8 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
   const { user, hasFavorite, toggleFavorite } = useAuth();
   const [loading, setLoading] = useState(true);
   const [payload, setPayload] = useState<MediaDetailResponse | null>(null);
+  const [playerStatusMap, setPlayerStatusMap] = useState<Record<string, PlayerTransmissionTaskStatus>>({});
+  const [torrentPage, setTorrentPage] = useState(1);
   const titleLanguage = locale === "en" ? "en" : "zh";
 
   const load = useCallback(async (forceRefresh = false) => {
@@ -188,6 +253,40 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
   useEffect(() => {
     void load(false);
   }, [load]);
+
+  useEffect(() => {
+    const torrents = payload?.torrents ?? [];
+    if (torrents.length === 0) {
+      setPlayerStatusMap({});
+      return;
+    }
+    let cancelled = false;
+    const infoHashes = torrents.map((item) => item.infoHash).filter(Boolean);
+    const loadBatch = async () => {
+      try {
+        const result = await fetchPlayerTransmissionBatchStatus(infoHashes);
+        if (cancelled) return;
+        const nextMap: Record<string, PlayerTransmissionTaskStatus> = {};
+        result.items.forEach((item) => {
+          const key = item.infoHash.trim().toLowerCase();
+          if (!key) return;
+          nextMap[key] = item;
+        });
+        setPlayerStatusMap(nextMap);
+      } catch {
+        if (cancelled) return;
+        setPlayerStatusMap({});
+      }
+    };
+    void loadBatch();
+    return () => {
+      cancelled = true;
+    };
+  }, [payload?.torrents]);
+
+  useEffect(() => {
+    setTorrentPage(1);
+  }, [payload?.item.id]);
 
   const poster = useMemo(() => (payload?.item ? getPosterUrl(payload.item, "lg") : null), [payload?.item]);
   const backdrop = useMemo(() => (payload?.item ? getBackdropUrl(payload.item, "lg") : null), [payload?.item]);
@@ -221,6 +320,10 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
   }
 
   const { item, torrents } = payload;
+  const torrentPageSize = 10;
+  const torrentTotalPages = Math.max(1, Math.ceil(torrents.length / torrentPageSize));
+  const normalizedTorrentPage = Math.max(1, Math.min(torrentPage, torrentTotalPages));
+  const pagedTorrents = torrents.slice((normalizedTorrentPage - 1) * torrentPageSize, normalizedTorrentPage * torrentPageSize);
   const backToCategoryHref = item.isAnime
     ? "/media/anime"
     : item.contentType === "movie"
@@ -417,7 +520,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
               {aliases.length > 0 ? (
                 <Group gap={6} wrap="wrap">
                   {aliases.slice(0, 6).map((alias) => (
-                    <Badge key={alias} variant="dot" color="gray">{alias}</Badge>
+                    <Badge key={alias} variant="dot" color="slate">{alias}</Badge>
                   ))}
                 </Group>
               ) : null}
@@ -433,7 +536,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
               {genreNames.length > 0 ? (
                 <Group gap={6} wrap="wrap">
                   {genreNames.map((genre) => (
-                    <Badge key={genre} variant="dot" color="gray">{genre}</Badge>
+                    <Badge key={genre} variant="dot" color="slate">{genre}</Badge>
                   ))}
                 </Group>
               ) : null}
@@ -542,7 +645,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
                   ) : null}
                   <Badge variant="outline">{formatBytes(recommendedTorrent.size)}</Badge>
                   {recommendedTorrent.torrent.sources.slice(0, 2).map((source) => (
-                    <Badge key={`${recommendedTorrent.infoHash}:${source.key}`} variant="dot" color="gray">
+                    <Badge key={`${recommendedTorrent.infoHash}:${source.key}`} variant="dot" color="slate">
                       {source.name}
                     </Badge>
                   ))}
@@ -618,26 +721,38 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
           {torrents.length === 0 ? (
             <Text c="dimmed">{t("media.noResults")}</Text>
           ) : (
-            <ScrollArea>
-              <Table className="media-torrent-snapshot-table" striped withTableBorder highlightOnHover miw={920}>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>{t("torrents.table.title")}</Table.Th>
-                    <Table.Th>{t("torrents.table.seeders")}</Table.Th>
-                    <Table.Th>{t("torrents.table.leechers")}</Table.Th>
-                    <Table.Th>{t("torrents.table.size")}</Table.Th>
-                    <Table.Th>{t("torrents.table.filesCount")}</Table.Th>
-                    <Table.Th>{t("media.detail.resolution")}</Table.Th>
-                    <Table.Th>{t("torrents.table.actions")}</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {torrents.map((torrent) => (
-                    <TorrentRow key={torrent.infoHash} item={torrent} t={t} />
-                  ))}
-                </Table.Tbody>
-              </Table>
-            </ScrollArea>
+            <>
+              <ScrollArea>
+                <Table className="media-torrent-snapshot-table" striped withTableBorder highlightOnHover miw={920}>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>{t("torrents.table.title")}</Table.Th>
+                      <Table.Th>{t("torrents.table.seeders")}</Table.Th>
+                      <Table.Th>{t("torrents.table.leechers")}</Table.Th>
+                      <Table.Th>{t("torrents.table.size")}</Table.Th>
+                      <Table.Th>{t("torrents.table.filesCount")}</Table.Th>
+                      <Table.Th>{t("media.detail.resolution")}</Table.Th>
+                      <Table.Th>{t("torrents.table.actions")}</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {pagedTorrents.map((torrent) => (
+                      <TorrentRow
+                        key={torrent.infoHash}
+                        item={torrent}
+                        t={t}
+                        playerStatus={playerStatusMap[torrent.infoHash.trim().toLowerCase()]}
+                      />
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </ScrollArea>
+              {torrentTotalPages > 1 ? (
+                <Group justify="flex-end" mt="sm">
+                  <Pagination value={normalizedTorrentPage} onChange={setTorrentPage} total={torrentTotalPages} size="sm" />
+                </Group>
+              ) : null}
+            </>
           )}
         </Card>
 

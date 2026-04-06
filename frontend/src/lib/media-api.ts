@@ -1,4 +1,4 @@
-import { apiRequest } from "@/lib/api";
+import { apiBaseURL, apiRequest } from "@/lib/api";
 
 export type MediaListItem = {
   id: string;
@@ -157,6 +157,90 @@ export type MediaDetailResponse = {
   subtitleTemplates: MediaSubtitleTemplate[];
 };
 
+export type PlayerTransmissionFile = {
+  index: number;
+  name: string;
+  length: number;
+  bytesCompleted: number;
+  wanted: boolean;
+  priority: number;
+  isVideo: boolean;
+};
+
+export type PlayerTransmissionStatusResponse = {
+  infoHash: string;
+  torrentId: number;
+  name: string;
+  state: string;
+  progress: number;
+  downloadRate: number;
+  uploadRate: number;
+  peersConnected: number;
+  errorCode: number;
+  errorMessage: string;
+  selectedFileIndex: number;
+  selectedFileBytesCompleted: number;
+  selectedFileLength: number;
+  selectedFileReadyRatio: number;
+  selectedFileContiguousBytes: number;
+  selectedFileContiguousRatio: number;
+  selectedFileAvailableRanges: Array<{
+    startRatio: number;
+    endRatio: number;
+  }>;
+  sequentialDownload: boolean;
+  files: PlayerTransmissionFile[];
+  updatedAt: string;
+};
+
+export type PlayerTransmissionTaskStatus = {
+  infoHash: string;
+  exists: boolean;
+  torrentId: number;
+  state: string;
+  progress: number;
+};
+
+export type PlayerTransmissionBatchStatusResponse = {
+  items: PlayerTransmissionTaskStatus[];
+};
+
+export type PlayerTransmissionBootstrapResponse = {
+  infoHash: string;
+  torrentId: number;
+  selectedFileIndex: number;
+  streamUrl: string;
+  transcodeEnabled: boolean;
+  transcodePreferredExtensions: string[];
+  status: PlayerTransmissionStatusResponse;
+};
+
+export type PlayerTransmissionSelectFileResponse = {
+  infoHash: string;
+  selectedFileIndex: number;
+  streamUrl: string;
+  transcodeEnabled: boolean;
+  transcodePreferredExtensions: string[];
+  status: PlayerTransmissionStatusResponse;
+};
+
+export type PlayerSubtitleItem = {
+  id: number;
+  infoHash: string;
+  label: string;
+  language: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PlayerSubtitleListResponse = {
+  items: PlayerSubtitleItem[];
+};
+
+export type PlayerSubtitleSingleResponse = {
+  item: PlayerSubtitleItem;
+};
+
 function normalizeStringArray(value: string[] | null | undefined): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
@@ -312,4 +396,174 @@ export async function fetchMediaDetail(id: string, options?: { refresh?: boolean
         }))
       : []
   };
+}
+
+export async function fetchPlayerTransmissionBootstrap(infoHash: string): Promise<PlayerTransmissionBootstrapResponse> {
+  const normalized = infoHash.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error("Missing infoHash.");
+  }
+  return apiRequest<PlayerTransmissionBootstrapResponse>("/api/media/player/transmission/bootstrap", {
+    method: "POST",
+    data: { infoHash: normalized }
+  });
+}
+
+export async function fetchPlayerTransmissionStatus(infoHash: string): Promise<PlayerTransmissionStatusResponse> {
+  const normalized = infoHash.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error("Missing infoHash.");
+  }
+  const query = new URLSearchParams({ infoHash: normalized });
+  return apiRequest<PlayerTransmissionStatusResponse>(`/api/media/player/transmission/status?${query.toString()}`);
+}
+
+export async function fetchPlayerTransmissionBatchStatus(
+  infoHashes: string[]
+): Promise<PlayerTransmissionBatchStatusResponse> {
+  const normalized = Array.from(
+    new Set(infoHashes.map((item) => item.trim().toLowerCase()).filter((item) => item.length > 0))
+  );
+  if (normalized.length === 0) {
+    return { items: [] };
+  }
+  const query = new URLSearchParams();
+  normalized.forEach((item) => query.append("infoHash", item));
+  return apiRequest<PlayerTransmissionBatchStatusResponse>(
+    `/api/media/player/transmission/status/batch?${query.toString()}`
+  );
+}
+
+export async function selectPlayerTransmissionFile(
+  infoHash: string,
+  fileIndex: number
+): Promise<PlayerTransmissionSelectFileResponse> {
+  const normalized = infoHash.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error("Missing infoHash.");
+  }
+  return apiRequest<PlayerTransmissionSelectFileResponse>("/api/media/player/transmission/select-file", {
+    method: "POST",
+    data: { infoHash: normalized, fileIndex }
+  });
+}
+
+export function buildPlayerTransmissionStreamURL(
+  infoHash: string,
+  fileIndex: number,
+  cacheBust?: string,
+  options?: { transcode?: boolean; startSeconds?: number; startBytes?: number }
+): string {
+  const query = new URLSearchParams({
+    infoHash: infoHash.trim().toLowerCase(),
+    fileIndex: String(fileIndex)
+  });
+  if (cacheBust) {
+    query.set("t", cacheBust);
+  }
+  if (options?.transcode) {
+    query.set("transcode", "1");
+    if (Number.isFinite(options.startSeconds) && (options.startSeconds || 0) > 0) {
+      query.set("start", String(Math.max(0, options.startSeconds || 0)));
+    }
+    if (Number.isFinite(options.startBytes) && (options.startBytes || 0) > 0) {
+      query.set("startBytes", String(Math.max(0, Math.floor(options.startBytes || 0))));
+    }
+  }
+  return `${apiBaseURL}/api/media/player/transmission/stream?${query.toString()}`;
+}
+
+export function buildPlayerSubtitleContentURL(
+  infoHash: string,
+  subtitleId: number | string,
+  cacheBust?: string
+): string {
+  const query = new URLSearchParams({
+    infoHash: infoHash.trim().toLowerCase()
+  });
+  if (cacheBust) {
+    query.set("t", cacheBust);
+  }
+  return `${apiBaseURL}/api/media/player/subtitles/${encodeURIComponent(String(subtitleId))}/content?${query.toString()}`;
+}
+
+export async function fetchPlayerSubtitles(infoHash: string): Promise<PlayerSubtitleItem[]> {
+  const normalized = infoHash.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error("Missing infoHash.");
+  }
+  const query = new URLSearchParams({ infoHash: normalized });
+  const result = await apiRequest<PlayerSubtitleListResponse>(`/api/media/player/subtitles?${query.toString()}`);
+  return Array.isArray(result.items) ? result.items : [];
+}
+
+export async function fetchPlayerSubtitleContent(infoHash: string, subtitleId: number): Promise<string> {
+  const normalized = infoHash.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error("Missing infoHash.");
+  }
+  if (!Number.isInteger(subtitleId) || subtitleId <= 0) {
+    throw new Error("Invalid subtitleId.");
+  }
+  const query = new URLSearchParams({ infoHash: normalized });
+  return apiRequest<string>(
+    `/api/media/player/subtitles/${encodeURIComponent(String(subtitleId))}/content?${query.toString()}`
+  );
+}
+
+export async function createPlayerSubtitle(input: {
+  infoHash: string;
+  label: string;
+  language?: string;
+  contentVtt: string;
+}): Promise<PlayerSubtitleItem> {
+  const normalized = input.infoHash.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error("Missing infoHash.");
+  }
+  const response = await apiRequest<PlayerSubtitleSingleResponse>("/api/media/player/subtitles", {
+    method: "POST",
+    data: {
+      infoHash: normalized,
+      label: input.label,
+      language: input.language || "und",
+      contentVtt: input.contentVtt
+    }
+  });
+  return response.item;
+}
+
+export async function updatePlayerSubtitle(input: {
+  infoHash: string;
+  subtitleId: number;
+  label?: string;
+  language?: string;
+}): Promise<PlayerSubtitleItem> {
+  const normalized = input.infoHash.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error("Missing infoHash.");
+  }
+  const response = await apiRequest<PlayerSubtitleSingleResponse>(
+    `/api/media/player/subtitles/${encodeURIComponent(String(input.subtitleId))}`,
+    {
+      method: "PUT",
+      data: {
+        infoHash: normalized,
+        label: input.label,
+        language: input.language
+      }
+    }
+  );
+  return response.item;
+}
+
+export async function deletePlayerSubtitle(input: { infoHash: string; subtitleId: number }): Promise<void> {
+  const normalized = input.infoHash.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error("Missing infoHash.");
+  }
+  const query = new URLSearchParams({ infoHash: normalized });
+  await apiRequest(`/api/media/player/subtitles/${encodeURIComponent(String(input.subtitleId))}?${query.toString()}`, {
+    method: "DELETE"
+  });
 }

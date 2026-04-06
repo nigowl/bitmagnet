@@ -2,6 +2,7 @@ package ginzap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
 
@@ -135,5 +137,36 @@ func TestGinzapWithConfig(t *testing.T) {
 	err := timestampLocationCheck(logLine.Context[7].String, time.UTC)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestGinzapSuppressesBrokenPipeErrors(t *testing.T) {
+	t.Parallel()
+
+	r := gin.New()
+	logger, observed := buildDummyLogger()
+	r.Use(WithConfig(logger, &Config{
+		TimeFormat: time.RFC3339,
+		UTC:        true,
+	}))
+
+	r.GET("/stream", func(c *gin.Context) {
+		_ = c.Error(errors.New("write tcp 127.0.0.1:3333->127.0.0.1:12345: write: broken pipe"))
+		c.Status(http.StatusPartialContent)
+	})
+
+	recorder := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/stream", nil)
+	r.ServeHTTP(recorder, req)
+
+	all := observed.All()
+	if len(all) != 1 {
+		t.Fatalf("expected 1 log line, got %d", len(all))
+	}
+	if all[0].Level != zapcore.DebugLevel {
+		t.Fatalf("expected debug level, got %s", all[0].Level.String())
+	}
+	if all[0].Message != "/stream" {
+		t.Fatalf("expected path message, got %s", all[0].Message)
 	}
 }

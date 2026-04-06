@@ -9,3 +9,11 @@ func tableNameUser() string {
 func tableNameUserFavorite() string {
 	return model.TableNameUserFavorite
 }
+
+func tableNameUserInviteCode() string {
+	return model.TableNameUserInviteCode
+}
+
+func tableNameUserSession() string {
+	return model.TableNameUserSession
+}

@@ -412,7 +412,7 @@ function DailyPicksCarousel({ title, items, loading, emptyText, t, titleLanguage
               <ActionIcon
                 className="app-icon-btn home-daily-carousel-control home-daily-carousel-control-prev"
                 variant="filled"
-                color="gray"
+                color="slate"
                 aria-label="Previous slide"
                 onClick={() => move("prev")}
               >
@@ -421,7 +421,7 @@ function DailyPicksCarousel({ title, items, loading, emptyText, t, titleLanguage
               <ActionIcon
                 className="app-icon-btn home-daily-carousel-control home-daily-carousel-control-next"
                 variant="filled"
-                color="gray"
+                color="slate"
                 aria-label="Next slide"
                 onClick={() => move("next")}
               >
