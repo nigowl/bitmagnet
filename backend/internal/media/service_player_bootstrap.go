@@ -17,6 +17,7 @@ import (
 
 const defaultPlayerMetadataTimeoutSeconds = 25
 const defaultPlayerHardTimeoutSeconds = 45
+const defaultPlayerEnabled = true
 const defaultPlayerTransmissionRPCURL = "http://127.0.0.1:9091/transmission/rpc"
 const defaultPlayerTransmissionTimeoutSeconds = 8
 const defaultPlayerTransmissionSequentialDownload = true
@@ -24,10 +25,10 @@ const defaultPlayerTransmissionCleanupEnabled = false
 const defaultPlayerTransmissionCleanupSlowTaskEnabled = true
 const defaultPlayerTransmissionCleanupStorageEnabled = true
 const defaultPlayerTransmissionCleanupMaxTasks = 60
+const defaultPlayerTransmissionCleanupMaxTotalSizeGB = 100
 const defaultPlayerTransmissionCleanupMinFreeSpaceGB = 20
 const defaultPlayerTransmissionCleanupSlowWindowMinutes = 30
-const defaultPlayerTransmissionCleanupSlowRateKbps = 64
-const defaultPlayerTransmissionCleanupDeleteData = true
+const defaultPlayerTransmissionCleanupSlowRateKbps = 100
 const defaultPlayerFFmpegBinaryPath = "ffmpeg"
 const defaultPlayerFFmpegPreset = "veryfast"
 const defaultPlayerFFmpegCRF = 23
@@ -37,6 +38,7 @@ const defaultPlayerFFmpegForceTranscodeExtensions = ".mkv,.avi,.flv,.wmv,.rm,.rm
 const transmissionSessionHeader = "X-Transmission-Session-Id"
 
 type playerBootstrapSettings struct {
+	PlayerEnabled                        bool
 	MetadataTimeoutSeconds               int
 	HardTimeoutSeconds                   int
 	TransmissionEnabled                  bool
@@ -51,10 +53,10 @@ type playerBootstrapSettings struct {
 	TransmissionCleanupSlowTaskEnabled   bool
 	TransmissionCleanupStorageEnabled    bool
 	TransmissionCleanupMaxTasks          int
+	TransmissionCleanupMaxTotalSizeGB    int
 	TransmissionCleanupMinFreeSpaceGB    int
 	TransmissionCleanupSlowWindowMinutes int
 	TransmissionCleanupSlowRateKbps      int
-	TransmissionCleanupDeleteData        bool
 	FFmpeg                               PlayerFFmpegTranscodeSettings
 }
 
@@ -65,6 +67,7 @@ func (s *service) loadPlayerBootstrapSettings(ctx context.Context, db *gorm.DB) 
 	}
 
 	settings := playerBootstrapSettings{
+		PlayerEnabled:                        defaultPlayerEnabled,
 		MetadataTimeoutSeconds:               defaultPlayerMetadataTimeoutSeconds,
 		HardTimeoutSeconds:                   defaultPlayerHardTimeoutSeconds,
 		TransmissionEnabled:                  false,
@@ -79,10 +82,10 @@ func (s *service) loadPlayerBootstrapSettings(ctx context.Context, db *gorm.DB) 
 		TransmissionCleanupSlowTaskEnabled:   defaultPlayerTransmissionCleanupSlowTaskEnabled,
 		TransmissionCleanupStorageEnabled:    defaultPlayerTransmissionCleanupStorageEnabled,
 		TransmissionCleanupMaxTasks:          defaultPlayerTransmissionCleanupMaxTasks,
+		TransmissionCleanupMaxTotalSizeGB:    defaultPlayerTransmissionCleanupMaxTotalSizeGB,
 		TransmissionCleanupMinFreeSpaceGB:    defaultPlayerTransmissionCleanupMinFreeSpaceGB,
 		TransmissionCleanupSlowWindowMinutes: defaultPlayerTransmissionCleanupSlowWindowMinutes,
 		TransmissionCleanupSlowRateKbps:      defaultPlayerTransmissionCleanupSlowRateKbps,
-		TransmissionCleanupDeleteData:        defaultPlayerTransmissionCleanupDeleteData,
 		FFmpeg: PlayerFFmpegTranscodeSettings{
 			Enabled:                  false,
 			BinaryPath:               defaultPlayerFFmpegBinaryPath,
@@ -98,6 +101,11 @@ func (s *service) loadPlayerBootstrapSettings(ctx context.Context, db *gorm.DB) 
 	if raw, ok := values[runtimeconfig.KeyPlayerMetadataTimeoutSeconds]; ok {
 		if parsed, parseErr := strconv.Atoi(strings.TrimSpace(raw)); parseErr == nil && parsed >= 5 && parsed <= 300 {
 			settings.MetadataTimeoutSeconds = parsed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerEnabled]; ok {
+		if parsed, parseErr := strconv.ParseBool(strings.TrimSpace(raw)); parseErr == nil {
+			settings.PlayerEnabled = parsed
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerHardTimeoutSeconds]; ok {
@@ -162,14 +170,14 @@ func (s *service) loadPlayerBootstrapSettings(ctx context.Context, db *gorm.DB) 
 			settings.TransmissionCleanupStorageEnabled = parsed
 		}
 	}
-	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupDeleteData]; ok {
-		if parsed, parseErr := strconv.ParseBool(strings.TrimSpace(raw)); parseErr == nil {
-			settings.TransmissionCleanupDeleteData = parsed
-		}
-	}
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupMaxTasks]; ok {
 		if parsed, parseErr := strconv.Atoi(strings.TrimSpace(raw)); parseErr == nil && parsed >= 0 && parsed <= 5000 {
 			settings.TransmissionCleanupMaxTasks = parsed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupMaxTotalSizeGB]; ok {
+		if parsed, parseErr := strconv.Atoi(strings.TrimSpace(raw)); parseErr == nil && parsed >= 0 && parsed <= 32768 {
+			settings.TransmissionCleanupMaxTotalSizeGB = parsed
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupMinFreeSpaceGB]; ok {

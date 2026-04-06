@@ -155,6 +155,7 @@ export type MediaDetailResponse = {
   };
   torrents: MediaDetailTorrent[];
   subtitleTemplates: MediaSubtitleTemplate[];
+  playerEnabled: boolean;
 };
 
 export type PlayerTransmissionFile = {
@@ -364,6 +365,7 @@ export async function fetchMediaDetail(id: string, options?: { refresh?: boolean
 
   return {
     ...response,
+    playerEnabled: typeof response.playerEnabled === "boolean" ? response.playerEnabled : true,
     item: {
       ...response.item,
       genres: normalizeStringArray(response.item?.genres),

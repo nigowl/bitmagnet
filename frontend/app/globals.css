@@ -2315,8 +2315,8 @@ body {
   height: 100%;
 }
 
+.torrent-player-stage-shell.controls-visible .torrent-inline-controls,
 .torrent-player-stage-shell:hover .torrent-inline-controls,
-.torrent-player-stage-shell:focus-within .torrent-inline-controls,
 .torrent-player-stage-shell.is-paused .torrent-inline-controls {
   opacity: 1;
   pointer-events: auto;
@@ -2380,24 +2380,27 @@ body {
   border: 1px solid rgba(160, 178, 222, 0.14);
 }
 
-.torrent-inline-seek-downloaded,
+.torrent-inline-seek-available-segment,
 .torrent-inline-seek-contiguous,
 .torrent-inline-seek-played {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 0;
 }
 
-.torrent-inline-seek-downloaded {
+.torrent-inline-seek-available-segment {
+  left: 0;
   background: linear-gradient(90deg, rgba(68, 98, 162, 0.34), rgba(94, 132, 202, 0.38));
+  border-radius: 999px;
 }
 
 .torrent-inline-seek-contiguous {
+  left: 0;
   background: linear-gradient(90deg, rgba(74, 148, 255, 0.46), rgba(112, 187, 255, 0.52));
 }
 
 .torrent-inline-seek-played {
+  left: 0;
   background: linear-gradient(90deg, rgba(255, 137, 44, 0.66), rgba(255, 182, 90, 0.7));
   box-shadow: 0 0 10px rgba(255, 154, 77, 0.18);
 }

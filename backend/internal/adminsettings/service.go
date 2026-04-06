@@ -14,7 +14,6 @@ import (
 	"github.com/nigowl/bitmagnet/internal/lazy"
 	"github.com/nigowl/bitmagnet/internal/logging"
 	"github.com/nigowl/bitmagnet/internal/media"
-	"github.com/nigowl/bitmagnet/internal/model"
 	"github.com/nigowl/bitmagnet/internal/queue"
 	"github.com/nigowl/bitmagnet/internal/runtimeconfig"
 	"github.com/nigowl/bitmagnet/internal/subtitles"
@@ -23,7 +22,6 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 var ErrInvalidInput = errors.New("invalid input")
@@ -113,6 +111,7 @@ type HomeHighScoreSettings struct {
 }
 
 type PlayerSettings struct {
+	Enabled                bool                 `json:"enabled"`
 	MetadataTimeoutSeconds int                  `json:"metadataTimeoutSeconds"`
 	HardTimeoutSeconds     int                  `json:"hardTimeoutSeconds"`
 	Transmission           TransmissionSettings `json:"transmission"`
@@ -133,10 +132,10 @@ type TransmissionSettings struct {
 	AutoCleanupSlowTaskEnabled   bool   `json:"autoCleanupSlowTaskEnabled"`
 	AutoCleanupStorageEnabled    bool   `json:"autoCleanupStorageEnabled"`
 	AutoCleanupMaxTasks          int    `json:"autoCleanupMaxTasks"`
+	AutoCleanupMaxTotalSizeGB    int    `json:"autoCleanupMaxTotalSizeGB"`
 	AutoCleanupMinFreeSpaceGB    int    `json:"autoCleanupMinFreeSpaceGB"`
 	AutoCleanupSlowWindowMinutes int    `json:"autoCleanupSlowWindowMinutes"`
 	AutoCleanupSlowRateKbps      int    `json:"autoCleanupSlowRateKbps"`
-	AutoCleanupDeleteData        bool   `json:"autoCleanupDeleteData"`
 }
 
 type FFmpegSettings struct {
@@ -230,6 +229,7 @@ type HomeHighScoreSettingsInput struct {
 }
 
 type PlayerSettingsInput struct {
+	Enabled                *bool                      `json:"enabled"`
 	MetadataTimeoutSeconds *int                       `json:"metadataTimeoutSeconds"`
 	HardTimeoutSeconds     *int                       `json:"hardTimeoutSeconds"`
 	Transmission           *TransmissionSettingsInput `json:"transmission"`
@@ -250,10 +250,10 @@ type TransmissionSettingsInput struct {
 	AutoCleanupSlowTaskEnabled   *bool   `json:"autoCleanupSlowTaskEnabled"`
 	AutoCleanupStorageEnabled    *bool   `json:"autoCleanupStorageEnabled"`
 	AutoCleanupMaxTasks          *int    `json:"autoCleanupMaxTasks"`
+	AutoCleanupMaxTotalSizeGB    *int    `json:"autoCleanupMaxTotalSizeGB"`
 	AutoCleanupMinFreeSpaceGB    *int    `json:"autoCleanupMinFreeSpaceGB"`
 	AutoCleanupSlowWindowMinutes *int    `json:"autoCleanupSlowWindowMinutes"`
 	AutoCleanupSlowRateKbps      *int    `json:"autoCleanupSlowRateKbps"`
-	AutoCleanupDeleteData        *bool   `json:"autoCleanupDeleteData"`
 }
 
 type TransmissionTask struct {
@@ -274,8 +274,7 @@ type TransmissionTask struct {
 }
 
 type TransmissionTaskDeleteInput struct {
-	ID         int64 `json:"id"`
-	DeleteData bool  `json:"deleteData"`
+	ID int64 `json:"id"`
 }
 
 type TransmissionTaskDeleteResult struct {
@@ -290,6 +289,13 @@ type TransmissionCleanupResult struct {
 	RemovedIDs        []int64  `json:"removedIds"`
 	Reasons           []string `json:"reasons"`
 	EstimatedFreeGain int64    `json:"estimatedFreeGain"`
+}
+
+type TransmissionTaskStats struct {
+	TaskCount          int   `json:"taskCount"`
+	TotalSizeBytes     int64 `json:"totalSizeBytes"`
+	FreeSpaceBytes     int64 `json:"freeSpaceBytes"`
+	FreeSpaceAvailable bool  `json:"freeSpaceAvailable"`
 }
 
 type FFmpegSettingsInput struct {
@@ -339,6 +345,7 @@ type Service interface {
 	TestPlayerDownloadMapping(ctx context.Context, input DownloadMappingTestInput) (DownloadMappingTestResult, error)
 	TestPlayerFFmpeg(ctx context.Context, input FFmpegTestInput) (FFmpegTestResult, error)
 	ListPlayerTransmissionTasks(ctx context.Context) ([]TransmissionTask, error)
+	GetPlayerTransmissionTaskStats(ctx context.Context) (TransmissionTaskStats, error)
 	DeletePlayerTransmissionTask(ctx context.Context, input TransmissionTaskDeleteInput) (TransmissionTaskDeleteResult, error)
 	RunPlayerTransmissionCleanup(ctx context.Context) (TransmissionCleanupResult, error)
 	ListSubtitleTemplates(ctx context.Context) ([]subtitles.Template, error)
@@ -411,6 +418,7 @@ func NewService(p Params) Service {
 			},
 		},
 		Player: PlayerSettings{
+			Enabled:                true,
 			MetadataTimeoutSeconds: 25,
 			HardTimeoutSeconds:     45,
 			Transmission: TransmissionSettings{
@@ -427,10 +435,10 @@ func NewService(p Params) Service {
 				AutoCleanupSlowTaskEnabled:   true,
 				AutoCleanupStorageEnabled:    true,
 				AutoCleanupMaxTasks:          60,
+				AutoCleanupMaxTotalSizeGB:    100,
 				AutoCleanupMinFreeSpaceGB:    20,
 				AutoCleanupSlowWindowMinutes: 30,
-				AutoCleanupSlowRateKbps:      64,
-				AutoCleanupDeleteData:        true,
+				AutoCleanupSlowRateKbps:      100,
 			},
 			FFmpeg: FFmpegSettings{
 				Enabled:                  false,
@@ -789,36 +797,8 @@ func (s *service) Update(ctx context.Context, input UpdateInput) (Settings, erro
 		return effective, nil
 	}
 
-	now := time.Now()
-	for key, valuePtr := range updates {
-		if valuePtr == nil {
-			if err := db.WithContext(ctx).
-				Table(model.TableNameKeyValue).
-				Where("key = ?", key).
-				Delete(&model.KeyValue{}).Error; err != nil {
-				return Settings{}, err
-			}
-			continue
-		}
-
-		item := model.KeyValue{
-			Key:       key,
-			Value:     *valuePtr,
-			CreatedAt: now,
-			UpdatedAt: now,
-		}
-		if err := db.WithContext(ctx).
-			Table(model.TableNameKeyValue).
-			Clauses(clause.OnConflict{
-				Columns: []clause.Column{{Name: "key"}},
-				DoUpdates: clause.Assignments(map[string]any{
-					"value":      item.Value,
-					"updated_at": now,
-				}),
-			}).
-			Create(&item).Error; err != nil {
-			return Settings{}, err
-		}
+	if err := runtimeconfig.WriteValues(ctx, db, updates); err != nil {
+		return Settings{}, err
 	}
 
 	if input.LogLevel != nil && s.levelController != nil {
@@ -1375,6 +1355,12 @@ func applyPlayerUpdate(
 		return nil
 	}
 
+	if input.Enabled != nil {
+		value := strconv.FormatBool(*input.Enabled)
+		updates[runtimeconfig.KeyPlayerEnabled] = &value
+		effective.Player.Enabled = *input.Enabled
+	}
+
 	if input.MetadataTimeoutSeconds != nil {
 		if *input.MetadataTimeoutSeconds < 5 || *input.MetadataTimeoutSeconds > 300 {
 			return fmt.Errorf("%w: player.metadataTimeoutSeconds", ErrInvalidInput)
@@ -1498,6 +1484,14 @@ func applyPlayerUpdate(
 			updates[runtimeconfig.KeyPlayerTransmissionCleanupMaxTasks] = &value
 			effective.Player.Transmission.AutoCleanupMaxTasks = *input.Transmission.AutoCleanupMaxTasks
 		}
+		if input.Transmission.AutoCleanupMaxTotalSizeGB != nil {
+			if *input.Transmission.AutoCleanupMaxTotalSizeGB < 0 || *input.Transmission.AutoCleanupMaxTotalSizeGB > 32768 {
+				return fmt.Errorf("%w: player.transmission.autoCleanupMaxTotalSizeGB", ErrInvalidInput)
+			}
+			value := strconv.Itoa(*input.Transmission.AutoCleanupMaxTotalSizeGB)
+			updates[runtimeconfig.KeyPlayerTransmissionCleanupMaxTotalSizeGB] = &value
+			effective.Player.Transmission.AutoCleanupMaxTotalSizeGB = *input.Transmission.AutoCleanupMaxTotalSizeGB
+		}
 		if input.Transmission.AutoCleanupMinFreeSpaceGB != nil {
 			if *input.Transmission.AutoCleanupMinFreeSpaceGB < 0 || *input.Transmission.AutoCleanupMinFreeSpaceGB > 8192 {
 				return fmt.Errorf("%w: player.transmission.autoCleanupMinFreeSpaceGB", ErrInvalidInput)
@@ -1521,11 +1515,6 @@ func applyPlayerUpdate(
 			value := strconv.Itoa(*input.Transmission.AutoCleanupSlowRateKbps)
 			updates[runtimeconfig.KeyPlayerTransmissionCleanupSlowRateKbps] = &value
 			effective.Player.Transmission.AutoCleanupSlowRateKbps = *input.Transmission.AutoCleanupSlowRateKbps
-		}
-		if input.Transmission.AutoCleanupDeleteData != nil {
-			value := strconv.FormatBool(*input.Transmission.AutoCleanupDeleteData)
-			updates[runtimeconfig.KeyPlayerTransmissionCleanupDeleteData] = &value
-			effective.Player.Transmission.AutoCleanupDeleteData = *input.Transmission.AutoCleanupDeleteData
 		}
 	}
 
@@ -1605,6 +1594,11 @@ func applyPlayerUpdate(
 }
 
 func applyPlayerMerge(result *Settings, values map[string]string) {
+	if raw, ok := values[runtimeconfig.KeyPlayerEnabled]; ok {
+		if parsed, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+			result.Player.Enabled = parsed
+		}
+	}
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionURL]; ok {
 		trimmed := strings.TrimSpace(raw)
 		if trimmed != "" {
@@ -1650,11 +1644,6 @@ func applyPlayerMerge(result *Settings, values map[string]string) {
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupStorageEnabled]; ok {
 		if parsed, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
 			result.Player.Transmission.AutoCleanupStorageEnabled = parsed
-		}
-	}
-	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupDeleteData]; ok {
-		if parsed, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
-			result.Player.Transmission.AutoCleanupDeleteData = parsed
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegEnabled]; ok {
@@ -1707,6 +1696,9 @@ func applyPlayerMerge(result *Settings, values map[string]string) {
 	})
 	applyInt(runtimeconfig.KeyPlayerTransmissionCleanupMaxTasks, 0, 5000, func(v int) {
 		result.Player.Transmission.AutoCleanupMaxTasks = v
+	})
+	applyInt(runtimeconfig.KeyPlayerTransmissionCleanupMaxTotalSizeGB, 0, 32768, func(v int) {
+		result.Player.Transmission.AutoCleanupMaxTotalSizeGB = v
 	})
 	applyInt(runtimeconfig.KeyPlayerTransmissionCleanupMinFreeSpaceGB, 0, 8192, func(v int) {
 		result.Player.Transmission.AutoCleanupMinFreeSpaceGB = v
@@ -1873,6 +1865,7 @@ func settingsToRuntimeValueMap(settings Settings) map[string]string {
 		runtimeconfig.KeyHomeHighScoreMax:       strconv.FormatFloat(settings.Home.HighScore.MaxScore, 'f', 4, 64),
 		runtimeconfig.KeyHomeHighScoreWindow:    strconv.FormatFloat(settings.Home.HighScore.Window, 'f', 4, 64),
 
+		runtimeconfig.KeyPlayerEnabled:                              strconv.FormatBool(settings.Player.Enabled),
 		runtimeconfig.KeyPlayerMetadataTimeoutSeconds:               strconv.Itoa(settings.Player.MetadataTimeoutSeconds),
 		runtimeconfig.KeyPlayerHardTimeoutSeconds:                   strconv.Itoa(settings.Player.HardTimeoutSeconds),
 		runtimeconfig.KeyPlayerTransmissionEnabled:                  strconv.FormatBool(settings.Player.Transmission.Enabled),
@@ -1887,10 +1880,10 @@ func settingsToRuntimeValueMap(settings Settings) map[string]string {
 		runtimeconfig.KeyPlayerTransmissionCleanupSlowTaskEnabled:   strconv.FormatBool(settings.Player.Transmission.AutoCleanupSlowTaskEnabled),
 		runtimeconfig.KeyPlayerTransmissionCleanupStorageEnabled:    strconv.FormatBool(settings.Player.Transmission.AutoCleanupStorageEnabled),
 		runtimeconfig.KeyPlayerTransmissionCleanupMaxTasks:          strconv.Itoa(settings.Player.Transmission.AutoCleanupMaxTasks),
+		runtimeconfig.KeyPlayerTransmissionCleanupMaxTotalSizeGB:    strconv.Itoa(settings.Player.Transmission.AutoCleanupMaxTotalSizeGB),
 		runtimeconfig.KeyPlayerTransmissionCleanupMinFreeSpaceGB:    strconv.Itoa(settings.Player.Transmission.AutoCleanupMinFreeSpaceGB),
 		runtimeconfig.KeyPlayerTransmissionCleanupSlowWindowMinutes: strconv.Itoa(settings.Player.Transmission.AutoCleanupSlowWindowMinutes),
 		runtimeconfig.KeyPlayerTransmissionCleanupSlowRateKbps:      strconv.Itoa(settings.Player.Transmission.AutoCleanupSlowRateKbps),
-		runtimeconfig.KeyPlayerTransmissionCleanupDeleteData:        strconv.FormatBool(settings.Player.Transmission.AutoCleanupDeleteData),
 		runtimeconfig.KeyPlayerFFmpegEnabled:                        strconv.FormatBool(settings.Player.FFmpeg.Enabled),
 		runtimeconfig.KeyPlayerFFmpegBinaryPath:                     settings.Player.FFmpeg.BinaryPath,
 		runtimeconfig.KeyPlayerFFmpegPreset:                         settings.Player.FFmpeg.Preset,

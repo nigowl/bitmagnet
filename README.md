@@ -62,6 +62,7 @@
 
 - 根目录 `startup.sh` 会调用 `backend/startup.sh`，并可选带起 `frontend/startup.sh`。
 - 后端脚本支持 `POSTGRES_AUTO_START=auto|1|0`。当数据库是本机地址且不可达时，`auto` 模式会尝试用 Docker 启动本地 Postgres 容器。
+- 运行模式变量 `BITMAGNET_RUNTIME_MODE` 默认 `development`，用于隔离 `bm_key_values` 运行时配置（开发态优先使用 `dev:*`，缺失时回退无前缀；生产态使用无前缀 key）。
 
 ### Docker Compose
 
@@ -82,6 +83,11 @@ docker compose up -d --build
 - 后端 API：`http://localhost:3333`
 - 前端：`http://localhost:3334`
 
+模式建议：
+
+- 本地开发：`BITMAGNET_RUNTIME_MODE=development`
+- 线上环境：`BITMAGNET_RUNTIME_MODE=production`
+
 ## 配置说明
 
 ### 后端常用环境变量
@@ -98,6 +104,9 @@ docker compose up -d --build
 worker：
 
 - `BITMAGNET_WORKER_KEYS`（默认 `all`，可指定部分 worker）
+- `BITMAGNET_RUNTIME_MODE`（`development|production`，默认 `development`）
+  - `development`：写入 `dev:*`；读取优先 `dev:*`，缺失时回退无前缀 key
+  - `production`：读取/写入无前缀配置 key
 
 日志：
 

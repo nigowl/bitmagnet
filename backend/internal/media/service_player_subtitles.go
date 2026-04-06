@@ -85,6 +85,17 @@ func (s *service) playerSubtitleDB(ctx context.Context) (*gorm.DB, error) {
 		WithContext(ctx), nil
 }
 
+func (s *service) ensurePlayerEnabled(ctx context.Context, db *gorm.DB) error {
+	settings, err := s.loadPlayerBootstrapSettings(ctx, db)
+	if err != nil {
+		return err
+	}
+	if !settings.PlayerEnabled {
+		return ErrPlayerDisabled
+	}
+	return nil
+}
+
 func (s *service) PlayerSubtitleList(ctx context.Context, input PlayerSubtitleListInput) ([]PlayerSubtitle, error) {
 	infoHash, err := normalizePlayerSubtitleInfoHash(input.InfoHash)
 	if err != nil {
@@ -92,6 +103,9 @@ func (s *service) PlayerSubtitleList(ctx context.Context, input PlayerSubtitleLi
 	}
 	db, err := s.playerSubtitleDB(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.ensurePlayerEnabled(ctx, db); err != nil {
 		return nil, err
 	}
 
@@ -128,6 +142,9 @@ func (s *service) PlayerSubtitleCreate(ctx context.Context, input PlayerSubtitle
 	if err != nil {
 		return PlayerSubtitle{}, err
 	}
+	if err := s.ensurePlayerEnabled(ctx, db); err != nil {
+		return PlayerSubtitle{}, err
+	}
 
 	now := time.Now().UTC()
 	record := model.PlayerSubtitle{
@@ -156,6 +173,9 @@ func (s *service) PlayerSubtitleUpdate(ctx context.Context, input PlayerSubtitle
 	}
 	db, err := s.playerSubtitleDB(ctx)
 	if err != nil {
+		return PlayerSubtitle{}, err
+	}
+	if err := s.ensurePlayerEnabled(ctx, db); err != nil {
 		return PlayerSubtitle{}, err
 	}
 
@@ -217,6 +237,9 @@ func (s *service) PlayerSubtitleDelete(ctx context.Context, input PlayerSubtitle
 	if err != nil {
 		return err
 	}
+	if err := s.ensurePlayerEnabled(ctx, db); err != nil {
+		return err
+	}
 	result := db.WithContext(ctx).
 		Table(model.TableNamePlayerSubtitle).
 		Where("id = ? AND info_hash = ?", input.ID, infoHash).
@@ -240,6 +263,9 @@ func (s *service) PlayerSubtitleContent(ctx context.Context, input PlayerSubtitl
 	}
 	db, err := s.playerSubtitleDB(ctx)
 	if err != nil {
+		return PlayerSubtitleContentResult{}, err
+	}
+	if err := s.ensurePlayerEnabled(ctx, db); err != nil {
 		return PlayerSubtitleContentResult{}, err
 	}
 

@@ -85,6 +85,7 @@ type DetailResult struct {
 	Item              DetailItem               `json:"item"`
 	Torrents          []DetailTorrent          `json:"torrents"`
 	SubtitleTemplates []DetailSubtitleTemplate `json:"subtitleTemplates"`
+	PlayerEnabled     bool                     `json:"playerEnabled"`
 }
 
 type DetailOptions struct {

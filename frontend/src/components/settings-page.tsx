@@ -85,6 +85,7 @@ type SystemSettings = {
     };
   };
   player: {
+    enabled: boolean;
     metadataTimeoutSeconds: number;
     hardTimeoutSeconds: number;
     transmission: {
@@ -101,10 +102,10 @@ type SystemSettings = {
       autoCleanupSlowTaskEnabled: boolean;
       autoCleanupStorageEnabled: boolean;
       autoCleanupMaxTasks: number;
+      autoCleanupMaxTotalSizeGB: number;
       autoCleanupMinFreeSpaceGB: number;
       autoCleanupSlowWindowMinutes: number;
       autoCleanupSlowRateKbps: number;
-      autoCleanupDeleteData: boolean;
     };
     ffmpeg: {
       enabled: boolean;
@@ -232,6 +233,17 @@ type DownloadMappingConnectivityResponse = {
   result: DownloadMappingConnectivityResult;
 };
 
+type TransmissionTaskStats = {
+  taskCount: number;
+  totalSizeBytes: number;
+  freeSpaceBytes: number;
+  freeSpaceAvailable: boolean;
+};
+
+type TransmissionTaskStatsResponse = {
+  stats: TransmissionTaskStats;
+};
+
 type FFmpegConnectivityResult = {
   success: boolean;
   message: string;
@@ -345,6 +357,7 @@ const PERFORMANCE_PRESETS: Record<PerformancePresetKey, SystemSettings["performa
 };
 
 const DEFAULT_PLAYER_SETTINGS: SystemSettings["player"] = {
+  enabled: true,
   metadataTimeoutSeconds: 25,
   hardTimeoutSeconds: 45,
   transmission: {
@@ -361,10 +374,10 @@ const DEFAULT_PLAYER_SETTINGS: SystemSettings["player"] = {
     autoCleanupSlowTaskEnabled: true,
     autoCleanupStorageEnabled: true,
     autoCleanupMaxTasks: 60,
+    autoCleanupMaxTotalSizeGB: 100,
     autoCleanupMinFreeSpaceGB: 20,
     autoCleanupSlowWindowMinutes: 30,
-    autoCleanupSlowRateKbps: 64,
-    autoCleanupDeleteData: true
+    autoCleanupSlowRateKbps: 100
   },
   ffmpeg: {
     enabled: false,
@@ -468,6 +481,8 @@ export function SettingsPage() {
   const [downloadMappingTesting, setDownloadMappingTesting] = useState(false);
   const [transmissionTestResult, setTransmissionTestResult] = useState<TransmissionConnectivityResult | null>(null);
   const [downloadMappingTestResult, setDownloadMappingTestResult] = useState<DownloadMappingConnectivityResult | null>(null);
+  const [transmissionTaskStats, setTransmissionTaskStats] = useState<TransmissionTaskStats | null>(null);
+  const [transmissionTaskStatsLoading, setTransmissionTaskStatsLoading] = useState(false);
   const [ffmpegTesting, setFFmpegTesting] = useState(false);
   const [ffmpegTestResult, setFFmpegTestResult] = useState<FFmpegConnectivityResult | null>(null);
   const [subtitleForm, setSubtitleForm] = useState({
@@ -476,6 +491,10 @@ export function SettingsPage() {
     enabled: true
   });
   const tabsRef = useTabsUnderline();
+
+  const resolvePlayerEnabled = useCallback((value: unknown, fallback: boolean) => {
+    return typeof value === "boolean" ? value : fallback;
+  }, []);
 
   const loadSettings = useCallback(async () => {
     if (!isAdmin) return;
@@ -487,6 +506,7 @@ export function SettingsPage() {
         player: {
           ...DEFAULT_PLAYER_SETTINGS,
           ...data.settings.player,
+          enabled: resolvePlayerEnabled(data.settings.player?.enabled, DEFAULT_PLAYER_SETTINGS.enabled),
           transmission: {
             ...DEFAULT_PLAYER_SETTINGS.transmission,
             ...data.settings.player?.transmission,
@@ -516,7 +536,7 @@ export function SettingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [isAdmin]);
+  }, [isAdmin, resolvePlayerEnabled]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -574,6 +594,7 @@ export function SettingsPage() {
         player: {
           ...DEFAULT_PLAYER_SETTINGS,
           ...data.settings.player,
+          enabled: resolvePlayerEnabled(data.settings.player?.enabled, settings.player.enabled),
           transmission: {
             ...DEFAULT_PLAYER_SETTINGS.transmission,
             ...data.settings.player?.transmission,
@@ -598,7 +619,18 @@ export function SettingsPage() {
       };
       setSettings(normalized);
       setInitialSettings(normalized);
+      if (typeof data.settings.player?.enabled !== "boolean") {
+        notifications.show({
+          color: "yellow",
+          message: "后端未返回 player.enabled，已临时保留当前开关状态。请重启后端后再保存一次。"
+        });
+      }
       void loadRuntimeStatus();
+      if (normalized.player?.transmission?.enabled) {
+        void loadTransmissionTaskStats();
+      } else {
+        setTransmissionTaskStats(null);
+      }
       notifications.show({ color: "green", message: t("settings.saved") });
     } catch (error) {
       notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
@@ -839,6 +871,28 @@ export function SettingsPage() {
     notifications.show({ color: "green", message: t("settings.playerDefaultsRestored") });
   };
 
+  const loadTransmissionTaskStats = useCallback(async () => {
+    if (!isAdmin) return;
+    setTransmissionTaskStatsLoading(true);
+    try {
+      const data = await apiRequest<TransmissionTaskStatsResponse>("/api/admin/settings/player/transmission/tasks/stats");
+      setTransmissionTaskStats(data.stats || null);
+    } catch {
+      setTransmissionTaskStats(null);
+    } finally {
+      setTransmissionTaskStatsLoading(false);
+    }
+  }, [isAdmin, resolvePlayerEnabled]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (!settings.player.transmission.enabled) {
+      setTransmissionTaskStats(null);
+      return;
+    }
+    void loadTransmissionTaskStats();
+  }, [isAdmin, loadTransmissionTaskStats, settings.player.transmission.enabled]);
+
   const testPlayerTransmission = async () => {
     setTransmissionTesting(true);
     try {
@@ -866,6 +920,7 @@ export function SettingsPage() {
     } catch (error) {
       notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
     } finally {
+      void loadTransmissionTaskStats();
       setTransmissionTesting(false);
     }
   };
@@ -1698,50 +1753,60 @@ export function SettingsPage() {
                   {t("settings.playerResetDefaults")}
                 </Button>
               </Group>
+              <Card className="settings-section-block" radius="lg">
+                <Switch
+                  label={t("settings.playerEnabled")}
+                  checked={settings.player.enabled}
+                  onChange={(event) => {
+                    updatePlayerSettings({ enabled: event.currentTarget.checked });
+                  }}
+                />
+              </Card>
 
-              <Accordion className="settings-sections-accordion" variant="separated" radius="lg" multiple defaultValue={[]}>
-                <Accordion.Item value="player-policy">
-                  <Accordion.Control>{t("settings.playerConnectionPolicyTitle")}</Accordion.Control>
-                  <Accordion.Panel>
-                    <Card className="settings-section-block" radius="lg">
-                      <Stack gap="sm">
-                        <SimpleGrid cols={{ base: 1, md: 2 }}>
-                          <NumberInput
-                            label={t("settings.playerMetadataTimeoutSeconds")}
-                            min={5}
-                            max={300}
-                            value={settings.player.metadataTimeoutSeconds}
-                            onChange={(value) => {
-                              if (typeof value === "number" && Number.isFinite(value)) {
-                                if (value > settings.player.hardTimeoutSeconds) {
-                                  updatePlayerSettings({
-                                    metadataTimeoutSeconds: value,
-                                    hardTimeoutSeconds: value
-                                  });
-                                  return;
+              {settings.player.enabled ? (
+                <Accordion className="settings-sections-accordion" variant="separated" radius="lg" multiple defaultValue={[]}>
+                  <Accordion.Item value="player-policy">
+                    <Accordion.Control>{t("settings.playerConnectionPolicyTitle")}</Accordion.Control>
+                    <Accordion.Panel>
+                      <Card className="settings-section-block" radius="lg">
+                        <Stack gap="sm">
+                          <SimpleGrid cols={{ base: 1, md: 2 }}>
+                            <NumberInput
+                              label={t("settings.playerMetadataTimeoutSeconds")}
+                              min={5}
+                              max={300}
+                              value={settings.player.metadataTimeoutSeconds}
+                              onChange={(value) => {
+                                if (typeof value === "number" && Number.isFinite(value)) {
+                                  if (value > settings.player.hardTimeoutSeconds) {
+                                    updatePlayerSettings({
+                                      metadataTimeoutSeconds: value,
+                                      hardTimeoutSeconds: value
+                                    });
+                                    return;
+                                  }
+                                  updatePlayerSettings({ metadataTimeoutSeconds: value });
                                 }
-                                updatePlayerSettings({ metadataTimeoutSeconds: value });
-                              }
-                            }}
-                          />
-                          <NumberInput
-                            label={t("settings.playerHardTimeoutSeconds")}
-                            min={Math.max(10, settings.player.metadataTimeoutSeconds)}
-                            max={900}
-                            value={settings.player.hardTimeoutSeconds}
-                            onChange={(value) => {
-                              if (typeof value === "number" && Number.isFinite(value)) {
-                                updatePlayerSettings({ hardTimeoutSeconds: value });
-                              }
-                            }}
-                          />
-                        </SimpleGrid>
-                      </Stack>
-                    </Card>
-                  </Accordion.Panel>
-                </Accordion.Item>
+                              }}
+                            />
+                            <NumberInput
+                              label={t("settings.playerHardTimeoutSeconds")}
+                              min={Math.max(10, settings.player.metadataTimeoutSeconds)}
+                              max={900}
+                              value={settings.player.hardTimeoutSeconds}
+                              onChange={(value) => {
+                                if (typeof value === "number" && Number.isFinite(value)) {
+                                  updatePlayerSettings({ hardTimeoutSeconds: value });
+                                }
+                              }}
+                            />
+                          </SimpleGrid>
+                        </Stack>
+                      </Card>
+                    </Accordion.Panel>
+                  </Accordion.Item>
 
-                <Accordion.Item value="player-transmission">
+                  <Accordion.Item value="player-transmission">
                   <Accordion.Control>{t("settings.playerTransmissionTitle")}</Accordion.Control>
                   <Accordion.Panel>
                     <Card className="settings-section-block" radius="lg">
@@ -1893,7 +1958,30 @@ export function SettingsPage() {
                                       }}
                                     />
                                     <NumberInput
+                                      label={t("settings.playerTransmissionAutoCleanupMaxTotalSizeGB")}
+                                      description={`${t("settings.playerTransmissionCurrentTotalSize")}: ${
+                                        transmissionTaskStatsLoading
+                                          ? t("common.loading")
+                                          : formatGiBFromBytes(transmissionTaskStats?.totalSizeBytes)
+                                      }`}
+                                      min={0}
+                                      max={32768}
+                                      value={settings.player.transmission.autoCleanupMaxTotalSizeGB}
+                                      onChange={(value) => {
+                                        if (typeof value === "number" && Number.isFinite(value)) {
+                                          updatePlayerTransmissionSettings({ autoCleanupMaxTotalSizeGB: value });
+                                        }
+                                      }}
+                                    />
+                                    <NumberInput
                                       label={t("settings.playerTransmissionAutoCleanupMinFreeSpaceGB")}
+                                      description={`${t("settings.playerTransmissionCurrentFreeSpace")}: ${
+                                        transmissionTaskStatsLoading
+                                          ? t("common.loading")
+                                          : transmissionTaskStats?.freeSpaceAvailable
+                                            ? formatGiBFromBytes(transmissionTaskStats.freeSpaceBytes)
+                                            : t("settings.playerTransmissionCurrentValueUnavailable")
+                                      }`}
                                       min={0}
                                       max={8192}
                                       value={settings.player.transmission.autoCleanupMinFreeSpaceGB}
@@ -1905,13 +1993,6 @@ export function SettingsPage() {
                                     />
                                   </SimpleGrid>
                                 ) : null}
-                                <Switch
-                                  label={t("settings.playerTransmissionAutoCleanupDeleteData")}
-                                  checked={settings.player.transmission.autoCleanupDeleteData}
-                                  onChange={(event) => {
-                                    updatePlayerTransmissionSettings({ autoCleanupDeleteData: event.currentTarget.checked });
-                                  }}
-                                />
                               </Stack>
                             ) : null}
                             {downloadMappingTestResult ? (
@@ -1960,9 +2041,9 @@ export function SettingsPage() {
                       </Stack>
                     </Card>
                   </Accordion.Panel>
-                </Accordion.Item>
+                  </Accordion.Item>
 
-                <Accordion.Item value="player-ffmpeg">
+                  <Accordion.Item value="player-ffmpeg">
                   <Accordion.Control>{t("settings.playerFfmpegTitle")}</Accordion.Control>
                   <Accordion.Panel>
                     <Card className="settings-section-block" radius="lg">
@@ -2069,8 +2150,13 @@ export function SettingsPage() {
                       </Stack>
                     </Card>
                   </Accordion.Panel>
-                </Accordion.Item>
-              </Accordion>
+                  </Accordion.Item>
+                </Accordion>
+              ) : (
+                <Card className="settings-section-block" radius="lg">
+                  <Text c="dimmed" size="sm">{t("settings.playerDisabledAdvancedHint")}</Text>
+                </Card>
+              )}
             </Stack>
           </Tabs.Panel>
 
@@ -2426,6 +2512,13 @@ function parseYear(value: string): number | undefined {
 
 function areSameValue(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function formatGiBFromBytes(bytes?: number): string {
+  if (!Number.isFinite(bytes) || Number(bytes) < 0) return "-";
+  const gib = Number(bytes) / (1024 * 1024 * 1024);
+  if (!Number.isFinite(gib)) return "-";
+  return `${gib.toFixed(gib >= 100 ? 0 : 1)} GB`;
 }
 
 function buildSettingsUpdatePayload(

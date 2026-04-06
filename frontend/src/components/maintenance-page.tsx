@@ -102,6 +102,14 @@ type TransmissionDeleteTaskResponse = {
   };
 };
 
+type AdminSettingsResponse = {
+  settings?: {
+    player?: {
+      enabled?: boolean;
+    };
+  };
+};
+
 export function MaintenancePage() {
   const { t } = useI18n();
   const { user, isAdmin, loading: authLoading } = useAuth();
@@ -119,6 +127,25 @@ export function MaintenancePage() {
   const [transmissionTasksLoading, setTransmissionTasksLoading] = useState(false);
   const [transmissionCleanupRunning, setTransmissionCleanupRunning] = useState(false);
   const [transmissionTaskDeleting, setTransmissionTaskDeleting] = useState<Record<number, boolean>>({});
+  const [playerEnabled, setPlayerEnabled] = useState(true);
+  const [playerSettingsLoading, setPlayerSettingsLoading] = useState(false);
+
+  const loadPlayerSettings = useCallback(async (): Promise<boolean> => {
+    if (!isAdmin) return true;
+    setPlayerSettingsLoading(true);
+    try {
+      const data = await apiRequest<AdminSettingsResponse>("/api/admin/settings");
+      const enabled = data?.settings?.player?.enabled;
+      const resolved = typeof enabled === "boolean" ? enabled : true;
+      setPlayerEnabled(resolved);
+      return resolved;
+    } catch {
+      setPlayerEnabled(true);
+      return true;
+    } finally {
+      setPlayerSettingsLoading(false);
+    }
+  }, [isAdmin]);
 
   const refreshPending = useCallback(async (type: MaintenanceTaskType) => {
     if (!user || !isAdmin) {
@@ -187,7 +214,7 @@ export function MaintenancePage() {
     if (!Number.isFinite(taskId) || taskId <= 0) return;
     setTransmissionTaskDeleting((current) => ({ ...current, [taskId]: true }));
     try {
-      await apiRequest<TransmissionDeleteTaskResponse>(`/api/admin/settings/player/transmission/tasks/${taskId}?deleteData=true`, {
+      await apiRequest<TransmissionDeleteTaskResponse>(`/api/admin/settings/player/transmission/tasks/${taskId}`, {
         method: "DELETE"
       });
       setTransmissionTasks((current) => current.filter((item) => item.id !== taskId));
@@ -226,9 +253,23 @@ export function MaintenancePage() {
   }, [task, refreshPending]);
 
   useEffect(() => {
-    if (!isAdmin || activeTab !== "transmission") return;
+    if (!isAdmin || !playerEnabled || activeTab !== "transmission") return;
     void loadTransmissionTasks();
-  }, [activeTab, isAdmin, loadTransmissionTasks]);
+  }, [activeTab, isAdmin, loadTransmissionTasks, playerEnabled]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setPlayerEnabled(true);
+      return;
+    }
+    void loadPlayerSettings();
+  }, [isAdmin, loadPlayerSettings]);
+
+  useEffect(() => {
+    if (!playerEnabled && activeTab === "transmission") {
+      setActiveTab("tasks");
+    }
+  }, [activeTab, playerEnabled]);
 
   const startTask = async () => {
     setStarting(true);
@@ -262,10 +303,13 @@ export function MaintenancePage() {
     if (task) {
       await refreshTask(task.id);
     }
-    await loadTransmissionTasks();
+    const enabled = await loadPlayerSettings();
+    if (enabled) {
+      await loadTransmissionTasks();
+    }
   };
 
-  const pageBusy = pendingLoading || refreshing || transmissionTasksLoading || transmissionCleanupRunning;
+  const pageBusy = pendingLoading || refreshing || transmissionTasksLoading || transmissionCleanupRunning || playerSettingsLoading;
 
   if (authLoading) {
     return (
@@ -322,8 +366,11 @@ export function MaintenancePage() {
         <Tabs className="app-tabs" value={activeTab} onChange={(value) => setActiveTab(value || "tasks")}>
           <Tabs.List grow>
             <Tabs.Tab value="tasks">{t("maintenance.tabTasks")}</Tabs.Tab>
-            <Tabs.Tab value="transmission">{t("maintenance.tabTransmission")}</Tabs.Tab>
+            {playerEnabled ? <Tabs.Tab value="transmission">{t("maintenance.tabTransmission")}</Tabs.Tab> : null}
           </Tabs.List>
+          {!playerEnabled ? (
+            <Text c="dimmed" size="xs" mt="xs">{t("maintenance.transmissionHiddenWhenPlayerDisabled")}</Text>
+          ) : null}
 
           <Tabs.Panel value="tasks" pt="md">
             <Stack gap="md">
@@ -422,86 +469,88 @@ export function MaintenancePage() {
             </Stack>
           </Tabs.Panel>
 
-          <Tabs.Panel value="transmission" pt="md">
-            <Stack gap="sm">
-              <Group justify="space-between" align="center" wrap="wrap">
-                <Text size="sm" c="dimmed">{t("settings.playerTransmissionTasksHint")}</Text>
-                <Group gap="xs">
-                  <Button
-                    size="xs"
-                    variant="default"
-                    loading={transmissionTasksLoading}
-                    onClick={() => void loadTransmissionTasks()}
-                  >
-                    {t("common.refresh")}
-                  </Button>
-                  <Button
-                    size="xs"
-                    variant="light"
-                    loading={transmissionCleanupRunning}
-                    onClick={() => void cleanupTransmissionTasks()}
-                  >
-                    {t("settings.playerTransmissionRunCleanup")}
-                  </Button>
+          {playerEnabled ? (
+            <Tabs.Panel value="transmission" pt="md">
+              <Stack gap="sm">
+                <Group justify="space-between" align="center" wrap="wrap">
+                  <Text size="sm" c="dimmed">{t("settings.playerTransmissionTasksHint")}</Text>
+                  <Group gap="xs">
+                    <Button
+                      size="xs"
+                      variant="default"
+                      loading={transmissionTasksLoading}
+                      onClick={() => void loadTransmissionTasks()}
+                    >
+                      {t("common.refresh")}
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      loading={transmissionCleanupRunning}
+                      onClick={() => void cleanupTransmissionTasks()}
+                    >
+                      {t("settings.playerTransmissionRunCleanup")}
+                    </Button>
+                  </Group>
                 </Group>
-              </Group>
 
-              {transmissionTasksLoading ? (
-                <Group justify="center" py="md">
-                  <Loader size="sm" />
-                </Group>
-              ) : transmissionTasks.length === 0 ? (
-                <Text size="sm" c="dimmed">{t("settings.playerTransmissionTasksEmpty")}</Text>
-              ) : (
-                <ScrollArea type="auto" scrollbarSize={8}>
-                  <Table striped withTableBorder highlightOnHover miw={980}>
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th>ID</Table.Th>
-                        <Table.Th>{t("settings.playerTransmissionTaskName")}</Table.Th>
-                        <Table.Th>{t("settings.playerTransmissionTaskStatus")}</Table.Th>
-                        <Table.Th>{t("settings.playerTransmissionTaskProgress")}</Table.Th>
-                        <Table.Th>{t("settings.playerTransmissionTaskSpeed")}</Table.Th>
-                        <Table.Th>{t("settings.playerTransmissionTaskUpdatedAt")}</Table.Th>
-                        <Table.Th>{t("settings.playerTransmissionTaskActions")}</Table.Th>
-                      </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {transmissionTasks.map((item) => (
-                        <Table.Tr key={item.id}>
-                          <Table.Td>{item.id}</Table.Td>
-                          <Table.Td>
-                            <Stack gap={2}>
-                              <Text size="sm" lineClamp={1} title={item.name}>{item.name || "-"}</Text>
-                              <Text size="xs" c="dimmed" ff="monospace" lineClamp={1} title={item.hashString}>{item.hashString || "-"}</Text>
-                            </Stack>
-                          </Table.Td>
-                          <Table.Td>{transmissionStatusLabel(item.status)}</Table.Td>
-                          <Table.Td>{(Math.max(0, Math.min(1, item.percentDone || 0)) * 100).toFixed(1)}%</Table.Td>
-                          <Table.Td>{formatRateCompact(item.rateDownload || 0)}</Table.Td>
-                          <Table.Td>{formatUnixDateTime(item.activityAtUnix || item.addedAtUnix)}</Table.Td>
-                          <Table.Td>
-                            <Tooltip label={t("settings.playerTransmissionTaskDelete")} withArrow>
-                              <ActionIcon
-                                className="app-icon-btn"
-                                variant="light"
-                                color="red"
-                                loading={Boolean(transmissionTaskDeleting[item.id])}
-                                onClick={() => void deleteTransmissionTask(item.id)}
-                                aria-label={t("settings.playerTransmissionTaskDelete")}
-                              >
-                                <Trash2 size={14} />
-                              </ActionIcon>
-                            </Tooltip>
-                          </Table.Td>
+                {transmissionTasksLoading ? (
+                  <Group justify="center" py="md">
+                    <Loader size="sm" />
+                  </Group>
+                ) : transmissionTasks.length === 0 ? (
+                  <Text size="sm" c="dimmed">{t("settings.playerTransmissionTasksEmpty")}</Text>
+                ) : (
+                  <ScrollArea type="auto" scrollbarSize={8}>
+                    <Table striped withTableBorder highlightOnHover miw={980}>
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th>{t("settings.playerTransmissionTaskId")}</Table.Th>
+                          <Table.Th>{t("settings.playerTransmissionTaskName")}</Table.Th>
+                          <Table.Th>{t("settings.playerTransmissionTaskStatus")}</Table.Th>
+                          <Table.Th>{t("settings.playerTransmissionTaskProgress")}</Table.Th>
+                          <Table.Th>{t("settings.playerTransmissionTaskSpeed")}</Table.Th>
+                          <Table.Th>{t("settings.playerTransmissionTaskUpdatedAt")}</Table.Th>
+                          <Table.Th>{t("settings.playerTransmissionTaskActions")}</Table.Th>
                         </Table.Tr>
-                      ))}
-                    </Table.Tbody>
-                  </Table>
-                </ScrollArea>
-              )}
-            </Stack>
-          </Tabs.Panel>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {transmissionTasks.map((item) => (
+                          <Table.Tr key={item.id}>
+                            <Table.Td>{item.id}</Table.Td>
+                            <Table.Td>
+                              <Stack gap={2}>
+                                <Text size="sm" lineClamp={1} title={item.name}>{item.name || "-"}</Text>
+                                <Text size="xs" c="dimmed" ff="monospace" lineClamp={1} title={item.hashString}>{item.hashString || "-"}</Text>
+                              </Stack>
+                            </Table.Td>
+                            <Table.Td>{transmissionStatusLabel(item.status, t)}</Table.Td>
+                            <Table.Td>{(Math.max(0, Math.min(1, item.percentDone || 0)) * 100).toFixed(1)}%</Table.Td>
+                            <Table.Td>{formatRateCompact(item.rateDownload || 0)}</Table.Td>
+                            <Table.Td>{formatUnixDateTime(item.activityAtUnix || item.addedAtUnix)}</Table.Td>
+                            <Table.Td>
+                              <Tooltip label={t("settings.playerTransmissionTaskDelete")} withArrow>
+                                <ActionIcon
+                                  className="app-icon-btn"
+                                  variant="light"
+                                  color="red"
+                                  loading={Boolean(transmissionTaskDeleting[item.id])}
+                                  onClick={() => void deleteTransmissionTask(item.id)}
+                                  aria-label={t("settings.playerTransmissionTaskDelete")}
+                                >
+                                  <Trash2 size={14} />
+                                </ActionIcon>
+                              </Tooltip>
+                            </Table.Td>
+                          </Table.Tr>
+                        ))}
+                      </Table.Tbody>
+                    </Table>
+                  </ScrollArea>
+                )}
+              </Stack>
+            </Tabs.Panel>
+          ) : null}
         </Tabs>
       </Card>
     </Stack>
@@ -532,23 +581,23 @@ function formatRateCompact(value: number): string {
   return `${formatBytesCompact(value)}/s`;
 }
 
-function transmissionStatusLabel(status: number): string {
+function transmissionStatusLabel(status: number, t: (key: string, ...args: unknown[]) => string): string {
   switch (status) {
     case 0:
-      return "stopped";
+      return t("settings.playerTransmissionStatusStopped");
     case 1:
-      return "check_wait";
+      return t("settings.playerTransmissionStatusCheckWait");
     case 2:
-      return "checking";
+      return t("settings.playerTransmissionStatusChecking");
     case 3:
-      return "download_wait";
+      return t("settings.playerTransmissionStatusDownloadWait");
     case 4:
-      return "downloading";
+      return t("settings.playerTransmissionStatusDownloading");
     case 5:
-      return "seed_wait";
+      return t("settings.playerTransmissionStatusSeedWait");
     case 6:
-      return "seeding";
+      return t("settings.playerTransmissionStatusSeeding");
     default:
-      return `unknown_${status}`;
+      return `${t("settings.playerTransmissionStatusUnknown")} (${status})`;
   }
 }

@@ -156,11 +156,13 @@ function resolvePlayerActionState(
 function TorrentRow({
   item,
   t,
-  playerStatus
+  playerStatus,
+  playerEnabled
 }: {
   item: MediaDetailTorrent;
   t: (key: string) => string;
   playerStatus?: PlayerTransmissionTaskStatus;
+  playerEnabled: boolean;
 }) {
   const torrentTitle = item.title || item.torrent.name;
   const filesCount = item.filesCount ?? item.torrent.filesCount;
@@ -180,19 +182,21 @@ function TorrentRow({
       <Table.Td>{displayResolution(item.videoResolution)}</Table.Td>
       <Table.Td>
         <Group gap={6} wrap="nowrap">
-          <Tooltip label={t("media.openPlayer")}>
-            <ActionIcon
-              className="app-icon-btn"
-              size="sm"
-              variant={playerStyle.variant}
-              color={playerStyle.color}
-              aria-label={t("media.openPlayer")}
-              title={t("media.openPlayer")}
-              renderRoot={(props) => <Link href={`/player/${encodeURIComponent(item.infoHash)}`} {...props} />}
-            >
-              <Play size={14} />
-            </ActionIcon>
-          </Tooltip>
+          {playerEnabled ? (
+            <Tooltip label={t("media.openPlayer")}>
+              <ActionIcon
+                className="app-icon-btn"
+                size="sm"
+                variant={playerStyle.variant}
+                color={playerStyle.color}
+                aria-label={t("media.openPlayer")}
+                title={t("media.openPlayer")}
+                renderRoot={(props) => <Link href={`/player/${encodeURIComponent(item.infoHash)}`} {...props} />}
+              >
+                <Play size={14} />
+              </ActionIcon>
+            </Tooltip>
+          ) : null}
           <Tooltip label={t("media.openTorrent")}>
             <ActionIcon
               className="app-icon-btn"
@@ -256,6 +260,10 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
 
   useEffect(() => {
     const torrents = payload?.torrents ?? [];
+    if (!payload?.playerEnabled) {
+      setPlayerStatusMap({});
+      return;
+    }
     if (torrents.length === 0) {
       setPlayerStatusMap({});
       return;
@@ -282,7 +290,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
     return () => {
       cancelled = true;
     };
-  }, [payload?.torrents]);
+  }, [payload?.playerEnabled, payload?.torrents]);
 
   useEffect(() => {
     setTorrentPage(1);
@@ -374,19 +382,21 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
     item.originalLanguage,
     ...(item.spokenLanguages ?? [])
   ]);
-  const subtitleLinks = (payload.subtitleTemplates ?? [])
-    .map((template) => {
-      const href = applySubtitleTemplate(template.urlTemplate, selectedDisplayTitle || originalDisplayTitle, item.releaseYear);
-      if (!href) {
-        return null;
-      }
-      return {
-        id: template.id,
-        label: template.name?.trim() || t("media.detail.subtitleTemplateFallback"),
-        href
-      };
-    })
-    .filter((entry): entry is { id: string; label: string; href: string } => Boolean(entry));
+  const subtitleLinks = payload.playerEnabled
+    ? (payload.subtitleTemplates ?? [])
+      .map((template) => {
+        const href = applySubtitleTemplate(template.urlTemplate, selectedDisplayTitle || originalDisplayTitle, item.releaseYear);
+        if (!href) {
+          return null;
+        }
+        return {
+          id: template.id,
+          label: template.name?.trim() || t("media.detail.subtitleTemplateFallback"),
+          href
+        };
+      })
+      .filter((entry): entry is { id: string; label: string; href: string } => Boolean(entry))
+    : [];
   const externalLinkCards = [
     ...quickExternalLinks.map((link) => ({
       id: `external:${link.key}:${link.href}`,
@@ -742,6 +752,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
                         item={torrent}
                         t={t}
                         playerStatus={playerStatusMap[torrent.infoHash.trim().toLowerCase()]}
+                        playerEnabled={Boolean(payload.playerEnabled)}
                       />
                     ))}
                   </Table.Tbody>

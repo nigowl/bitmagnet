@@ -286,22 +286,15 @@ func (m *Manager) loadRuntimeEnabledValues(ctx context.Context, db *gorm.DB) map
 		return cached
 	}
 
-	var rows []model.KeyValue
-	if err := db.WithContext(ctx).
-		Table(model.TableNameKeyValue).
-		Where("key IN ?", runtimeconfig.SitePluginEnabledKeys()).
-		Find(&rows).Error; err != nil {
+	rawValues, err := runtimeconfig.ReadValues(ctx, db, runtimeconfig.SitePluginEnabledKeys())
+	if err != nil {
 		m.logger.Warn("load media site plugin runtime settings failed", zap.Error(err))
 		return cached
 	}
 
-	values := make(map[string]bool, len(rows))
-	for _, row := range rows {
-		rawKey := strings.TrimSpace(row.Key)
-		if rawKey == "" {
-			continue
-		}
-		parsed, parseErr := strconv.ParseBool(strings.TrimSpace(row.Value))
+	values := make(map[string]bool, len(rawValues))
+	for rawKey, rawValue := range rawValues {
+		parsed, parseErr := strconv.ParseBool(strings.TrimSpace(rawValue))
 		if parseErr != nil {
 			continue
 		}

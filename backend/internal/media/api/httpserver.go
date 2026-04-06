@@ -120,6 +120,8 @@ func (b *builder) playerTransmissionBootstrap(c *gin.Context) {
 		switch {
 		case errors.Is(err, media.ErrInvalidInfoHash):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid infoHash"})
+		case errors.Is(err, media.ErrPlayerDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player disabled"})
 		case errors.Is(err, media.ErrPlayerTransmissionDisabled):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "player transmission disabled"})
 		case errors.Is(err, media.ErrNotFound):
@@ -147,6 +149,8 @@ func (b *builder) playerTransmissionSelectFile(c *gin.Context) {
 		switch {
 		case errors.Is(err, media.ErrInvalidInfoHash):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid infoHash"})
+		case errors.Is(err, media.ErrPlayerDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player disabled"})
 		case errors.Is(err, media.ErrPlayerTransmissionDisabled):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "player transmission disabled"})
 		case errors.Is(err, media.ErrNotFound):
@@ -171,6 +175,8 @@ func (b *builder) playerTransmissionStatus(c *gin.Context) {
 		switch {
 		case errors.Is(err, media.ErrInvalidInfoHash):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid infoHash"})
+		case errors.Is(err, media.ErrPlayerDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player disabled"})
 		case errors.Is(err, media.ErrPlayerTransmissionDisabled):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "player transmission disabled"})
 		case errors.Is(err, media.ErrNotFound):
@@ -191,6 +197,8 @@ func (b *builder) playerTransmissionBatchStatus(c *gin.Context) {
 	})
 	if err != nil {
 		switch {
+		case errors.Is(err, media.ErrPlayerDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player disabled"})
 		case errors.Is(err, media.ErrPlayerTransmissionDisabled):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "player transmission disabled"})
 		default:
@@ -220,6 +228,8 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 		switch {
 		case errors.Is(err, media.ErrInvalidInfoHash), errors.Is(err, media.ErrPlayerInvalidRange):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrPlayerDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player disabled"})
 		case errors.Is(err, media.ErrPlayerTransmissionDisabled):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "player transmission disabled"})
 		case errors.Is(err, media.ErrPlayerStreamUnavailable):
@@ -297,6 +307,8 @@ func (b *builder) playerSubtitleList(c *gin.Context) {
 		switch {
 		case errors.Is(err, media.ErrInvalidInfoHash):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid infoHash"})
+		case errors.Is(err, media.ErrPlayerDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player disabled"})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -316,6 +328,8 @@ func (b *builder) playerSubtitleCreate(c *gin.Context) {
 		switch {
 		case errors.Is(err, media.ErrInvalidInfoHash), errors.Is(err, media.ErrPlayerSubtitleInvalid):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrPlayerDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player disabled"})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -341,6 +355,8 @@ func (b *builder) playerSubtitleUpdate(c *gin.Context) {
 		switch {
 		case errors.Is(err, media.ErrInvalidInfoHash), errors.Is(err, media.ErrPlayerSubtitleInvalid):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrPlayerDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player disabled"})
 		case errors.Is(err, media.ErrPlayerSubtitleNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		default:
@@ -366,6 +382,8 @@ func (b *builder) playerSubtitleDelete(c *gin.Context) {
 		switch {
 		case errors.Is(err, media.ErrInvalidInfoHash), errors.Is(err, media.ErrPlayerSubtitleInvalid):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrPlayerDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player disabled"})
 		case errors.Is(err, media.ErrPlayerSubtitleNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		default:
@@ -391,6 +409,8 @@ func (b *builder) playerSubtitleContent(c *gin.Context) {
 		switch {
 		case errors.Is(err, media.ErrInvalidInfoHash), errors.Is(err, media.ErrPlayerSubtitleInvalid):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrPlayerDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player disabled"})
 		case errors.Is(err, media.ErrPlayerSubtitleNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		default:
@@ -497,7 +517,7 @@ func (b *builder) playerTransmissionStreamTranscoded(c *gin.Context, resolveResu
 			if message == "" {
 				message = waitErr.Error()
 			}
-			if isTransientFFmpegStartupFailure(message) {
+			if isTransientFFmpegStartupFailure(message) || isRetryableFFmpegFailure(message) {
 				c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("ffmpeg startup pending: %s", message)})
 				return
 			}
@@ -506,11 +526,11 @@ func (b *builder) playerTransmissionStreamTranscoded(c *gin.Context, resolveResu
 		}
 		if firstRead.err != nil && !errors.Is(firstRead.err, io.EOF) {
 			message := strings.TrimSpace(firstRead.err.Error())
-			if isTransientFFmpegStartupFailure(message) {
+			if isTransientFFmpegStartupFailure(message) || isRetryableFFmpegFailure(message) {
 				c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("ffmpeg startup pending: %s", message)})
 				return
 			}
-			c.JSON(http.StatusInternalServerError, gin.H{"error": firstRead.err.Error()})
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("ffmpeg startup pending: %s", firstRead.err.Error())})
 			return
 		}
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "ffmpeg startup pending: empty output"})
@@ -601,6 +621,26 @@ func isTransientFFmpegStartupFailure(message string) bool {
 		}
 	}
 	return false
+}
+
+func isRetryableFFmpegFailure(message string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	if normalized == "" {
+		return true
+	}
+	nonRetryable := []string{
+		"executable file not found",
+		"unknown encoder",
+		"option not found",
+		"invalid argument",
+		"permission denied",
+	}
+	for _, token := range nonRetryable {
+		if strings.Contains(normalized, token) {
+			return false
+		}
+	}
+	return true
 }
 
 func buildPlayerFFmpegArgs(filePath string, options media.PlayerFFmpegTranscodeSettings, startSeconds float64) []string {

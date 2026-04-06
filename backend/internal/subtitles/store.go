@@ -13,10 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nigowl/bitmagnet/internal/model"
 	"github.com/nigowl/bitmagnet/internal/runtimeconfig"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 const (
@@ -47,19 +45,12 @@ type Input struct {
 }
 
 func Load(ctx context.Context, db *gorm.DB) ([]Template, error) {
-	var item model.KeyValue
-	err := db.WithContext(ctx).
-		Table(model.TableNameKeyValue).
-		Where("key = ?", runtimeconfig.KeyMediaSubtitleTemplates).
-		Take(&item).Error
+	values, err := runtimeconfig.ReadValues(ctx, db, []string{runtimeconfig.KeyMediaSubtitleTemplates})
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return []Template{}, nil
-		}
 		return nil, err
 	}
 
-	rawValue := strings.TrimSpace(item.Value)
+	rawValue := strings.TrimSpace(values[runtimeconfig.KeyMediaSubtitleTemplates])
 	if rawValue == "" {
 		return []Template{}, nil
 	}
@@ -256,10 +247,9 @@ func validateURLTemplate(value string) error {
 
 func save(ctx context.Context, db *gorm.DB, templates []Template) error {
 	if len(templates) == 0 {
-		return db.WithContext(ctx).
-			Table(model.TableNameKeyValue).
-			Where("key = ?", runtimeconfig.KeyMediaSubtitleTemplates).
-			Delete(&model.KeyValue{}).Error
+		return runtimeconfig.WriteValues(ctx, db, map[string]*string{
+			runtimeconfig.KeyMediaSubtitleTemplates: nil,
+		})
 	}
 
 	normalized := normalizeLoadedTemplates(templates)
@@ -268,23 +258,10 @@ func save(ctx context.Context, db *gorm.DB, templates []Template) error {
 		return err
 	}
 
-	now := time.Now()
-	item := model.KeyValue{
-		Key:       runtimeconfig.KeyMediaSubtitleTemplates,
-		Value:     string(encoded),
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-	return db.WithContext(ctx).
-		Table(model.TableNameKeyValue).
-		Clauses(clause.OnConflict{
-			Columns: []clause.Column{{Name: "key"}},
-			DoUpdates: clause.Assignments(map[string]any{
-				"value":      item.Value,
-				"updated_at": now,
-			}),
-		}).
-		Create(&item).Error
+	value := string(encoded)
+	return runtimeconfig.WriteValues(ctx, db, map[string]*string{
+		runtimeconfig.KeyMediaSubtitleTemplates: &value,
+	})
 }
 
 func inferNameFromURL(raw string) string {

@@ -37,6 +37,7 @@ const (
 
 var ErrNotFound = errors.New("media not found")
 var ErrInvalidInfoHash = errors.New("invalid info hash")
+var ErrPlayerDisabled = errors.New("player is disabled")
 var ErrPlayerTransmissionDisabled = errors.New("player transmission is disabled")
 var ErrPlayerFileNotFound = errors.New("player file not found")
 var ErrPlayerStreamUnavailable = errors.New("player stream range unavailable")
@@ -354,7 +355,11 @@ func (s *service) Detail(ctx context.Context, id string, options ...DetailOption
 	}
 
 	result := DetailResult{
-		Item: detailItemFromModel(entry),
+		Item:          detailItemFromModel(entry),
+		PlayerEnabled: true,
+	}
+	if playerSettings, settingsErr := s.loadPlayerBootstrapSettings(ctx, db); settingsErr == nil {
+		result.PlayerEnabled = playerSettings.PlayerEnabled
 	}
 	for _, tc := range torrentContents {
 		result.Torrents = append(result.Torrents, detailTorrentFromModel(*tc))
@@ -697,25 +702,17 @@ func (s *service) loadRuntimeOptions(ctx context.Context, db *gorm.DB) mediaRunt
 		return cached
 	}
 
-	var rows []model.KeyValue
-	if err := db.WithContext(ctx).
-		Table(model.TableNameKeyValue).
-		Where("key IN ?", []string{
-			runtimeconfig.KeyMediaAutoCacheCover,
-			runtimeconfig.KeyMediaAutoFetchBilingual,
-		}).
-		Find(&rows).Error; err != nil {
+	values, err := runtimeconfig.ReadValues(ctx, db, []string{
+		runtimeconfig.KeyMediaAutoCacheCover,
+		runtimeconfig.KeyMediaAutoFetchBilingual,
+	})
+	if err != nil {
 		return cached
 	}
 
 	parsed := defaults
-	for _, row := range rows {
-		rawKey := strings.TrimSpace(row.Key)
-		rawValue := strings.TrimSpace(row.Value)
-		if rawKey == "" {
-			continue
-		}
-
+	for rawKey, value := range values {
+		rawValue := strings.TrimSpace(value)
 		value, err := strconv.ParseBool(rawValue)
 		if err != nil {
 			continue

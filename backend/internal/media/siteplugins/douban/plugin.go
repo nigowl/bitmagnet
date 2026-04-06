@@ -260,22 +260,5 @@ func readRuntimeValues(ctx context.Context, db *gorm.DB) (map[string]string, err
 		return map[string]string{}, nil
 	}
 
-	keys := runtimeconfig.DoubanKeys()
-	var rows []model.KeyValue
-	if err := db.WithContext(ctx).
-		Table(model.TableNameKeyValue).
-		Where("key IN ?", keys).
-		Find(&rows).Error; err != nil {
-		return nil, err
-	}
-
-	result := make(map[string]string, len(rows))
-	for _, row := range rows {
-		key := strings.TrimSpace(row.Key)
-		if key == "" {
-			continue
-		}
-		result[key] = row.Value
-	}
-	return result, nil
+	return runtimeconfig.ReadValues(ctx, db, runtimeconfig.DoubanKeys())
 }

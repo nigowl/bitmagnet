@@ -218,6 +218,9 @@ func (s *service) PlayerTransmissionBatchStatus(
 	if err != nil {
 		return PlayerTransmissionBatchStatusResult{}, err
 	}
+	if !settings.PlayerEnabled {
+		return PlayerTransmissionBatchStatusResult{}, ErrPlayerDisabled
+	}
 	if !settings.TransmissionEnabled {
 		return PlayerTransmissionBatchStatusResult{}, ErrPlayerTransmissionDisabled
 	}
@@ -339,6 +342,15 @@ func (s *service) PlayerTransmissionResolveStream(
 		}
 		time.Sleep(defaultPlayerStreamPollInterval)
 	}
+	if playerTransmissionFileFullyCompleted(readySnapshot, input.FileIndex) {
+		fullStart, fullEnd, fullPartial, rangeErr := parsePlayerByteRangeForCompletedFile(input.RangeHeader, fileLength)
+		if rangeErr != nil {
+			return PlayerTransmissionResolveStreamResult{}, rangeErr
+		}
+		rangeStart = fullStart
+		rangeEnd = fullEnd
+		partial = fullPartial
+	}
 
 	dirCandidates := []string{strings.TrimSpace(readySnapshot.DownloadDir)}
 	if sessionDirs, sessionErr := s.playerTransmissionLoadSessionDirs(ctx, settings); sessionErr == nil {
@@ -437,6 +449,9 @@ func (s *service) loadPlayerTransmissionBase(
 	settings, err := s.loadPlayerBootstrapSettings(ctx, db)
 	if err != nil {
 		return "", nil, model.Torrent{}, playerBootstrapSettings{}, err
+	}
+	if !settings.PlayerEnabled {
+		return "", nil, model.Torrent{}, playerBootstrapSettings{}, ErrPlayerDisabled
 	}
 	if !settings.TransmissionEnabled {
 		return "", nil, model.Torrent{}, playerBootstrapSettings{}, ErrPlayerTransmissionDisabled
@@ -741,9 +756,6 @@ func (s *service) playerTransmissionAutoCleanup(
 	}
 	slowCleanupEnabled := settings.TransmissionCleanupSlowTaskEnabled
 	storageCleanupEnabled := settings.TransmissionCleanupStorageEnabled
-	if !slowCleanupEnabled && !storageCleanupEnabled {
-		return nil
-	}
 
 	torrents, err := s.playerTransmissionLoadAllTorrents(ctx, settings)
 	if err != nil {
@@ -756,6 +768,10 @@ func (s *service) playerTransmissionAutoCleanup(
 	preserveHash := strings.TrimSpace(strings.ToLower(preserveInfoHash))
 	toRemove := make(map[int64]struct{})
 	estimatedFreeGain := int64(0)
+	totalSizeHint := int64(0)
+	for _, item := range torrents {
+		totalSizeHint += playerTransmissionTorrentSizeHint(item)
+	}
 	markRemove := func(item playerTransmissionRPCTorrent) {
 		if item.ID <= 0 {
 			return
@@ -767,32 +783,12 @@ func (s *service) playerTransmissionAutoCleanup(
 			return
 		}
 		toRemove[item.ID] = struct{}{}
-		estimatedFreeGain += maxInt64(item.SizeWhenDone, item.LeftUntilDone)
+		estimatedFreeGain += playerTransmissionTorrentSizeHint(item)
 	}
 
-	if storageCleanupEnabled && settings.TransmissionCleanupMaxTasks > 0 && len(torrents) > settings.TransmissionCleanupMaxTasks {
-		ordered := append([]playerTransmissionRPCTorrent(nil), torrents...)
-		sort.Slice(ordered, func(i, j int) bool {
-			left := maxInt64(ordered[i].ActivityDate, ordered[i].AddedDate)
-			right := maxInt64(ordered[j].ActivityDate, ordered[j].AddedDate)
-			if left == right {
-				return ordered[i].ID < ordered[j].ID
-			}
-			return left < right
-		})
-		need := len(torrents) - settings.TransmissionCleanupMaxTasks
-		for _, item := range ordered {
-			if need <= 0 {
-				break
-			}
-			if preserveHash != "" && strings.EqualFold(strings.TrimSpace(item.HashString), preserveHash) {
-				continue
-			}
-			if _, ok := toRemove[item.ID]; ok {
-				continue
-			}
+	for _, item := range torrents {
+		if item.Error > 0 || strings.TrimSpace(item.ErrorString) != "" {
 			markRemove(item)
-			need--
 		}
 	}
 
@@ -804,14 +800,76 @@ func (s *service) playerTransmissionAutoCleanup(
 			if item.LeftUntilDone <= 0 || item.IsFinished {
 				continue
 			}
-			lastActive := maxInt64(item.ActivityDate, item.AddedDate)
-			if lastActive <= 0 || nowUnix-lastActive < windowSeconds {
+			if item.Status != 3 && item.Status != 4 {
+				continue
+			}
+			if item.AddedDate <= 0 || nowUnix-item.AddedDate < windowSeconds {
 				continue
 			}
 			if item.RateDownload >= rateThreshold {
 				continue
 			}
 			markRemove(item)
+		}
+	}
+
+	if storageCleanupEnabled && settings.TransmissionCleanupMaxTotalSizeGB > 0 {
+		threshold := int64(settings.TransmissionCleanupMaxTotalSizeGB) * 1024 * 1024 * 1024
+		if threshold > 0 {
+			currentTotal := totalSizeHint - estimatedFreeGain
+			if currentTotal > threshold {
+				needTrim := currentTotal - threshold
+				ordered := append([]playerTransmissionRPCTorrent(nil), torrents...)
+				sort.Slice(ordered, func(i, j int) bool {
+					left := maxInt64(ordered[i].ActivityDate, ordered[i].AddedDate)
+					right := maxInt64(ordered[j].ActivityDate, ordered[j].AddedDate)
+					if left == right {
+						return ordered[i].ID < ordered[j].ID
+					}
+					return left < right
+				})
+				trimmed := int64(0)
+				for _, item := range ordered {
+					if trimmed >= needTrim {
+						break
+					}
+					if _, ok := toRemove[item.ID]; ok {
+						trimmed += playerTransmissionTorrentSizeHint(item)
+						continue
+					}
+					markRemove(item)
+					trimmed += playerTransmissionTorrentSizeHint(item)
+				}
+			}
+		}
+	}
+
+	if storageCleanupEnabled && settings.TransmissionCleanupMaxTasks > 0 {
+		remainingCount := len(torrents) - len(toRemove)
+		if remainingCount > settings.TransmissionCleanupMaxTasks {
+			ordered := append([]playerTransmissionRPCTorrent(nil), torrents...)
+			sort.Slice(ordered, func(i, j int) bool {
+				left := maxInt64(ordered[i].ActivityDate, ordered[i].AddedDate)
+				right := maxInt64(ordered[j].ActivityDate, ordered[j].AddedDate)
+				if left == right {
+					return ordered[i].ID < ordered[j].ID
+				}
+				return left < right
+			})
+			need := remainingCount - settings.TransmissionCleanupMaxTasks
+			for _, item := range ordered {
+				if need <= 0 {
+					break
+				}
+				if preserveHash != "" && strings.EqualFold(strings.TrimSpace(item.HashString), preserveHash) {
+					continue
+				}
+				if _, ok := toRemove[item.ID]; ok {
+					continue
+				}
+				markRemove(item)
+				need--
+			}
 		}
 	}
 
@@ -844,11 +902,11 @@ func (s *service) playerTransmissionAutoCleanup(
 						continue
 					}
 					if _, ok := toRemove[item.ID]; ok {
-						collected += maxInt64(item.SizeWhenDone, item.LeftUntilDone)
+						collected += playerTransmissionTorrentSizeHint(item)
 						continue
 					}
 					markRemove(item)
-					collected += maxInt64(item.SizeWhenDone, item.LeftUntilDone)
+					collected += playerTransmissionTorrentSizeHint(item)
 				}
 			}
 		}
@@ -862,7 +920,7 @@ func (s *service) playerTransmissionAutoCleanup(
 		ids = append(ids, id)
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-	return s.playerTransmissionRemoveTorrents(ctx, settings, ids, settings.TransmissionCleanupDeleteData)
+	return s.playerTransmissionRemoveTorrents(ctx, settings, ids)
 }
 
 func (s *service) playerTransmissionLoadAllTorrents(
@@ -880,6 +938,8 @@ func (s *service) playerTransmissionLoadAllTorrents(
 				"percentDone",
 				"rateDownload",
 				"rateUpload",
+				"error",
+				"errorString",
 				"leftUntilDone",
 				"sizeWhenDone",
 				"addedDate",
@@ -982,7 +1042,6 @@ func (s *service) playerTransmissionRemoveTorrents(
 	ctx context.Context,
 	settings playerBootstrapSettings,
 	ids []int64,
-	deleteData bool,
 ) error {
 	if len(ids) == 0 {
 		return nil
@@ -995,7 +1054,7 @@ func (s *service) playerTransmissionRemoveTorrents(
 		Method: "torrent-remove",
 		Arguments: playerTransmissionRPCArguments{
 			IDs:             idValues,
-			DeleteLocalData: boolPtr(deleteData),
+			DeleteLocalData: boolPtr(true),
 		},
 	})
 	raw, err := callTransmissionRPC(
@@ -1115,6 +1174,10 @@ func maxInt64(left int64, right int64) int64 {
 	return right
 }
 
+func playerTransmissionTorrentSizeHint(item playerTransmissionRPCTorrent) int64 {
+	return maxInt64(item.SizeWhenDone, item.LeftUntilDone)
+}
+
 func playerTransmissionBuildStreamURL(infoHash string, fileIndex int) string {
 	query := url.Values{}
 	query.Set("infoHash", infoHash)
@@ -1178,6 +1241,35 @@ func clampRatio(value float64) float64 {
 	return value
 }
 
+func playerTransmissionFileCompletedBytes(snapshot *playerTransmissionRPCTorrent, fileIndex int) int64 {
+	if snapshot == nil || fileIndex < 0 || fileIndex >= len(snapshot.Files) {
+		return 0
+	}
+	if fileIndex >= len(snapshot.FileStats) {
+		return 0
+	}
+	completed := snapshot.FileStats[fileIndex].BytesCompleted
+	if completed < 0 {
+		completed = 0
+	}
+	fileLength := snapshot.Files[fileIndex].Length
+	if fileLength > 0 && completed > fileLength {
+		completed = fileLength
+	}
+	return completed
+}
+
+func playerTransmissionFileFullyCompleted(snapshot *playerTransmissionRPCTorrent, fileIndex int) bool {
+	if snapshot == nil || fileIndex < 0 || fileIndex >= len(snapshot.Files) {
+		return false
+	}
+	fileLength := snapshot.Files[fileIndex].Length
+	if fileLength <= 0 {
+		return false
+	}
+	return playerTransmissionFileCompletedBytes(snapshot, fileIndex) >= fileLength
+}
+
 func playerTransmissionContiguousBytesFromStart(
 	snapshot *playerTransmissionRPCTorrent,
 	fileIndex int,
@@ -1186,6 +1278,9 @@ func playerTransmissionContiguousBytesFromStart(
 		return 0
 	}
 	fileLength := snapshot.Files[fileIndex].Length
+	if playerTransmissionFileFullyCompleted(snapshot, fileIndex) {
+		return fileLength
+	}
 	if fileLength <= 0 || snapshot.PieceSize <= 0 || strings.TrimSpace(snapshot.Pieces) == "" {
 		return 0
 	}
@@ -1236,6 +1331,14 @@ func playerTransmissionAvailableRanges(
 		return nil
 	}
 	fileLength := snapshot.Files[fileIndex].Length
+	if playerTransmissionFileFullyCompleted(snapshot, fileIndex) {
+		return []PlayerFileRange{
+			{
+				StartRatio: 0,
+				EndRatio:   1,
+			},
+		}
+	}
 	if fileLength <= 0 || snapshot.PieceSize <= 0 || strings.TrimSpace(snapshot.Pieces) == "" {
 		return nil
 	}
@@ -1402,6 +1505,72 @@ func parsePlayerByteRange(header string, total int64) (int64, int64, bool, error
 	return start, end, true, nil
 }
 
+func parsePlayerByteRangeForCompletedFile(header string, total int64) (int64, int64, bool, error) {
+	if total <= 0 {
+		return 0, 0, false, ErrPlayerInvalidRange
+	}
+	if strings.TrimSpace(header) == "" {
+		return 0, total - 1, false, nil
+	}
+
+	trimmed := strings.TrimSpace(header)
+	if !strings.HasPrefix(strings.ToLower(trimmed), "bytes=") {
+		return 0, 0, false, ErrPlayerInvalidRange
+	}
+	spec := strings.TrimSpace(trimmed[6:])
+	if spec == "" {
+		return 0, 0, false, ErrPlayerInvalidRange
+	}
+	if comma := strings.Index(spec, ","); comma >= 0 {
+		spec = strings.TrimSpace(spec[:comma])
+	}
+
+	parts := strings.SplitN(spec, "-", 2)
+	if len(parts) != 2 {
+		return 0, 0, false, ErrPlayerInvalidRange
+	}
+
+	left := strings.TrimSpace(parts[0])
+	right := strings.TrimSpace(parts[1])
+
+	var start int64
+	var end int64
+	if left == "" {
+		suffixLen, err := strconv.ParseInt(right, 10, 64)
+		if err != nil || suffixLen <= 0 {
+			return 0, 0, false, ErrPlayerInvalidRange
+		}
+		if suffixLen >= total {
+			start = 0
+		} else {
+			start = total - suffixLen
+		}
+		end = total - 1
+		return start, end, true, nil
+	}
+
+	parsedStart, err := strconv.ParseInt(left, 10, 64)
+	if err != nil || parsedStart < 0 || parsedStart >= total {
+		return 0, 0, false, ErrPlayerInvalidRange
+	}
+	start = parsedStart
+
+	if right == "" {
+		end = total - 1
+	} else {
+		parsedEnd, endErr := strconv.ParseInt(right, 10, 64)
+		if endErr != nil || parsedEnd < start {
+			return 0, 0, false, ErrPlayerInvalidRange
+		}
+		if parsedEnd >= total {
+			end = total - 1
+		} else {
+			end = parsedEnd
+		}
+	}
+	return start, end, true, nil
+}
+
 func playerTransmissionRangeAvailable(
 	snapshot *playerTransmissionRPCTorrent,
 	fileIndex int,
@@ -1413,6 +1582,13 @@ func playerTransmissionRangeAvailable(
 	}
 	if start < 0 || end < start {
 		return false
+	}
+	fileLength := snapshot.Files[fileIndex].Length
+	if fileLength > 0 && (start >= fileLength || end >= fileLength) {
+		return false
+	}
+	if playerTransmissionFileFullyCompleted(snapshot, fileIndex) {
+		return true
 	}
 	if snapshot.PieceSize <= 0 {
 		return false

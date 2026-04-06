@@ -54,6 +54,7 @@ func (b *builder) Apply(e *gin.Engine) error {
 	e.POST("/api/admin/settings/player/transmission/download-mapping/test", b.authMiddleware(), b.requireAdmin(), b.testPlayerDownloadMapping)
 	e.POST("/api/admin/settings/player/ffmpeg/test", b.authMiddleware(), b.requireAdmin(), b.testPlayerFFmpeg)
 	e.GET("/api/admin/settings/player/transmission/tasks", b.authMiddleware(), b.requireAdmin(), b.listPlayerTransmissionTasks)
+	e.GET("/api/admin/settings/player/transmission/tasks/stats", b.authMiddleware(), b.requireAdmin(), b.getPlayerTransmissionTaskStats)
 	e.DELETE("/api/admin/settings/player/transmission/tasks/:taskId", b.authMiddleware(), b.requireAdmin(), b.deletePlayerTransmissionTask)
 	e.POST("/api/admin/settings/player/transmission/tasks/cleanup", b.authMiddleware(), b.requireAdmin(), b.cleanupPlayerTransmissionTasks)
 	e.POST("/api/admin/settings/media/backfill-localized", b.authMiddleware(), b.requireAdmin(), b.backfillLocalizedMetadata)
@@ -269,6 +270,15 @@ func (b *builder) listPlayerTransmissionTasks(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"tasks": tasks})
 }
 
+func (b *builder) getPlayerTransmissionTaskStats(c *gin.Context) {
+	stats, err := b.service.GetPlayerTransmissionTaskStats(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"stats": stats})
+}
+
 func (b *builder) deletePlayerTransmissionTask(c *gin.Context) {
 	taskID, err := strconv.ParseInt(c.Param("taskId"), 10, 64)
 	if err != nil || taskID <= 0 {
@@ -276,16 +286,8 @@ func (b *builder) deletePlayerTransmissionTask(c *gin.Context) {
 		return
 	}
 
-	deleteData := true
-	if raw := c.Query("deleteData"); raw != "" {
-		if parsed, parseErr := strconv.ParseBool(raw); parseErr == nil {
-			deleteData = parsed
-		}
-	}
-
 	result, deleteErr := b.service.DeletePlayerTransmissionTask(c.Request.Context(), TransmissionTaskDeleteInput{
-		ID:         taskID,
-		DeleteData: deleteData,
+		ID: taskID,
 	})
 	if deleteErr != nil {
 		switch {

@@ -34,6 +34,7 @@ type transmissionTorrentItem struct {
 	HashString    string  `json:"hashString"`
 	Name          string  `json:"name"`
 	Status        int     `json:"status"`
+	Error         int     `json:"error"`
 	PercentDone   float64 `json:"percentDone"`
 	RateDownload  int64   `json:"rateDownload"`
 	RateUpload    int64   `json:"rateUpload"`
@@ -77,6 +78,33 @@ func (s *service) ListPlayerTransmissionTasks(ctx context.Context) ([]Transmissi
 	return tasks, nil
 }
 
+func (s *service) GetPlayerTransmissionTaskStats(ctx context.Context) (TransmissionTaskStats, error) {
+	cfg, err := s.loadTransmissionSettings(ctx)
+	if err != nil {
+		return TransmissionTaskStats{}, err
+	}
+	items, err := s.loadTransmissionTaskItems(ctx, cfg)
+	if err != nil {
+		return TransmissionTaskStats{}, err
+	}
+
+	totalSizeBytes := int64(0)
+	for _, item := range items {
+		totalSizeBytes += maxTransmissionSizeHint(item.SizeWhenDone, item.LeftUntilDone)
+	}
+
+	stats := TransmissionTaskStats{
+		TaskCount:      len(items),
+		TotalSizeBytes: totalSizeBytes,
+	}
+	freeSpaceBytes, freeErr := s.loadTransmissionFreeSpace(ctx, cfg)
+	if freeErr == nil {
+		stats.FreeSpaceBytes = freeSpaceBytes
+		stats.FreeSpaceAvailable = true
+	}
+	return stats, nil
+}
+
 func (s *service) DeletePlayerTransmissionTask(
 	ctx context.Context,
 	input TransmissionTaskDeleteInput,
@@ -88,7 +116,7 @@ func (s *service) DeletePlayerTransmissionTask(
 	if input.ID <= 0 {
 		return TransmissionTaskDeleteResult{}, fmt.Errorf("%w: transmission task id", ErrInvalidInput)
 	}
-	if err := s.removeTransmissionTasks(ctx, cfg, []int64{input.ID}, input.DeleteData); err != nil {
+	if err := s.removeTransmissionTasks(ctx, cfg, []int64{input.ID}); err != nil {
 		return TransmissionTaskDeleteResult{}, err
 	}
 	return TransmissionTaskDeleteResult{
@@ -116,9 +144,6 @@ func (s *service) runTransmissionCleanup(
 	if !force && !cfg.AutoCleanupEnabled {
 		return TransmissionCleanupResult{Success: true}, nil
 	}
-	if !slowCleanupEnabled && !storageCleanupEnabled {
-		return TransmissionCleanupResult{Success: true}, nil
-	}
 
 	items, err := s.loadTransmissionTaskItems(ctx, cfg)
 	if err != nil {
@@ -136,6 +161,10 @@ func (s *service) runTransmissionCleanup(
 
 	removeSet := make(map[int64]struct{})
 	estimatedGain := int64(0)
+	totalSizeHint := int64(0)
+	for _, item := range items {
+		totalSizeHint += maxTransmissionSizeHint(item.SizeWhenDone, item.LeftUntilDone)
+	}
 	mark := func(id int64, reason string, sizeHint int64) {
 		if id <= 0 {
 			return
@@ -153,31 +182,9 @@ func (s *service) runTransmissionCleanup(
 		estimatedGain += maxTransmissionSizeHint(sizeHint, 0)
 	}
 
-	if storageCleanupEnabled && cfg.AutoCleanupMaxTasks > 0 && len(items) > cfg.AutoCleanupMaxTasks {
-		ordered := append([]transmissionTorrentItem(nil), items...)
-		sort.Slice(ordered, func(i, j int) bool {
-			left := maxInt64(ordered[i].ActivityDate, ordered[i].AddedDate)
-			right := maxInt64(ordered[j].ActivityDate, ordered[j].AddedDate)
-			if left == right {
-				return ordered[i].ID < ordered[j].ID
-			}
-			return left < right
-		})
-		need := len(items) - cfg.AutoCleanupMaxTasks
-		for _, item := range ordered {
-			if need <= 0 {
-				break
-			}
-			if preservedIDs != nil {
-				if _, ok := preservedIDs[item.ID]; ok {
-					continue
-				}
-			}
-			if _, ok := removeSet[item.ID]; ok {
-				continue
-			}
-			mark(item.ID, fmt.Sprintf("max-tasks overflow (> %d): %s", cfg.AutoCleanupMaxTasks, strings.TrimSpace(item.Name)), item.SizeWhenDone)
-			need--
+	for _, item := range items {
+		if item.Error > 0 || strings.TrimSpace(item.ErrorString) != "" {
+			mark(item.ID, fmt.Sprintf("error-task: %s", strings.TrimSpace(item.Name)), item.SizeWhenDone)
 		}
 	}
 
@@ -189,8 +196,10 @@ func (s *service) runTransmissionCleanup(
 			if item.LeftUntilDone <= 0 || item.IsFinished {
 				continue
 			}
-			lastTouch := maxInt64(item.ActivityDate, item.AddedDate)
-			if lastTouch <= 0 || nowUnix-lastTouch < windowSeconds {
+			if item.Status != 3 && item.Status != 4 {
+				continue
+			}
+			if item.AddedDate <= 0 || nowUnix-item.AddedDate < windowSeconds {
 				continue
 			}
 			if item.RateDownload >= rateThresholdBytes {
@@ -199,13 +208,80 @@ func (s *service) runTransmissionCleanup(
 			mark(
 				item.ID,
 				fmt.Sprintf(
-					"slow-task (> %d min, < %d KB/s): %s",
+					"slow-task (>= %d min, < %d KB/s): %s",
 					cfg.AutoCleanupSlowWindowMinutes,
 					cfg.AutoCleanupSlowRateKbps,
 					strings.TrimSpace(item.Name),
 				),
 				item.SizeWhenDone,
 			)
+		}
+	}
+
+	if storageCleanupEnabled && cfg.AutoCleanupMaxTotalSizeGB > 0 {
+		thresholdBytes := int64(cfg.AutoCleanupMaxTotalSizeGB) * 1024 * 1024 * 1024
+		if thresholdBytes > 0 {
+			currentTotal := totalSizeHint - estimatedGain
+			if currentTotal > thresholdBytes {
+				needTrim := currentTotal - thresholdBytes
+				ordered := append([]transmissionTorrentItem(nil), items...)
+				sort.Slice(ordered, func(i, j int) bool {
+					left := maxInt64(ordered[i].ActivityDate, ordered[i].AddedDate)
+					right := maxInt64(ordered[j].ActivityDate, ordered[j].AddedDate)
+					if left == right {
+						return ordered[i].ID < ordered[j].ID
+					}
+					return left < right
+				})
+				collected := int64(0)
+				for _, item := range ordered {
+					if collected >= needTrim {
+						break
+					}
+					if preservedIDs != nil {
+						if _, ok := preservedIDs[item.ID]; ok {
+							continue
+						}
+					}
+					if _, ok := removeSet[item.ID]; ok {
+						collected += maxTransmissionSizeHint(item.SizeWhenDone, item.LeftUntilDone)
+						continue
+					}
+					mark(item.ID, fmt.Sprintf("max-total-size overflow (> %d GB): %s", cfg.AutoCleanupMaxTotalSizeGB, strings.TrimSpace(item.Name)), item.SizeWhenDone)
+					collected += maxTransmissionSizeHint(item.SizeWhenDone, item.LeftUntilDone)
+				}
+			}
+		}
+	}
+
+	if storageCleanupEnabled && cfg.AutoCleanupMaxTasks > 0 {
+		remainingCount := len(items) - len(removeSet)
+		if remainingCount > cfg.AutoCleanupMaxTasks {
+			ordered := append([]transmissionTorrentItem(nil), items...)
+			sort.Slice(ordered, func(i, j int) bool {
+				left := maxInt64(ordered[i].ActivityDate, ordered[i].AddedDate)
+				right := maxInt64(ordered[j].ActivityDate, ordered[j].AddedDate)
+				if left == right {
+					return ordered[i].ID < ordered[j].ID
+				}
+				return left < right
+			})
+			need := remainingCount - cfg.AutoCleanupMaxTasks
+			for _, item := range ordered {
+				if need <= 0 {
+					break
+				}
+				if preservedIDs != nil {
+					if _, ok := preservedIDs[item.ID]; ok {
+						continue
+					}
+				}
+				if _, ok := removeSet[item.ID]; ok {
+					continue
+				}
+				mark(item.ID, fmt.Sprintf("max-tasks overflow (> %d): %s", cfg.AutoCleanupMaxTasks, strings.TrimSpace(item.Name)), item.SizeWhenDone)
+				need--
+			}
 		}
 	}
 
@@ -260,7 +336,7 @@ func (s *service) runTransmissionCleanup(
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 
-	if err := s.removeTransmissionTasks(ctx, cfg, ids, cfg.AutoCleanupDeleteData); err != nil {
+	if err := s.removeTransmissionTasks(ctx, cfg, ids); err != nil {
 		return TransmissionCleanupResult{}, err
 	}
 	result.RemovedIDs = ids
@@ -281,6 +357,7 @@ func (s *service) loadTransmissionTaskItems(
 				"hashString",
 				"name",
 				"status",
+				"error",
 				"percentDone",
 				"rateDownload",
 				"rateUpload",
@@ -347,7 +424,6 @@ func (s *service) removeTransmissionTasks(
 	ctx context.Context,
 	cfg TransmissionSettings,
 	ids []int64,
-	deleteData bool,
 ) error {
 	if len(ids) == 0 {
 		return nil
@@ -356,7 +432,7 @@ func (s *service) removeTransmissionTasks(
 		Method: "torrent-remove",
 		Arguments: transmissionTorrentRequestArgs{
 			IDs:             ids,
-			DeleteLocalData: boolPtr(deleteData),
+			DeleteLocalData: boolPtr(true),
 		},
 	})
 	responseBytes, err := callTransmissionRPCWithSession(

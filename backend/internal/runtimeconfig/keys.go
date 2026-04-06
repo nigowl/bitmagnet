@@ -17,6 +17,7 @@ const (
 	KeyMediaAutoCacheCover                        = "system.performance.media.auto_cache_cover"
 	KeyMediaAutoFetchBilingual                    = "system.performance.media.auto_fetch_bilingual"
 	KeyMediaWarmupTimeoutSeconds                  = "system.performance.media.warmup_timeout_seconds"
+	KeyPlayerEnabled                              = "system.player.enabled"
 	KeyPlayerMetadataTimeoutSeconds               = "system.player.metadata_timeout_seconds"
 	KeyPlayerHardTimeoutSeconds                   = "system.player.hard_timeout_seconds"
 	KeyPlayerTransmissionEnabled                  = "system.player.transmission.enabled"
@@ -31,6 +32,7 @@ const (
 	KeyPlayerTransmissionCleanupSlowTaskEnabled   = "system.player.transmission.cleanup.slow_task.enabled"
 	KeyPlayerTransmissionCleanupStorageEnabled    = "system.player.transmission.cleanup.storage.enabled"
 	KeyPlayerTransmissionCleanupMaxTasks          = "system.player.transmission.cleanup.max_tasks"
+	KeyPlayerTransmissionCleanupMaxTotalSizeGB    = "system.player.transmission.cleanup.max_total_size_gb"
 	KeyPlayerTransmissionCleanupMinFreeSpaceGB    = "system.player.transmission.cleanup.min_free_space_gb"
 	KeyPlayerTransmissionCleanupSlowWindowMinutes = "system.player.transmission.cleanup.slow_window_minutes"
 	KeyPlayerTransmissionCleanupSlowRateKbps      = "system.player.transmission.cleanup.slow_rate_kbps"
@@ -170,6 +172,7 @@ func HomeKeys() []string {
 
 func PlayerKeys() []string {
 	return []string{
+		KeyPlayerEnabled,
 		KeyPlayerMetadataTimeoutSeconds,
 		KeyPlayerHardTimeoutSeconds,
 		KeyPlayerTransmissionEnabled,
@@ -184,10 +187,10 @@ func PlayerKeys() []string {
 		KeyPlayerTransmissionCleanupSlowTaskEnabled,
 		KeyPlayerTransmissionCleanupStorageEnabled,
 		KeyPlayerTransmissionCleanupMaxTasks,
+		KeyPlayerTransmissionCleanupMaxTotalSizeGB,
 		KeyPlayerTransmissionCleanupMinFreeSpaceGB,
 		KeyPlayerTransmissionCleanupSlowWindowMinutes,
 		KeyPlayerTransmissionCleanupSlowRateKbps,
-		KeyPlayerTransmissionCleanupDeleteData,
 		KeyPlayerFFmpegEnabled,
 		KeyPlayerFFmpegBinaryPath,
 		KeyPlayerFFmpegPreset,

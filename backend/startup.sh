@@ -32,6 +32,7 @@ BITMAGNET_CONFIG_DIR="${BITMAGNET_CONFIG_DIR:-$ROOT_DIR/config}"
 POSTGRES_AUTO_START="${POSTGRES_AUTO_START:-auto}"
 
 BITMAGNET_WORKER_KEYS="${BITMAGNET_WORKER_KEYS:-all}"
+BITMAGNET_RUNTIME_MODE="${BITMAGNET_RUNTIME_MODE:-development}"
 BITMAGNET_MODE="${BITMAGNET_MODE:-service}"
 BITMAGNET_BINARY_PATH="${BITMAGNET_BINARY_PATH:-$TMP_DIR/bitmagnet-dev}"
 
@@ -89,6 +90,7 @@ Environment:
   POSTGRES_AUTO_START=1     Force start a local postgres container before launch
   POSTGRES_AUTO_START=0     Do not attempt to manage postgres
   BITMAGNET_WORKER_KEYS     Worker keys, e.g. "http_server" or "http_server,queue_server"
+  BITMAGNET_RUNTIME_MODE    Runtime config mode: development|production
   BITMAGNET_MODE            Default mode when no positional mode is passed
   BITMAGNET_LOG_LEVEL       Alias of LOG_LEVEL (DEBUG/INFO/WARNING/ERROR/...)
   BITMAGNET_LOG_MAX_SIZE_MB Rotate log file size (MiB), maps to LOG_FILE_ROTATOR_MAX_SIZE in bytes
@@ -263,6 +265,7 @@ set_runtime_env() {
   export POSTGRES_NAME="$POSTGRES_DB"
   export POSTGRES_USER
   export POSTGRES_PASSWORD
+  export BITMAGNET_RUNTIME_MODE
 }
 
 set_debug_env() {
