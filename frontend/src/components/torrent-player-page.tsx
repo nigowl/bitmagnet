@@ -13,6 +13,7 @@ import {
   ScrollArea,
   Select,
   Stack,
+  Tabs,
   Text,
   Tooltip
 } from "@mantine/core";
@@ -147,6 +148,12 @@ type PlaybackProgressRecord = {
   seconds: number;
   duration: number;
   updatedAt: number;
+};
+
+type SubtitleStylePreset = {
+  scale: number;
+  textColor: string;
+  backgroundColor: string;
 };
 
 function buildPlaybackProgressStorageKey(infoHash: string, userId?: number): string {
@@ -648,6 +655,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const [isFullscreenActive, setIsFullscreenActive] = useState(false);
   const [isSeekingDrag, setIsSeekingDrag] = useState(false);
   const [seekDraftSeconds, setSeekDraftSeconds] = useState<number | null>(null);
+  const [seekHoverSeconds, setSeekHoverSeconds] = useState<number | null>(null);
+  const [seekHoverRatio, setSeekHoverRatio] = useState(0);
   const [videoFitMode, setVideoFitMode] = useState<"contain" | "cover" | "fill">("contain");
   const [transcodeStartOffsetSeconds, setTranscodeStartOffsetSeconds] = useState(0);
   const [statusSnapshot, setStatusSnapshot] = useState<PlayerTransmissionStatusResponse | null>(null);
@@ -664,8 +673,13 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const [selectedAudioTrackId, setSelectedAudioTrackId] = useState("auto");
   const [audioTrackSelectionAvailable, setAudioTrackSelectionAvailable] = useState(false);
   const [serverAudioTracks, setServerAudioTracks] = useState<PlayerTransmissionAudioTrack[]>([]);
-  const [subtitleScale] = useState(1);
+  const [subtitleStylePreset, setSubtitleStylePreset] = useState<SubtitleStylePreset>({
+    scale: 1,
+    textColor: "#f6f9ff",
+    backgroundColor: "rgba(0, 0, 0, 0.55)"
+  });
   const [subtitleManagerOpened, setSubtitleManagerOpened] = useState(false);
+  const [subtitleManagerTab, setSubtitleManagerTab] = useState<string | null>("files");
   const [diagnosticsOpened, setDiagnosticsOpened] = useState(false);
   const [playbackLoading, setPlaybackLoading] = useState(false);
 
@@ -1649,35 +1663,42 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     if (!selected) return;
 
     const preferTranscode = true;
-    const resumeAt = Math.max(0, Number(videoRef.current?.currentTime || 0));
+    const resumeAt = Math.max(0, resolveAbsoluteCurrent());
+    const startBytes = estimateTranscodeStartBytes(resumeAt, totalDurationSecondsRef.current, selected.length);
     const nextUrl = buildPlayerTransmissionStreamURL(
       infoHash,
       selectedFileIndex,
       `${selectedFileIndex}-${streamMode}-${preferTranscode ? "tc" : "direct"}`,
       preferTranscode
-        ? { transcode: true, audioTrackIndex: selectedAudioTrackQueryIndexRef.current }
+        ? {
+          transcode: true,
+          audioTrackIndex: selectedAudioTrackQueryIndexRef.current,
+          startSeconds: resumeAt,
+          startBytes
+        }
         : undefined
     );
     if (streamUrlRef.current === nextUrl) {
       return;
     }
 
-    setTranscodeStartOffsetSeconds(0);
-    transcodeStartOffsetRef.current = 0;
-    pendingTranscodeSeekDisplayRef.current = null;
-    pendingResumeTargetRef.current = preferTranscode ? 0 : resumeAt;
+    setTranscodeStartOffsetSeconds(preferTranscode ? resumeAt : 0);
+    transcodeStartOffsetRef.current = preferTranscode ? resumeAt : 0;
+    pendingTranscodeSeekDisplayRef.current = preferTranscode ? { target: resumeAt, at: Date.now() } : null;
+    pendingResumeTargetRef.current = resumeAt;
     autoResumeWhenPlayableRef.current = true;
     setPlaybackLoading(true);
     setPlayerStatus("buffering");
     applyStreamUrl(nextUrl, {
       autoplay: true,
-      resumeAt: preferTranscode ? 0 : resumeAt
+      resumeAt: 0
     });
 
     logInfo("stream", "stream mode updated", {
       mode: streamMode,
       selectedFileIndex,
-      preferTranscode
+      preferTranscode,
+      resumeAt
     });
   }, [
     applyStreamUrl,
@@ -1685,6 +1706,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     fileOptions,
     infoHash,
     logInfo,
+    resolveAbsoluteCurrent,
     selectedFileIndex,
     streamMode,
     selectedAudioTrackId
@@ -2038,7 +2060,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         controls: [],
         settings: [],
         duration: totalDurationSecondsRef.current > 0 ? totalDurationSecondsRef.current : undefined,
-        clickToPlay: true,
+        clickToPlay: false,
         captions: {
           active: true,
           update: true,
@@ -2302,7 +2324,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     const player = plyrRef.current;
     const video = videoRef.current;
     if (!video) return;
-    const isPaused = typeof player?.paused === "boolean" ? player.paused : video.paused;
+    const isPaused = video.paused;
     if (isPaused) {
       setIsVideoPaused(false);
       attemptResumePlayback("toggle_play");
@@ -2319,6 +2341,43 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     setIsVideoPaused(true);
     video.pause();
   }, [attemptResumePlayback]);
+
+  const handleStageClickTogglePlayback = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    if (target.closest(".torrent-inline-controls") || target.closest(".torrent-inline-settings-menu")) {
+      return;
+    }
+    handleTogglePlayback();
+  }, [handleTogglePlayback]);
+
+  useEffect(() => {
+    if (!canInitializePlyr) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tag = String(target?.tagName || "").toLowerCase();
+      const editable = Boolean(target?.isContentEditable) || tag === "input" || tag === "textarea" || tag === "select";
+      if (editable) return;
+      if (event.key === " " || event.code === "Space") {
+        event.preventDefault();
+        handleTogglePlayback();
+        return;
+      }
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        void handleSeekCommit(Math.max(0, resolveAbsoluteCurrent() - 30), "panel");
+        return;
+      }
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        void handleSeekCommit(resolveAbsoluteCurrent() + 30, "panel");
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [canInitializePlyr, handleSeekCommit, handleTogglePlayback, resolveAbsoluteCurrent]);
 
   const handleSetPlaybackRate = useCallback((rate: number) => {
     const player = plyrRef.current;
@@ -2515,7 +2574,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   }, [statusSnapshot?.selectedFileAvailableRanges]);
   const playedRatio = Math.max(0, Math.min(1, seekMax > 0 ? displayedCurrentSeconds / seekMax : 0));
   const playerStageStyle: CSSProperties = {
-    ["--torrent-subtitle-scale" as string]: String(subtitleScale),
+    ["--torrent-subtitle-scale" as string]: String(subtitleStylePreset.scale),
+    ["--torrent-subtitle-color" as string]: subtitleStylePreset.textColor,
+    ["--torrent-subtitle-bg" as string]: subtitleStylePreset.backgroundColor,
     ["--torrent-video-object-fit" as string]: videoFitMode,
     ["--torrent-player-aspect-ratio" as string]: videoAspectRatioCss,
     ["--torrent-player-aspect-ratio-value" as string]: String(videoAspectRatioValue),
@@ -2630,7 +2691,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
             onPointerDown={() => revealInlineControls(2600)}
             onTouchStart={() => revealInlineControls(3000)}
           >
-            <div className="torrent-player-wrap torrent-player-plyr-wrap" style={playerStageStyle}>
+            <div className="torrent-player-wrap torrent-player-plyr-wrap" style={playerStageStyle} onClick={handleStageClickTogglePlayback}>
               <video
                 ref={videoRef}
                 src={streamUrl || undefined}
@@ -2677,7 +2738,24 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
                 <div className="torrent-inline-time">{formatClock(displayedCurrentSeconds)}</div>
 
-                <div className="torrent-inline-seek-shell">
+                <div
+                  className="torrent-inline-seek-shell"
+                  onMouseMove={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    if (rect.width <= 0) return;
+                    const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+                    setSeekHoverRatio(ratio);
+                    setSeekHoverSeconds(seekMax * ratio);
+                  }}
+                  onMouseLeave={() => {
+                    setSeekHoverSeconds(null);
+                  }}
+                >
+                  {seekHoverSeconds !== null ? (
+                    <div className="torrent-inline-seek-hover" style={{ left: `${seekHoverRatio * 100}%` }}>
+                      {formatClock(seekHoverSeconds)}
+                    </div>
+                  ) : null}
                   <div className="torrent-inline-seek-track">
                     {availableRanges.map((range, idx) => (
                       <div
@@ -2813,7 +2891,20 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
                         </div>
 
                         <div className="torrent-inline-settings-section">
-                          <div className="torrent-inline-settings-title">{t("media.player.subtitleTrack")}</div>
+                          <div className="torrent-inline-settings-title-row">
+                            <div className="torrent-inline-settings-title">{t("media.player.subtitleTrack")}</div>
+                            <button
+                              type="button"
+                              className="torrent-inline-title-icon-btn"
+                              onClick={() => {
+                                setSettingsOpen(false);
+                                setSubtitleManagerOpened(true);
+                              }}
+                              title={t("media.player.subtitleManage")}
+                            >
+                              <Settings2 size={13} />
+                            </button>
+                          </div>
                           <div className="torrent-inline-subtitle-list">
                             {subtitleTrackOptions.map((option) => (
                               <button
@@ -2828,16 +2919,6 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
                               </button>
                             ))}
                           </div>
-                          <button
-                            type="button"
-                            className="torrent-inline-manage-btn"
-                            onClick={() => {
-                              setSettingsOpen(false);
-                              setSubtitleManagerOpened(true);
-                            }}
-                          >
-                            {t("media.player.subtitleManage")}
-                          </button>
                         </div>
                       </div>
                     ) : null}
@@ -2957,95 +3038,177 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         title={t("media.player.subtitleManagerTitle")}
         size="lg"
       >
-        <Stack gap="md">
-          <Group justify="space-between" align="center">
-            <Text c="dimmed" size="sm">{t("media.player.subtitleManagerHint")}</Text>
-            <Tooltip label={t("media.player.subtitleUploadPlaceholder")} withArrow>
-              <ActionIcon
-                variant="light"
-                size="lg"
-                aria-label={t("media.player.subtitleUpload")}
-                title={t("media.player.subtitleUploadPlaceholder")}
-                disabled={subtitleLoading}
-                onClick={() => {
-                  subtitleUploadInputRef.current?.click();
-                }}
-              >
-                <Upload size={18} />
-              </ActionIcon>
-            </Tooltip>
-          </Group>
-          <input
-            ref={subtitleUploadInputRef}
-            type="file"
-            accept=".srt,.vtt,.ass,.ssa"
-            disabled={subtitleLoading}
-            className="torrent-subtitle-upload-input"
-            onChange={(event) => {
-              const picked = event.currentTarget.files?.[0] || null;
-              event.currentTarget.value = "";
-              if (!picked) return;
-              void handleSubtitleUploadPick(picked);
-            }}
-          />
+        <Tabs value={subtitleManagerTab} onChange={setSubtitleManagerTab}>
+          <Tabs.List>
+            <Tabs.Tab value="files">{t("media.player.subtitleManagerTabFiles")}</Tabs.Tab>
+            <Tabs.Tab value="style">{t("media.player.subtitleManagerTabStyle")}</Tabs.Tab>
+          </Tabs.List>
 
-          {subtitleItems.length === 0 ? (
-            <Text size="sm" c="dimmed">{t("media.player.subtitleManagerEmpty")}</Text>
-          ) : (
-            <Stack gap="xs">
-              {subtitleItems.map((item) => (
-                <div className="torrent-subtitle-item-card" key={item.id}>
-                  <Group justify="space-between" align="center" gap="xs" wrap="nowrap">
-                    <Stack gap={2} style={{ minWidth: 0 }}>
-                      <Text fw={700} size="sm" className="torrent-subtitle-item-title">
-                        {item.label || `Subtitle ${item.id}`}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        {t("media.player.subtitleOffset")}: {formatSubtitleOffsetLabel(item.offsetSeconds || 0)}
-                      </Text>
-                    </Stack>
-                    <Group gap={4} wrap="nowrap">
-                      <ActionIcon
-                        size="sm"
-                        variant="light"
-                        disabled={subtitleLoading}
-                        onClick={() => {
-                          void handleAdjustSubtitleOffset(item.id, -0.5);
-                        }}
-                        aria-label={t("media.player.subtitleOffsetMinus")}
-                      >
-                        <Minus size={14} />
-                      </ActionIcon>
-                      <ActionIcon
-                        size="sm"
-                        variant="light"
-                        disabled={subtitleLoading}
-                        onClick={() => {
-                          void handleAdjustSubtitleOffset(item.id, 0.5);
-                        }}
-                        aria-label={t("media.player.subtitleOffsetPlus")}
-                      >
-                        <Plus size={14} />
-                      </ActionIcon>
-                      <ActionIcon
-                        size="sm"
-                        color="red"
-                        variant="light"
-                        disabled={subtitleLoading}
-                        onClick={() => {
-                          void handleDeleteSubtitle(item.id);
-                        }}
-                        aria-label={t("media.player.subtitleDelete")}
-                      >
-                        <Trash2 size={14} />
-                      </ActionIcon>
-                    </Group>
-                  </Group>
-                </div>
-              ))}
+          <Tabs.Panel value="files" pt="md">
+            <Stack gap="md">
+              <Group justify="space-between" align="center">
+                <Text c="dimmed" size="sm">{t("media.player.subtitleManagerHint")}</Text>
+                <Tooltip label={t("media.player.subtitleUploadPlaceholder")} withArrow>
+                  <ActionIcon
+                    variant="light"
+                    size="lg"
+                    aria-label={t("media.player.subtitleUpload")}
+                    title={t("media.player.subtitleUploadPlaceholder")}
+                    disabled={subtitleLoading}
+                    onClick={() => {
+                      subtitleUploadInputRef.current?.click();
+                    }}
+                  >
+                    <Upload size={18} />
+                  </ActionIcon>
+                </Tooltip>
+              </Group>
+              <input
+                ref={subtitleUploadInputRef}
+                type="file"
+                accept=".srt,.vtt,.ass,.ssa"
+                disabled={subtitleLoading}
+                className="torrent-subtitle-upload-input"
+                onChange={(event) => {
+                  const picked = event.currentTarget.files?.[0] || null;
+                  event.currentTarget.value = "";
+                  if (!picked) return;
+                  void handleSubtitleUploadPick(picked);
+                }}
+              />
+
+              {subtitleItems.length === 0 ? (
+                <Text size="sm" c="dimmed">{t("media.player.subtitleManagerEmpty")}</Text>
+              ) : (
+                <Stack gap="xs">
+                  {subtitleItems.map((item) => (
+                    <div className="torrent-subtitle-item-card" key={item.id}>
+                      <Group justify="space-between" align="center" gap="xs" wrap="nowrap">
+                        <Stack gap={2} style={{ minWidth: 0 }}>
+                          <Text fw={700} size="sm" className="torrent-subtitle-item-title">
+                            {item.label || `Subtitle ${item.id}`}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            {t("media.player.subtitleOffset")}: {formatSubtitleOffsetLabel(item.offsetSeconds || 0)}
+                          </Text>
+                        </Stack>
+                        <Group gap={4} wrap="nowrap">
+                          <ActionIcon
+                            size="sm"
+                            variant="light"
+                            disabled={subtitleLoading}
+                            onClick={() => {
+                              void handleAdjustSubtitleOffset(item.id, -0.5);
+                            }}
+                            aria-label={t("media.player.subtitleOffsetMinus")}
+                          >
+                            <Minus size={14} />
+                          </ActionIcon>
+                          <ActionIcon
+                            size="sm"
+                            variant="light"
+                            disabled={subtitleLoading}
+                            onClick={() => {
+                              void handleAdjustSubtitleOffset(item.id, 0.5);
+                            }}
+                            aria-label={t("media.player.subtitleOffsetPlus")}
+                          >
+                            <Plus size={14} />
+                          </ActionIcon>
+                          <ActionIcon
+                            size="sm"
+                            color="red"
+                            variant="light"
+                            disabled={subtitleLoading}
+                            onClick={() => {
+                              void handleDeleteSubtitle(item.id);
+                            }}
+                            aria-label={t("media.player.subtitleDelete")}
+                          >
+                            <Trash2 size={14} />
+                          </ActionIcon>
+                        </Group>
+                      </Group>
+                    </div>
+                  ))}
+                </Stack>
+              )}
             </Stack>
-          )}
-        </Stack>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="style" pt="md">
+            <Stack gap="md">
+              <div className="torrent-inline-settings-section">
+                <div className="torrent-inline-settings-title">{t("media.player.subtitleStyleSize")}</div>
+                <div className="torrent-inline-rate-grid torrent-inline-rate-grid-6">
+                  {[
+                    { value: 0.75, label: "XS" },
+                    { value: 0.9, label: "S" },
+                    { value: 1, label: "M" },
+                    { value: 1.15, label: "L" },
+                    { value: 1.3, label: "XL" },
+                    { value: 1.5, label: "XXL" }
+                  ].map((item) => (
+                    <button
+                      key={`ssm:${item.value}`}
+                      type="button"
+                      className={`torrent-inline-rate-btn${Math.abs(subtitleStylePreset.scale - item.value) < 0.01 ? " is-active" : ""}`}
+                      onClick={() => {
+                        setSubtitleStylePreset((current) => ({ ...current, scale: item.value }));
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="torrent-inline-settings-title">{t("media.player.subtitleStyleColor")}</div>
+                <div className="torrent-inline-rate-grid torrent-inline-rate-grid-6">
+                  {[
+                    { value: "#f6f9ff", label: t("media.player.subtitleStyleColorWhite") },
+                    { value: "#ffe082", label: t("media.player.subtitleStyleColorYellow") },
+                    { value: "#d3ecff", label: t("media.player.subtitleStyleColorCyan") },
+                    { value: "#b6f8c8", label: t("media.player.subtitleStyleColorGreen") },
+                    { value: "#ffc88a", label: t("media.player.subtitleStyleColorOrange") },
+                    { value: "#ffd2ef", label: t("media.player.subtitleStyleColorPink") }
+                  ].map((item) => (
+                    <button
+                      key={`scm:${item.value}`}
+                      type="button"
+                      className={`torrent-inline-rate-btn${subtitleStylePreset.textColor === item.value ? " is-active" : ""}`}
+                      onClick={() => {
+                        setSubtitleStylePreset((current) => ({ ...current, textColor: item.value }));
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="torrent-inline-settings-title">{t("media.player.subtitleStyleBackground")}</div>
+                <div className="torrent-inline-rate-grid torrent-inline-rate-grid-6">
+                  {[
+                    { value: "rgba(0, 0, 0, 0)", label: t("media.player.subtitleStyleBgNone") },
+                    { value: "rgba(0, 0, 0, 0.15)", label: "15%" },
+                    { value: "rgba(0, 0, 0, 0.25)", label: "25%" },
+                    { value: "rgba(0, 0, 0, 0.4)", label: "40%" },
+                    { value: "rgba(0, 0, 0, 0.55)", label: "55%" },
+                    { value: "rgba(0, 0, 0, 0.7)", label: "70%" }
+                  ].map((item) => (
+                    <button
+                      key={`sbm:${item.value}`}
+                      type="button"
+                      className={`torrent-inline-rate-btn${subtitleStylePreset.backgroundColor === item.value ? " is-active" : ""}`}
+                      onClick={() => {
+                        setSubtitleStylePreset((current) => ({ ...current, backgroundColor: item.value }));
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </Stack>
+          </Tabs.Panel>
+        </Tabs>
       </Modal>
     </Stack>
   );
