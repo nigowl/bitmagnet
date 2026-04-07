@@ -181,6 +181,9 @@
     "userCreated": "User created",
     "userUpdated": "User updated",
     "userEditTargetMissing": "Missing target user for edit",
+    "userUsernameInvalid": "Username must be 3-32 characters and contain only letters, numbers, dots, underscores, and hyphens",
+    "userPasswordRequired": "Password is required when creating a user",
+    "userPasswordMinLength": "Password must be at least 8 characters",
     "emptyUsers": "No users",
     "emptyInvites": "No invite codes"
   },
@@ -288,7 +291,8 @@
     "category": {
       "main": "Main (Web/API)",
       "dht": "DHT Crawler",
-      "site_plugins": "Media Site Plugins"
+      "site_plugins": "Media Site Plugins",
+      "player_stream": "Online Playback (Transmission/Transcode)"
     }
   },
   "settings": {

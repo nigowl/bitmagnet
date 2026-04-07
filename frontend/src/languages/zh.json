@@ -181,6 +181,9 @@
     "userCreated": "用户已创建",
     "userUpdated": "用户已更新",
     "userEditTargetMissing": "缺少待编辑用户",
+    "userUsernameInvalid": "用户名需为 3-32 位，仅支持字母、数字、点、下划线和连字符",
+    "userPasswordRequired": "新增用户时必须填写密码",
+    "userPasswordMinLength": "密码长度至少 8 位",
     "emptyUsers": "暂无用户",
     "emptyInvites": "暂无邀请码"
   },
@@ -288,7 +291,8 @@
     "category": {
       "main": "主要（Web 接口等）",
       "dht": "DHT 爬虫相关",
-      "site_plugins": "影视外站插件相关"
+      "site_plugins": "影视外站插件相关",
+      "player_stream": "在线播放链路（Transmission/转码）"
     }
   },
   "settings": {

@@ -77,6 +77,8 @@ type UserFormState = {
   role: "admin" | "user";
 };
 
+const usernamePattern = /^[a-zA-Z0-9._-]{3,32}$/;
+
 const DEFAULT_INVITE_FORM: InviteFormState = {
   code: "",
   note: "",
@@ -333,14 +335,30 @@ export function UsersPage() {
   }, [resetUserForm, userSaving]);
 
   const submitUserEditor = useCallback(async () => {
+    const normalizedUsername = userForm.username.trim();
+    if (!usernamePattern.test(normalizedUsername)) {
+      notifications.show({ color: "yellow", message: t("users.userUsernameInvalid") });
+      return;
+    }
+
+    const normalizedPassword = userForm.password.trim();
+    if (userEditorMode === "create" && !normalizedPassword) {
+      notifications.show({ color: "yellow", message: t("users.userPasswordRequired") });
+      return;
+    }
+    if (normalizedPassword && normalizedPassword.length < 8) {
+      notifications.show({ color: "yellow", message: t("users.userPasswordMinLength") });
+      return;
+    }
+
     setUserSaving(true);
     try {
       if (userEditorMode === "create") {
         const data = await apiRequest<UserResponse>("/api/admin/users", {
           method: "POST",
           data: {
-            username: userForm.username.trim(),
-            password: userForm.password,
+            username: normalizedUsername,
+            password: normalizedPassword,
             role: userForm.role
           }
         });
@@ -351,11 +369,11 @@ export function UsersPage() {
           throw new Error(t("users.userEditTargetMissing"));
         }
         const payload: Record<string, string> = {
-          username: userForm.username.trim(),
+          username: normalizedUsername,
           role: userForm.role
         };
-        if (userForm.password.trim()) {
-          payload.password = userForm.password;
+        if (normalizedPassword) {
+          payload.password = normalizedPassword;
         }
         const data = await apiRequest<UserResponse>(`/api/admin/users/${userEditingId}`, {
           method: "PUT",
@@ -479,12 +497,18 @@ export function UsersPage() {
           <TextInput
             label={t("users.userUsername")}
             value={userForm.username}
-            onChange={(event) => setUserForm((current) => ({ ...current, username: event.currentTarget.value }))}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setUserForm((current) => ({ ...current, username: value }));
+            }}
           />
           <PasswordInput
             label={userEditorMode === "create" ? t("users.userPassword") : t("users.userPasswordOptional")}
             value={userForm.password}
-            onChange={(event) => setUserForm((current) => ({ ...current, password: event.currentTarget.value }))}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setUserForm((current) => ({ ...current, password: value }));
+            }}
           />
           <Select
             label={t("users.userRole")}

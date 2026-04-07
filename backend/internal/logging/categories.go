@@ -8,6 +8,7 @@ const (
 	LogCategoryMain        = "main"
 	LogCategoryDHT         = "dht"
 	LogCategorySitePlugins = "site_plugins"
+	LogCategoryPlayer      = "player_stream"
 )
 
 type logCategory struct {
@@ -20,6 +21,7 @@ func logCategories(config FileRotatorConfig) []logCategory {
 		{Key: LogCategoryMain, BaseName: categoryBaseName(config.BaseName, "main")},
 		{Key: LogCategoryDHT, BaseName: categoryBaseName(config.BaseName, "dht")},
 		{Key: LogCategorySitePlugins, BaseName: categoryBaseName(config.BaseName, "site_plugins")},
+		{Key: LogCategoryPlayer, BaseName: categoryBaseName(config.BaseName, "player_stream")},
 	}
 }
 
@@ -28,6 +30,7 @@ func availableLogCategoryKeys() []string {
 		LogCategoryMain,
 		LogCategoryDHT,
 		LogCategorySitePlugins,
+		LogCategoryPlayer,
 	}
 }
 
@@ -39,6 +42,8 @@ func normalizeLogCategory(category string) string {
 		return LogCategoryDHT
 	case LogCategorySitePlugins:
 		return LogCategorySitePlugins
+	case LogCategoryPlayer:
+		return LogCategoryPlayer
 	default:
 		return LogCategoryMain
 	}
@@ -52,6 +57,8 @@ func loggerCategory(loggerName string) string {
 		return LogCategoryDHT
 	case strings.HasPrefix(name, "media_site_plugins"), strings.Contains(name, "site_plugins"):
 		return LogCategorySitePlugins
+	case strings.HasPrefix(name, "media_player_stream"), strings.Contains(name, "player_stream"):
+		return LogCategoryPlayer
 	default:
 		return LogCategoryMain
 	}

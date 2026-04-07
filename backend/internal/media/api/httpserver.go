@@ -20,11 +20,13 @@ import (
 	"github.com/nigowl/bitmagnet/internal/httpserver"
 	"github.com/nigowl/bitmagnet/internal/media"
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 )
 
 type HTTPParams struct {
 	fx.In
 	Service media.Service
+	Logger  *zap.Logger
 }
 
 type HTTPResult struct {
@@ -33,11 +35,19 @@ type HTTPResult struct {
 }
 
 func NewHTTPServer(p HTTPParams) HTTPResult {
-	return HTTPResult{Option: &builder{service: p.Service}}
+	logger := p.Logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	return HTTPResult{Option: &builder{
+		service:      p.Service,
+		streamLogger: logger.Named("media_player_stream"),
+	}}
 }
 
 type builder struct {
-	service media.Service
+	service      media.Service
+	streamLogger *zap.Logger
 }
 
 func (b *builder) Key() string {
@@ -215,6 +225,53 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 	preferTranscode := parseBool(c.Query("transcode"), false)
 	startSeconds := parseFloat(c.Query("start"), 0)
 	startBytes := parseInt64(c.Query("startBytes"), 0)
+	startedAt := time.Now()
+	responseError := ""
+
+	baseFields := []zap.Field{
+		zap.String("method", c.Request.Method),
+		zap.String("path", c.Request.URL.Path),
+		zap.String("request_uri", c.Request.URL.RequestURI()),
+		zap.String("query", c.Request.URL.RawQuery),
+		zap.String("info_hash", infoHash),
+		zap.Int("file_index", fileIndex),
+		zap.Bool("prefer_transcode", preferTranscode),
+		zap.Float64("start_seconds", startSeconds),
+		zap.Int64("start_bytes", startBytes),
+		zap.String("range", c.GetHeader("Range")),
+		zap.String("client_ip", c.ClientIP()),
+		zap.String("user_agent", c.Request.UserAgent()),
+	}
+	defer func() {
+		statusCode := c.Writer.Status()
+		if statusCode <= 0 {
+			statusCode = http.StatusOK
+		}
+		fields := append([]zap.Field{}, baseFields...)
+		fields = append(
+			fields,
+			zap.Int("status", statusCode),
+			zap.Duration("latency", time.Since(startedAt)),
+			zap.String("stream_source", c.Writer.Header().Get("X-Bitmagnet-Stream-Source")),
+			zap.String("stream_path", c.Writer.Header().Get("X-Bitmagnet-Stream-Path")),
+		)
+		if responseError != "" {
+			fields = append(fields, zap.String("response_error", responseError))
+		}
+		if len(c.Errors) > 0 {
+			fields = append(fields, zap.String("gin_errors", c.Errors.String()))
+		}
+		switch {
+		case statusCode >= 500:
+			b.streamLogger.Warn("player stream request failed", fields...)
+		case statusCode >= 400:
+			b.streamLogger.Info("player stream request rejected", fields...)
+		case preferTranscode || strings.TrimSpace(c.Writer.Header().Get("X-Bitmagnet-Transcode")) != "":
+			b.streamLogger.Info("player stream request", fields...)
+		default:
+			b.streamLogger.Debug("player stream request", fields...)
+		}
+	}()
 
 	resolveResult, err := b.service.PlayerTransmissionResolveStream(c.Request.Context(), media.PlayerTransmissionResolveStreamInput{
 		InfoHash:        infoHash,
@@ -225,6 +282,7 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 		StartBytes:      startBytes,
 	})
 	if err != nil {
+		responseError = err.Error()
 		switch {
 		case errors.Is(err, media.ErrInvalidInfoHash), errors.Is(err, media.ErrPlayerInvalidRange):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -251,20 +309,23 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 
 	file, err := os.Open(resolveResult.FilePath)
 	if err != nil {
+		responseError = fmt.Sprintf("stream file not found: %s (%v)", resolveResult.FilePath, err)
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": fmt.Sprintf("stream file not found: %s (%v)", resolveResult.FilePath, err),
+			"error": responseError,
 		})
 		return
 	}
 	defer file.Close()
 
 	if _, err := file.Seek(resolveResult.RangeStart, io.SeekStart); err != nil {
+		responseError = err.Error()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	contentLength := resolveResult.RangeEnd - resolveResult.RangeStart + 1
 	if contentLength < 0 {
+		responseError = "invalid range"
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid range"})
 		return
 	}
@@ -294,6 +355,7 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 	}
 
 	if _, err := io.CopyN(c.Writer, file, contentLength); err != nil && !errors.Is(err, io.EOF) && !isBenignStreamingError(err) {
+		responseError = err.Error()
 		c.Error(err)
 	}
 }
