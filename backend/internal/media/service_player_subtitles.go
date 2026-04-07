@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"errors"
+	"math"
 	"strings"
 	"time"
 
@@ -63,14 +64,25 @@ func normalizePlayerSubtitleVTT(raw string) (string, error) {
 	return content, nil
 }
 
+func normalizePlayerSubtitleOffsetSeconds(raw float64) (float64, error) {
+	if math.IsNaN(raw) || math.IsInf(raw, 0) {
+		return 0, ErrPlayerSubtitleInvalid
+	}
+	if raw > 300 || raw < -300 {
+		return 0, ErrPlayerSubtitleInvalid
+	}
+	return raw, nil
+}
+
 func mapPlayerSubtitleRecord(record model.PlayerSubtitle) PlayerSubtitle {
 	return PlayerSubtitle{
-		ID:        record.ID,
-		InfoHash:  record.InfoHash,
-		Label:     record.Label,
-		Language:  record.Language,
-		CreatedAt: record.CreatedAt,
-		UpdatedAt: record.UpdatedAt,
+		ID:            record.ID,
+		InfoHash:      record.InfoHash,
+		Label:         record.Label,
+		Language:      record.Language,
+		OffsetSeconds: record.OffsetSeconds,
+		CreatedAt:     record.CreatedAt,
+		UpdatedAt:     record.UpdatedAt,
 	}
 }
 
@@ -148,12 +160,13 @@ func (s *service) PlayerSubtitleCreate(ctx context.Context, input PlayerSubtitle
 
 	now := time.Now().UTC()
 	record := model.PlayerSubtitle{
-		InfoHash:   infoHash,
-		Label:      label,
-		Language:   normalizePlayerSubtitleLanguage(input.Language),
-		ContentVTT: contentVTT,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		InfoHash:      infoHash,
+		Label:         label,
+		Language:      normalizePlayerSubtitleLanguage(input.Language),
+		OffsetSeconds: 0,
+		ContentVTT:    contentVTT,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 	if err := db.WithContext(ctx).
 		Table(model.TableNamePlayerSubtitle).
@@ -202,6 +215,13 @@ func (s *service) PlayerSubtitleUpdate(ctx context.Context, input PlayerSubtitle
 	}
 	if input.Language != nil {
 		updates["language"] = normalizePlayerSubtitleLanguage(*input.Language)
+	}
+	if input.OffsetSeconds != nil {
+		offsetSeconds, normalizeErr := normalizePlayerSubtitleOffsetSeconds(*input.OffsetSeconds)
+		if normalizeErr != nil {
+			return PlayerSubtitle{}, normalizeErr
+		}
+		updates["offset_seconds"] = offsetSeconds
 	}
 
 	if len(updates) > 1 {

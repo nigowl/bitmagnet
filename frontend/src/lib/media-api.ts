@@ -230,6 +230,7 @@ export type PlayerSubtitleItem = {
   infoHash: string;
   label: string;
   language: string;
+  offsetSeconds: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -540,6 +541,7 @@ export async function updatePlayerSubtitle(input: {
   subtitleId: number;
   label?: string;
   language?: string;
+  offsetSeconds?: number;
 }): Promise<PlayerSubtitleItem> {
   const normalized = input.infoHash.trim().toLowerCase();
   if (!normalized) {
@@ -552,7 +554,8 @@ export async function updatePlayerSubtitle(input: {
       data: {
         infoHash: normalized,
         label: input.label,
-        language: input.language
+        language: input.language,
+        offsetSeconds: input.offsetSeconds
       }
     }
   );

@@ -51,7 +51,7 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       # 运行模式：development / production（用于隔离 bm_key_values 运行时配置）
-      - BITMAGNET_RUNTIME_MODE=${BITMAGNET_RUNTIME_MODE:-development}
+      - BITMAGNET_RUNTIME_MODE=production
       # 日志配置：等级（DEBUG/INFO/WARNING/ERROR/CRITICAL/ALERT/EMERGENCY）
       - LOG_LEVEL=INFO
       # 日志配置：文件日志等级（建议与 LOG_LEVEL 保持一致）

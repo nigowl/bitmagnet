@@ -13,6 +13,8 @@
 - 运维可视化：监控页展示健康状态、worker 状态、队列指标、种子事件指标，定位问题更直观。
 - 中英双语界面：前端文案支持中英文切换，管理员页面交互风格统一（右上角图标操作按钮 + Tooltip）。
 - 在线播放体验：播放器已统一到 `Plyr` 能力层（字幕、倍速、画面模式、PiP、全屏）并保留自定义底栏风格。
+- 字幕管理增强：支持字幕上传/删除与每条字幕偏移（±0.5 秒步进，自动保存到字幕表），播放中立即生效。
+- 播放器交互优化：底栏支持“鼠标静止后自动隐藏、交互后自动显示”，行为与原版 Plyr 接近。
 - 主题一致性：亮/暗色均使用统一语义色与中性色（`slate`），避免暗色页面出现突兀浅灰控件。
 - 文案规范化：中英文功能命名更简洁，页面副标题/提示文案统一为小一号字号。
 
@@ -28,7 +30,7 @@
 
 ### 前置依赖
 
-- Go（建议 1.22+）
+- Go（建议 1.23+）
 - Node.js（建议 20+）与 npm
 - PostgreSQL（本地或远程）
 - Docker（可选，用于自动拉起本地 Postgres 或 Compose 部署）
@@ -87,6 +89,7 @@ docker compose up -d --build
 
 - 本地开发：`BITMAGNET_RUNTIME_MODE=development`
 - 线上环境：`BITMAGNET_RUNTIME_MODE=production`
+- 说明：`docker-compose.sample.yml` 当前默认将 `BITMAGNET_RUNTIME_MODE` 设为 `production`，如需本地隔离配置请自行改为 `development`。
 
 ## 配置说明
 
@@ -192,11 +195,10 @@ npm run typecheck
 npm run lint
 ```
 
-## 代码整理说明
+## 开发约定
 
-- 已移除前端历史遗留的 Video.js 相关样式与未使用文案键，当前播放器仅保留 Plyr 实现路径。
-- 已统一页面副标题与提示文案的字号规则（通常比正文小一号）。
-- 已完成前后端基础检查：`npm run lint`、`npm run typecheck`、`go test ./...`。
+- 播放器渲染链路以 Plyr 为主，不再维护 Video.js 旧路径。
+- 提交前建议至少执行：`npm run lint`、`npm run typecheck`、`go test ./...`。
 
 ## 目录结构
 

@@ -2316,7 +2316,6 @@ body {
 }
 
 .torrent-player-stage-shell.controls-visible .torrent-inline-controls,
-.torrent-player-stage-shell:hover .torrent-inline-controls,
 .torrent-player-stage-shell.is-paused .torrent-inline-controls {
   opacity: 1;
   pointer-events: auto;

@@ -224,12 +224,13 @@ type PlayerTransmissionSelectFileResult struct {
 }
 
 type PlayerSubtitle struct {
-	ID        int64     `json:"id"`
-	InfoHash  string    `json:"infoHash"`
-	Label     string    `json:"label"`
-	Language  string    `json:"language"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID            int64     `json:"id"`
+	InfoHash      string    `json:"infoHash"`
+	Label         string    `json:"label"`
+	Language      string    `json:"language"`
+	OffsetSeconds float64   `json:"offsetSeconds"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 type PlayerSubtitleListInput struct {
@@ -244,10 +245,11 @@ type PlayerSubtitleCreateInput struct {
 }
 
 type PlayerSubtitleUpdateInput struct {
-	InfoHash string  `json:"infoHash"`
-	ID       int64   `json:"id"`
-	Label    *string `json:"label"`
-	Language *string `json:"language"`
+	InfoHash      string   `json:"infoHash"`
+	ID            int64    `json:"id"`
+	Label         *string  `json:"label"`
+	Language      *string  `json:"language"`
+	OffsetSeconds *float64 `json:"offsetSeconds"`
 }
 
 type PlayerSubtitleDeleteInput struct {

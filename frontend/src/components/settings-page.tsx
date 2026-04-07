@@ -1288,8 +1288,8 @@ export function SettingsPage() {
                   </Accordion.Panel>
                 </Accordion.Item>
 
-                <Accordion.Item value="perf-preset">
-                  <Accordion.Control>{t("settings.performancePresetTitle")}</Accordion.Control>
+                <Accordion.Item value="perf-dht">
+                  <Accordion.Control>{t("settings.performanceDhtTitle")}</Accordion.Control>
                   <Accordion.Panel>
                     <Card className="settings-section-block" radius="lg">
                       <Stack gap="sm">
@@ -1307,16 +1307,6 @@ export function SettingsPage() {
                             </Card>
                           ))}
                         </SimpleGrid>
-                      </Stack>
-                    </Card>
-                  </Accordion.Panel>
-                </Accordion.Item>
-
-                <Accordion.Item value="perf-dht">
-                  <Accordion.Control>{t("settings.performanceDhtTitle")}</Accordion.Control>
-                  <Accordion.Panel>
-                    <Card className="settings-section-block" radius="lg">
-                      <Stack gap="sm">
                         <SimpleGrid cols={{ base: 1, md: 2 }}>
                           <NumberInput
                             label={renderPerformanceLabel(t("settings.dhtScalingFactor"), t("settings.performanceImpact.dhtScalingFactor"))}
@@ -1807,349 +1797,347 @@ export function SettingsPage() {
                   </Accordion.Item>
 
                   <Accordion.Item value="player-transmission">
-                  <Accordion.Control>{t("settings.playerTransmissionTitle")}</Accordion.Control>
-                  <Accordion.Panel>
-                    <Card className="settings-section-block" radius="lg">
-                      <Stack gap="sm">
-                        <Text size="sm" c="dimmed">{t("settings.playerTransmissionHint")}</Text>
-                        <Switch
-                          label={t("settings.playerTransmissionEnabled")}
-                          checked={settings.player.transmission.enabled}
-                          onChange={(event) => {
-                            updatePlayerTransmissionSettings({ enabled: event.currentTarget.checked });
-                          }}
-                        />
-                        {settings.player.transmission.enabled ? (
-                          <Stack gap="sm" className="settings-toggle-panel">
-                            <Group justify="flex-end" align="flex-start" wrap="wrap">
-                              <Group gap="xs">
-                                <Button variant="default" size="xs" loading={downloadMappingTesting} onClick={() => void testDownloadMapping()}>
-                                  {t("settings.playerDownloadMappingTestButton")}
-                                </Button>
-                                <Button variant="light" size="xs" loading={transmissionTesting} onClick={() => void testPlayerTransmission()}>
-                                  {t("settings.playerTransmissionTestButton")}
-                                </Button>
+                    <Accordion.Control>{t("settings.playerTransmissionTitle")}</Accordion.Control>
+                    <Accordion.Panel>
+                      <Card className="settings-section-block" radius="lg">
+                        <Stack gap="sm">
+                          <Text size="sm" c="dimmed">{t("settings.playerTransmissionHint")}</Text>
+                          <Switch
+                            label={t("settings.playerTransmissionEnabled")}
+                            checked={settings.player.transmission.enabled}
+                            onChange={(event) => {
+                              updatePlayerTransmissionSettings({ enabled: event.currentTarget.checked });
+                            }}
+                          />
+                          {settings.player.transmission.enabled ? (
+                            <Stack gap="sm" className="settings-toggle-panel">
+                              <Group justify="flex-end" align="flex-start" wrap="wrap">
+                                <Group gap="xs">
+                                  <Button variant="default" size="xs" loading={downloadMappingTesting} onClick={() => void testDownloadMapping()}>
+                                    {t("settings.playerDownloadMappingTestButton")}
+                                  </Button>
+                                  <Button variant="light" size="xs" loading={transmissionTesting} onClick={() => void testPlayerTransmission()}>
+                                    {t("settings.playerTransmissionTestButton")}
+                                  </Button>
+                                </Group>
                               </Group>
-                            </Group>
-                            <SimpleGrid cols={{ base: 1, md: 2 }}>
-                              <TextInput
-                                label={t("settings.playerTransmissionUrl")}
-                                value={settings.player.transmission.url}
-                                onChange={(event) => {
-                                  updatePlayerTransmissionSettings({ url: event.currentTarget.value });
-                                }}
-                              />
-                              <NumberInput
-                                label={t("settings.playerTransmissionTimeoutSeconds")}
-                                min={2}
-                                max={60}
-                                value={settings.player.transmission.timeoutSeconds}
-                                onChange={(value) => {
-                                  if (typeof value === "number" && Number.isFinite(value)) {
-                                    updatePlayerTransmissionSettings({ timeoutSeconds: value });
-                                  }
-                                }}
-                              />
-                              <TextInput
-                                label={t("settings.playerTransmissionUsername")}
-                                value={settings.player.transmission.username}
-                                onChange={(event) => {
-                                  updatePlayerTransmissionSettings({ username: event.currentTarget.value });
-                                }}
-                              />
-                              <TextInput
-                                label={t("settings.playerTransmissionPassword")}
-                                type="password"
-                                value={settings.player.transmission.password}
-                                onChange={(event) => {
-                                  updatePlayerTransmissionSettings({ password: event.currentTarget.value });
-                                }}
-                              />
-                            </SimpleGrid>
-                            <Card withBorder radius="md" p="sm" className="player-download-mapping-card">
-                              <Stack gap="xs">
+                              <SimpleGrid cols={{ base: 1, md: 2 }}>
                                 <TextInput
-                                  label={t("settings.playerTransmissionLocalDownloadDir")}
-                                  value={settings.player.transmission.downloadMappingDirectory}
+                                  label={t("settings.playerTransmissionUrl")}
+                                  value={settings.player.transmission.url}
                                   onChange={(event) => {
-                                    const value = event.currentTarget.value;
-                                    updatePlayerTransmissionSettings({
-                                      downloadMappingDirectory: value,
-                                      localDownloadDir: value
-                                    });
+                                    updatePlayerTransmissionSettings({ url: event.currentTarget.value });
                                   }}
                                 />
-                              </Stack>
-                            </Card>
-                            <Switch
-                              label={t("settings.playerTransmissionInsecureTls")}
-                              checked={settings.player.transmission.insecureTls}
-                              onChange={(event) => {
-                                updatePlayerTransmissionSettings({ insecureTls: event.currentTarget.checked });
-                              }}
-                            />
-                            <Switch
-                              label={t("settings.playerTransmissionSequentialDownload")}
-                              checked={settings.player.transmission.sequentialDownload}
-                              onChange={(event) => {
-                                updatePlayerTransmissionSettings({ sequentialDownload: event.currentTarget.checked });
-                              }}
-                            />
-                            <Switch
-                              label={t("settings.playerTransmissionAutoCleanupEnabled")}
-                              checked={settings.player.transmission.autoCleanupEnabled}
-                              onChange={(event) => {
-                                updatePlayerTransmissionSettings({ autoCleanupEnabled: event.currentTarget.checked });
-                              }}
-                            />
-                            {settings.player.transmission.autoCleanupEnabled ? (
-                              <Stack gap="sm" className="settings-toggle-panel">
-                                <Switch
-                                  label={t("settings.playerTransmissionAutoCleanupSlowTaskEnabled")}
-                                  checked={settings.player.transmission.autoCleanupSlowTaskEnabled}
-                                  onChange={(event) => {
-                                    updatePlayerTransmissionSettings({ autoCleanupSlowTaskEnabled: event.currentTarget.checked });
+                                <NumberInput
+                                  label={t("settings.playerTransmissionTimeoutSeconds")}
+                                  min={2}
+                                  max={60}
+                                  value={settings.player.transmission.timeoutSeconds}
+                                  onChange={(value) => {
+                                    if (typeof value === "number" && Number.isFinite(value)) {
+                                      updatePlayerTransmissionSettings({ timeoutSeconds: value });
+                                    }
                                   }}
                                 />
-                                {settings.player.transmission.autoCleanupSlowTaskEnabled ? (
-                                  <SimpleGrid cols={{ base: 1, md: 2 }}>
-                                    <NumberInput
-                                      label={t("settings.playerTransmissionAutoCleanupSlowWindowMinutes")}
-                                      min={5}
-                                      max={1440}
-                                      value={settings.player.transmission.autoCleanupSlowWindowMinutes}
-                                      onChange={(value) => {
-                                        if (typeof value === "number" && Number.isFinite(value)) {
-                                          updatePlayerTransmissionSettings({ autoCleanupSlowWindowMinutes: value });
-                                        }
-                                      }}
-                                    />
-                                    <NumberInput
-                                      label={t("settings.playerTransmissionAutoCleanupSlowRateKbps")}
-                                      min={0}
-                                      max={102400}
-                                      value={settings.player.transmission.autoCleanupSlowRateKbps}
-                                      onChange={(value) => {
-                                        if (typeof value === "number" && Number.isFinite(value)) {
-                                          updatePlayerTransmissionSettings({ autoCleanupSlowRateKbps: value });
-                                        }
-                                      }}
-                                    />
-                                  </SimpleGrid>
-                                ) : null}
-                                <Switch
-                                  label={t("settings.playerTransmissionAutoCleanupStorageEnabled")}
-                                  checked={settings.player.transmission.autoCleanupStorageEnabled}
+                                <TextInput
+                                  label={t("settings.playerTransmissionUsername")}
+                                  value={settings.player.transmission.username}
                                   onChange={(event) => {
-                                    updatePlayerTransmissionSettings({ autoCleanupStorageEnabled: event.currentTarget.checked });
+                                    updatePlayerTransmissionSettings({ username: event.currentTarget.value });
                                   }}
                                 />
-                                {settings.player.transmission.autoCleanupStorageEnabled ? (
-                                  <SimpleGrid cols={{ base: 1, md: 2 }}>
-                                    <NumberInput
-                                      label={t("settings.playerTransmissionAutoCleanupMaxTasks")}
-                                      min={0}
-                                      max={5000}
-                                      value={settings.player.transmission.autoCleanupMaxTasks}
-                                      onChange={(value) => {
-                                        if (typeof value === "number" && Number.isFinite(value)) {
-                                          updatePlayerTransmissionSettings({ autoCleanupMaxTasks: value });
-                                        }
-                                      }}
-                                    />
-                                    <NumberInput
-                                      label={t("settings.playerTransmissionAutoCleanupMaxTotalSizeGB")}
-                                      description={`${t("settings.playerTransmissionCurrentTotalSize")}: ${
-                                        transmissionTaskStatsLoading
-                                          ? t("common.loading")
-                                          : formatGiBFromBytes(transmissionTaskStats?.totalSizeBytes)
-                                      }`}
-                                      min={0}
-                                      max={32768}
-                                      value={settings.player.transmission.autoCleanupMaxTotalSizeGB}
-                                      onChange={(value) => {
-                                        if (typeof value === "number" && Number.isFinite(value)) {
-                                          updatePlayerTransmissionSettings({ autoCleanupMaxTotalSizeGB: value });
-                                        }
-                                      }}
-                                    />
-                                    <NumberInput
-                                      label={t("settings.playerTransmissionAutoCleanupMinFreeSpaceGB")}
-                                      description={`${t("settings.playerTransmissionCurrentFreeSpace")}: ${
-                                        transmissionTaskStatsLoading
-                                          ? t("common.loading")
-                                          : transmissionTaskStats?.freeSpaceAvailable
-                                            ? formatGiBFromBytes(transmissionTaskStats.freeSpaceBytes)
-                                            : t("settings.playerTransmissionCurrentValueUnavailable")
-                                      }`}
-                                      min={0}
-                                      max={8192}
-                                      value={settings.player.transmission.autoCleanupMinFreeSpaceGB}
-                                      onChange={(value) => {
-                                        if (typeof value === "number" && Number.isFinite(value)) {
-                                          updatePlayerTransmissionSettings({ autoCleanupMinFreeSpaceGB: value });
-                                        }
-                                      }}
-                                    />
-                                  </SimpleGrid>
-                                ) : null}
-                              </Stack>
-                            ) : null}
-                            {downloadMappingTestResult ? (
-                              <Card withBorder radius="md" p="sm">
-                                <Stack gap={6}>
-                                  <Group gap={8}>
-                                    <Badge color={downloadMappingTestResult.success ? "green" : "yellow"} variant="light">
-                                      {downloadMappingTestResult.success ? t("settings.playerDownloadMappingTestSuccess") : t("settings.playerDownloadMappingTestFailed")}
-                                    </Badge>
-                                    <Text size="sm">{t("settings.playerTransmissionLatency")}: {downloadMappingTestResult.latencyMs}ms</Text>
-                                  </Group>
-                                  <Text size="sm">{t("settings.playerTransmissionMessage")}: {downloadMappingTestResult.message || "-"}</Text>
-                                  <Text size="sm">{t("settings.playerTransmissionLocalDirProbe")}: {downloadMappingTestResult.directory || "-"}</Text>
-                                  <Text size="sm">
-                                    {t("settings.playerTransmissionLocalDirStatus")}: {String(Boolean(downloadMappingTestResult.directoryExists))} / {String(Boolean(downloadMappingTestResult.directoryIsDir))} / {String(Boolean(downloadMappingTestResult.directoryReadable))}
-                                  </Text>
-                                  <Text size="sm">{t("settings.playerTransmissionLocalDirEntries")}: {downloadMappingTestResult.directoryEntries ?? 0}</Text>
-                                  <Text size="sm">{t("settings.playerTransmissionLocalDirError")}: {downloadMappingTestResult.directoryError || "-"}</Text>
+                                <TextInput
+                                  label={t("settings.playerTransmissionPassword")}
+                                  type="password"
+                                  value={settings.player.transmission.password}
+                                  onChange={(event) => {
+                                    updatePlayerTransmissionSettings({ password: event.currentTarget.value });
+                                  }}
+                                />
+                              </SimpleGrid>
+                              <Card withBorder radius="md" p="sm" className="player-download-mapping-card">
+                                <Stack gap="xs">
+                                  <TextInput
+                                    label={t("settings.playerTransmissionLocalDownloadDir")}
+                                    value={settings.player.transmission.downloadMappingDirectory}
+                                    onChange={(event) => {
+                                      const value = event.currentTarget.value;
+                                      updatePlayerTransmissionSettings({
+                                        downloadMappingDirectory: value,
+                                        localDownloadDir: value
+                                      });
+                                    }}
+                                  />
                                 </Stack>
                               </Card>
-                            ) : null}
-                            {transmissionTestResult ? (
-                              <Card withBorder radius="md" p="sm">
-                                <Stack gap={6}>
-                                  <Group gap={8}>
-                                    <Badge color={transmissionTestResult.success ? "green" : "yellow"} variant="light">
-                                      {transmissionTestResult.success ? t("settings.playerTransmissionTestSuccess") : t("settings.playerTransmissionTestFailed")}
-                                    </Badge>
-                                    <Text size="sm">{t("settings.playerTransmissionLatency")}: {transmissionTestResult.latencyMs}ms</Text>
-                                  </Group>
-                                  <Text size="sm">{t("settings.playerTransmissionMessage")}: {transmissionTestResult.message || "-"}</Text>
-                                  <Text size="sm" ff="monospace">{transmissionTestResult.url || "-"}</Text>
-                                  <SimpleGrid cols={{ base: 1, md: 3 }}>
-                                    <Text size="sm">{t("settings.playerTransmissionVersion")}: {transmissionTestResult.version || "-"}</Text>
-                                    <Text size="sm">{t("settings.playerTransmissionRpcVersion")}: {transmissionTestResult.rpcVersion || 0}</Text>
-                                    <Text size="sm">{t("settings.playerTransmissionRpcVersionMin")}: {transmissionTestResult.rpcVersionMin || 0}</Text>
-                                  </SimpleGrid>
-                                  <Text size="sm">{t("settings.playerTransmissionDownloadDir")}: {transmissionTestResult.downloadDir || "-"}</Text>
-                                  <Text size="sm">{t("settings.playerDownloadMappingModeLabel")}: {transmissionTestResult.downloadMapping?.mode || "-"}</Text>
-                                  <Text size="sm">{t("settings.playerDownloadMappingSummary")}: {transmissionTestResult.downloadMapping?.message || "-"}</Text>
+                              <Switch
+                                label={t("settings.playerTransmissionInsecureTls")}
+                                checked={settings.player.transmission.insecureTls}
+                                onChange={(event) => {
+                                  updatePlayerTransmissionSettings({ insecureTls: event.currentTarget.checked });
+                                }}
+                              />
+                              <Switch
+                                label={t("settings.playerTransmissionSequentialDownload")}
+                                checked={settings.player.transmission.sequentialDownload}
+                                onChange={(event) => {
+                                  updatePlayerTransmissionSettings({ sequentialDownload: event.currentTarget.checked });
+                                }}
+                              />
+                              <Switch
+                                label={t("settings.playerTransmissionAutoCleanupEnabled")}
+                                checked={settings.player.transmission.autoCleanupEnabled}
+                                onChange={(event) => {
+                                  updatePlayerTransmissionSettings({ autoCleanupEnabled: event.currentTarget.checked });
+                                }}
+                              />
+                              {settings.player.transmission.autoCleanupEnabled ? (
+                                <Stack gap="sm" className="settings-toggle-panel">
+                                  <Switch
+                                    label={t("settings.playerTransmissionAutoCleanupSlowTaskEnabled")}
+                                    checked={settings.player.transmission.autoCleanupSlowTaskEnabled}
+                                    onChange={(event) => {
+                                      updatePlayerTransmissionSettings({ autoCleanupSlowTaskEnabled: event.currentTarget.checked });
+                                    }}
+                                  />
+                                  {settings.player.transmission.autoCleanupSlowTaskEnabled ? (
+                                    <SimpleGrid cols={{ base: 1, md: 2 }}>
+                                      <NumberInput
+                                        label={t("settings.playerTransmissionAutoCleanupSlowWindowMinutes")}
+                                        min={5}
+                                        max={1440}
+                                        value={settings.player.transmission.autoCleanupSlowWindowMinutes}
+                                        onChange={(value) => {
+                                          if (typeof value === "number" && Number.isFinite(value)) {
+                                            updatePlayerTransmissionSettings({ autoCleanupSlowWindowMinutes: value });
+                                          }
+                                        }}
+                                      />
+                                      <NumberInput
+                                        label={t("settings.playerTransmissionAutoCleanupSlowRateKbps")}
+                                        min={0}
+                                        max={102400}
+                                        value={settings.player.transmission.autoCleanupSlowRateKbps}
+                                        onChange={(value) => {
+                                          if (typeof value === "number" && Number.isFinite(value)) {
+                                            updatePlayerTransmissionSettings({ autoCleanupSlowRateKbps: value });
+                                          }
+                                        }}
+                                      />
+                                    </SimpleGrid>
+                                  ) : null}
+                                  <Switch
+                                    label={t("settings.playerTransmissionAutoCleanupStorageEnabled")}
+                                    checked={settings.player.transmission.autoCleanupStorageEnabled}
+                                    onChange={(event) => {
+                                      updatePlayerTransmissionSettings({ autoCleanupStorageEnabled: event.currentTarget.checked });
+                                    }}
+                                  />
+                                  {settings.player.transmission.autoCleanupStorageEnabled ? (
+                                    <SimpleGrid cols={{ base: 1, md: 2 }}>
+                                      <NumberInput
+                                        label={t("settings.playerTransmissionAutoCleanupMaxTasks")}
+                                        min={0}
+                                        max={5000}
+                                        value={settings.player.transmission.autoCleanupMaxTasks}
+                                        onChange={(value) => {
+                                          if (typeof value === "number" && Number.isFinite(value)) {
+                                            updatePlayerTransmissionSettings({ autoCleanupMaxTasks: value });
+                                          }
+                                        }}
+                                      />
+                                      <NumberInput
+                                        label={t("settings.playerTransmissionAutoCleanupMaxTotalSizeGB")}
+                                        description={`${t("settings.playerTransmissionCurrentTotalSize")}: ${transmissionTaskStatsLoading
+                                            ? t("common.loading")
+                                            : formatGiBFromBytes(transmissionTaskStats?.totalSizeBytes)
+                                          }`}
+                                        min={0}
+                                        max={32768}
+                                        value={settings.player.transmission.autoCleanupMaxTotalSizeGB}
+                                        onChange={(value) => {
+                                          if (typeof value === "number" && Number.isFinite(value)) {
+                                            updatePlayerTransmissionSettings({ autoCleanupMaxTotalSizeGB: value });
+                                          }
+                                        }}
+                                      />
+                                      <NumberInput
+                                        label={t("settings.playerTransmissionAutoCleanupMinFreeSpaceGB")}
+                                        description={`${t("settings.playerTransmissionCurrentFreeSpace")}: ${transmissionTaskStatsLoading
+                                            ? t("common.loading")
+                                            : transmissionTaskStats?.freeSpaceAvailable
+                                              ? formatGiBFromBytes(transmissionTaskStats.freeSpaceBytes)
+                                              : t("settings.playerTransmissionCurrentValueUnavailable")
+                                          }`}
+                                        min={0}
+                                        max={8192}
+                                        value={settings.player.transmission.autoCleanupMinFreeSpaceGB}
+                                        onChange={(value) => {
+                                          if (typeof value === "number" && Number.isFinite(value)) {
+                                            updatePlayerTransmissionSettings({ autoCleanupMinFreeSpaceGB: value });
+                                          }
+                                        }}
+                                      />
+                                    </SimpleGrid>
+                                  ) : null}
                                 </Stack>
-                              </Card>
-                            ) : null}
-                          </Stack>
-                        ) : null}
-                      </Stack>
-                    </Card>
-                  </Accordion.Panel>
+                              ) : null}
+                              {downloadMappingTestResult ? (
+                                <Card withBorder radius="md" p="sm">
+                                  <Stack gap={6}>
+                                    <Group gap={8}>
+                                      <Badge color={downloadMappingTestResult.success ? "green" : "yellow"} variant="light">
+                                        {downloadMappingTestResult.success ? t("settings.playerDownloadMappingTestSuccess") : t("settings.playerDownloadMappingTestFailed")}
+                                      </Badge>
+                                      <Text size="sm">{t("settings.playerTransmissionLatency")}: {downloadMappingTestResult.latencyMs}ms</Text>
+                                    </Group>
+                                    <Text size="sm">{t("settings.playerTransmissionMessage")}: {downloadMappingTestResult.message || "-"}</Text>
+                                    <Text size="sm">{t("settings.playerTransmissionLocalDirProbe")}: {downloadMappingTestResult.directory || "-"}</Text>
+                                    <Text size="sm">
+                                      {t("settings.playerTransmissionLocalDirStatus")}: {String(Boolean(downloadMappingTestResult.directoryExists))} / {String(Boolean(downloadMappingTestResult.directoryIsDir))} / {String(Boolean(downloadMappingTestResult.directoryReadable))}
+                                    </Text>
+                                    <Text size="sm">{t("settings.playerTransmissionLocalDirEntries")}: {downloadMappingTestResult.directoryEntries ?? 0}</Text>
+                                    <Text size="sm">{t("settings.playerTransmissionLocalDirError")}: {downloadMappingTestResult.directoryError || "-"}</Text>
+                                  </Stack>
+                                </Card>
+                              ) : null}
+                              {transmissionTestResult ? (
+                                <Card withBorder radius="md" p="sm">
+                                  <Stack gap={6}>
+                                    <Group gap={8}>
+                                      <Badge color={transmissionTestResult.success ? "green" : "yellow"} variant="light">
+                                        {transmissionTestResult.success ? t("settings.playerTransmissionTestSuccess") : t("settings.playerTransmissionTestFailed")}
+                                      </Badge>
+                                      <Text size="sm">{t("settings.playerTransmissionLatency")}: {transmissionTestResult.latencyMs}ms</Text>
+                                    </Group>
+                                    <Text size="sm">{t("settings.playerTransmissionMessage")}: {transmissionTestResult.message || "-"}</Text>
+                                    <Text size="sm" ff="monospace">{transmissionTestResult.url || "-"}</Text>
+                                    <SimpleGrid cols={{ base: 1, md: 3 }}>
+                                      <Text size="sm">{t("settings.playerTransmissionVersion")}: {transmissionTestResult.version || "-"}</Text>
+                                      <Text size="sm">{t("settings.playerTransmissionRpcVersion")}: {transmissionTestResult.rpcVersion || 0}</Text>
+                                      <Text size="sm">{t("settings.playerTransmissionRpcVersionMin")}: {transmissionTestResult.rpcVersionMin || 0}</Text>
+                                    </SimpleGrid>
+                                    <Text size="sm">{t("settings.playerTransmissionDownloadDir")}: {transmissionTestResult.downloadDir || "-"}</Text>
+                                    <Text size="sm">{t("settings.playerDownloadMappingModeLabel")}: {transmissionTestResult.downloadMapping?.mode || "-"}</Text>
+                                    <Text size="sm">{t("settings.playerDownloadMappingSummary")}: {transmissionTestResult.downloadMapping?.message || "-"}</Text>
+                                  </Stack>
+                                </Card>
+                              ) : null}
+                            </Stack>
+                          ) : null}
+                        </Stack>
+                      </Card>
+                    </Accordion.Panel>
                   </Accordion.Item>
 
                   <Accordion.Item value="player-ffmpeg">
-                  <Accordion.Control>{t("settings.playerFfmpegTitle")}</Accordion.Control>
-                  <Accordion.Panel>
-                    <Card className="settings-section-block" radius="lg">
-                      <Stack gap="sm">
-                        <Text size="sm" c="dimmed">{t("settings.playerFfmpegHint")}</Text>
-                        <Switch
-                          label={t("settings.playerFfmpegEnabled")}
-                          checked={settings.player.ffmpeg.enabled}
-                          onChange={(event) => {
-                            updatePlayerFFmpegSettings({ enabled: event.currentTarget.checked });
-                          }}
-                        />
-                        {settings.player.ffmpeg.enabled ? (
-                          <Stack gap="sm" className="settings-toggle-panel">
-                            <Group justify="flex-end">
-                              <Button variant="light" size="xs" loading={ffmpegTesting} onClick={() => void testPlayerFFmpeg()}>
-                                {t("settings.playerFfmpegTestButton")}
-                              </Button>
-                            </Group>
-                            <SimpleGrid cols={{ base: 1, md: 2 }}>
-                              <TextInput
-                                label={t("settings.playerFfmpegBinaryPath")}
-                                value={settings.player.ffmpeg.binaryPath}
+                    <Accordion.Control>{t("settings.playerFfmpegTitle")}</Accordion.Control>
+                    <Accordion.Panel>
+                      <Card className="settings-section-block" radius="lg">
+                        <Stack gap="sm">
+                          <Text size="sm" c="dimmed">{t("settings.playerFfmpegHint")}</Text>
+                          <Switch
+                            label={t("settings.playerFfmpegEnabled")}
+                            checked={settings.player.ffmpeg.enabled}
+                            onChange={(event) => {
+                              updatePlayerFFmpegSettings({ enabled: event.currentTarget.checked });
+                            }}
+                          />
+                          {settings.player.ffmpeg.enabled ? (
+                            <Stack gap="sm" className="settings-toggle-panel">
+                              <Group justify="flex-end">
+                                <Button variant="light" size="xs" loading={ffmpegTesting} onClick={() => void testPlayerFFmpeg()}>
+                                  {t("settings.playerFfmpegTestButton")}
+                                </Button>
+                              </Group>
+                              <SimpleGrid cols={{ base: 1, md: 2 }}>
+                                <TextInput
+                                  label={t("settings.playerFfmpegBinaryPath")}
+                                  value={settings.player.ffmpeg.binaryPath}
+                                  onChange={(event) => {
+                                    updatePlayerFFmpegSettings({ binaryPath: event.currentTarget.value });
+                                  }}
+                                />
+                                <TextInput
+                                  label={t("settings.playerFfmpegPreset")}
+                                  value={settings.player.ffmpeg.preset}
+                                  onChange={(event) => {
+                                    updatePlayerFFmpegSettings({ preset: event.currentTarget.value });
+                                  }}
+                                />
+                                <NumberInput
+                                  label={t("settings.playerFfmpegCrf")}
+                                  min={16}
+                                  max={38}
+                                  value={settings.player.ffmpeg.crf}
+                                  onChange={(value) => {
+                                    if (typeof value === "number" && Number.isFinite(value)) {
+                                      updatePlayerFFmpegSettings({ crf: value });
+                                    }
+                                  }}
+                                />
+                                <NumberInput
+                                  label={t("settings.playerFfmpegAudioBitrate")}
+                                  min={64}
+                                  max={320}
+                                  value={settings.player.ffmpeg.audioBitrateKbps}
+                                  onChange={(value) => {
+                                    if (typeof value === "number" && Number.isFinite(value)) {
+                                      updatePlayerFFmpegSettings({ audioBitrateKbps: value });
+                                    }
+                                  }}
+                                />
+                                <NumberInput
+                                  label={t("settings.playerFfmpegThreads")}
+                                  min={0}
+                                  max={32}
+                                  value={settings.player.ffmpeg.threads}
+                                  onChange={(value) => {
+                                    if (typeof value === "number" && Number.isFinite(value)) {
+                                      updatePlayerFFmpegSettings({ threads: value });
+                                    }
+                                  }}
+                                />
+                                <TextInput
+                                  label={t("settings.playerFfmpegExtraArgs")}
+                                  value={settings.player.ffmpeg.extraArgs}
+                                  onChange={(event) => {
+                                    updatePlayerFFmpegSettings({ extraArgs: event.currentTarget.value });
+                                  }}
+                                />
+                              </SimpleGrid>
+                              <Textarea
+                                label={t("settings.playerFfmpegForceTranscodeExtensions")}
+                                description={t("settings.playerFfmpegForceTranscodeExtensionsHint")}
+                                minRows={3}
+                                autosize
+                                value={settings.player.ffmpeg.forceTranscodeExtensions}
                                 onChange={(event) => {
-                                  updatePlayerFFmpegSettings({ binaryPath: event.currentTarget.value });
+                                  updatePlayerFFmpegSettings({ forceTranscodeExtensions: event.currentTarget.value });
                                 }}
                               />
-                              <TextInput
-                                label={t("settings.playerFfmpegPreset")}
-                                value={settings.player.ffmpeg.preset}
-                                onChange={(event) => {
-                                  updatePlayerFFmpegSettings({ preset: event.currentTarget.value });
-                                }}
-                              />
-                              <NumberInput
-                                label={t("settings.playerFfmpegCrf")}
-                                min={16}
-                                max={38}
-                                value={settings.player.ffmpeg.crf}
-                                onChange={(value) => {
-                                  if (typeof value === "number" && Number.isFinite(value)) {
-                                    updatePlayerFFmpegSettings({ crf: value });
-                                  }
-                                }}
-                              />
-                              <NumberInput
-                                label={t("settings.playerFfmpegAudioBitrate")}
-                                min={64}
-                                max={320}
-                                value={settings.player.ffmpeg.audioBitrateKbps}
-                                onChange={(value) => {
-                                  if (typeof value === "number" && Number.isFinite(value)) {
-                                    updatePlayerFFmpegSettings({ audioBitrateKbps: value });
-                                  }
-                                }}
-                              />
-                              <NumberInput
-                                label={t("settings.playerFfmpegThreads")}
-                                min={0}
-                                max={32}
-                                value={settings.player.ffmpeg.threads}
-                                onChange={(value) => {
-                                  if (typeof value === "number" && Number.isFinite(value)) {
-                                    updatePlayerFFmpegSettings({ threads: value });
-                                  }
-                                }}
-                              />
-                              <TextInput
-                                label={t("settings.playerFfmpegExtraArgs")}
-                                value={settings.player.ffmpeg.extraArgs}
-                                onChange={(event) => {
-                                  updatePlayerFFmpegSettings({ extraArgs: event.currentTarget.value });
-                                }}
-                              />
-                            </SimpleGrid>
-                            <Textarea
-                              label={t("settings.playerFfmpegForceTranscodeExtensions")}
-                              description={t("settings.playerFfmpegForceTranscodeExtensionsHint")}
-                              minRows={3}
-                              autosize
-                              value={settings.player.ffmpeg.forceTranscodeExtensions}
-                              onChange={(event) => {
-                                updatePlayerFFmpegSettings({ forceTranscodeExtensions: event.currentTarget.value });
-                              }}
-                            />
-                            {ffmpegTestResult ? (
-                              <Card withBorder radius="md" p="sm">
-                                <Stack gap={6}>
-                                  <Group gap={8}>
-                                    <Badge color={ffmpegTestResult.success ? "green" : "yellow"} variant="light">
-                                      {ffmpegTestResult.success ? t("settings.playerFfmpegTestSuccess") : t("settings.playerFfmpegTestFailed")}
-                                    </Badge>
-                                    <Text size="sm">{t("settings.playerFfmpegLatency")}: {ffmpegTestResult.latencyMs}ms</Text>
-                                  </Group>
-                                  <Text size="sm">{t("settings.playerFfmpegMessage")}: {ffmpegTestResult.message || "-"}</Text>
-                                  <Text size="sm">{t("settings.playerFfmpegVersion")}: {ffmpegTestResult.version || "-"}</Text>
-                                  <Text size="sm">{t("settings.playerFfmpegBinaryPath")}: {ffmpegTestResult.binaryPath || "-"}</Text>
-                                  <Text size="sm" ff="monospace">{ffmpegTestResult.argsPreview || "-"}</Text>
-                                </Stack>
-                              </Card>
-                            ) : null}
-                          </Stack>
-                        ) : null}
-                      </Stack>
-                    </Card>
-                  </Accordion.Panel>
+                              {ffmpegTestResult ? (
+                                <Card withBorder radius="md" p="sm">
+                                  <Stack gap={6}>
+                                    <Group gap={8}>
+                                      <Badge color={ffmpegTestResult.success ? "green" : "yellow"} variant="light">
+                                        {ffmpegTestResult.success ? t("settings.playerFfmpegTestSuccess") : t("settings.playerFfmpegTestFailed")}
+                                      </Badge>
+                                      <Text size="sm">{t("settings.playerFfmpegLatency")}: {ffmpegTestResult.latencyMs}ms</Text>
+                                    </Group>
+                                    <Text size="sm">{t("settings.playerFfmpegMessage")}: {ffmpegTestResult.message || "-"}</Text>
+                                    <Text size="sm">{t("settings.playerFfmpegVersion")}: {ffmpegTestResult.version || "-"}</Text>
+                                    <Text size="sm">{t("settings.playerFfmpegBinaryPath")}: {ffmpegTestResult.binaryPath || "-"}</Text>
+                                    <Text size="sm" ff="monospace">{ffmpegTestResult.argsPreview || "-"}</Text>
+                                  </Stack>
+                                </Card>
+                              ) : null}
+                            </Stack>
+                          ) : null}
+                        </Stack>
+                      </Card>
+                    </Accordion.Panel>
                   </Accordion.Item>
                 </Accordion>
               ) : (

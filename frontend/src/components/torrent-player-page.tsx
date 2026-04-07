@@ -17,7 +17,7 @@ import {
   Tooltip
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { AlertTriangle, Maximize2, Minimize2, Pause, PictureInPicture2, Play, Settings2, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, Maximize2, Minimize2, Minus, Pause, PictureInPicture2, Play, Plus, Settings2, Trash2, Upload } from "lucide-react";
 import { graphqlRequest } from "@/lib/api";
 import { TORRENT_CONTENT_SEARCH_QUERY } from "@/lib/graphql";
 import { useI18n } from "@/languages/provider";
@@ -30,6 +30,7 @@ import {
   fetchPlayerTransmissionBootstrap,
   fetchPlayerTransmissionStatus,
   selectPlayerTransmissionFile,
+  updatePlayerSubtitle,
   type PlayerSubtitleItem,
   type PlayerTransmissionFile,
   type PlayerTransmissionStatusResponse
@@ -316,6 +317,18 @@ function shiftWebVttByOffset(content: string, offsetSeconds: number): string {
   }
 
   return `${output.join("\n").replace(/\n{3,}/g, "\n\n").trim()}\n`;
+}
+
+function normalizeSubtitleOffsetValue(raw: number): number {
+  if (!Number.isFinite(raw)) return 0;
+  return Math.round(raw * 2) / 2;
+}
+
+function formatSubtitleOffsetLabel(raw: number): string {
+  const safe = Number.isFinite(raw) ? raw : 0;
+  const normalized = Math.abs(safe) < 0.001 ? 0 : safe;
+  const sign = normalized > 0 ? "+" : "";
+  return `${sign}${normalized.toFixed(1)}s`;
 }
 
 function estimateTranscodeStartBytes(
@@ -929,8 +942,15 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       return;
     }
 
-    const offsetSeconds = activePreferTranscode ? Math.max(0, transcodeStartOffsetSeconds) : 0;
-    if (offsetSeconds < 0.1) {
+    const transcodeOffsetSeconds = activePreferTranscode ? Math.max(0, transcodeStartOffsetSeconds) : 0;
+    const effectiveOffsetBySubtitleID = new Map<number, number>(
+      subtitleItems.map((item) => {
+        const manualOffsetSeconds = Number.isFinite(item.offsetSeconds) ? item.offsetSeconds : 0;
+        return [item.id, transcodeOffsetSeconds - manualOffsetSeconds];
+      })
+    );
+    const shouldBuildShifted = Array.from(effectiveOffsetBySubtitleID.values()).some((offset) => Math.abs(offset) >= 0.1);
+    if (!shouldBuildShifted) {
       const next: Record<number, string> = {};
       for (const item of subtitleItems) {
         next[item.id] = buildPlayerSubtitleContentURL(infoHash, item.id, item.updatedAt);
@@ -950,13 +970,14 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
       for (const item of subtitleItems) {
         const baseUrl = buildPlayerSubtitleContentURL(infoHash, item.id, item.updatedAt);
+        const effectiveOffsetSeconds = effectiveOffsetBySubtitleID.get(item.id) || 0;
         try {
           const response = await fetch(baseUrl, { cache: "no-store" });
           if (!response.ok) {
             throw new Error(`subtitle http ${response.status}`);
           }
           const raw = await response.text();
-          const shifted = shiftWebVttByOffset(raw, offsetSeconds);
+          const shifted = shiftWebVttByOffset(raw, effectiveOffsetSeconds);
           const blobUrl = URL.createObjectURL(new Blob([shifted], { type: "text/vtt" }));
           next[item.id] = blobUrl;
           nextBlobUrls.push(blobUrl);
@@ -964,7 +985,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           next[item.id] = baseUrl;
           logWarn("subtitle", "failed to build shifted subtitle source", {
             subtitleId: item.id,
-            offsetSeconds,
+            offsetSeconds: effectiveOffsetSeconds,
             message: toErrorMessage(error, "shift subtitle failed")
           });
         }
@@ -2085,6 +2106,27 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     [infoHash, loadSubtitles, selectedSubtitleId, t]
   );
 
+  const handleAdjustSubtitleOffset = useCallback(
+    async (id: number, deltaSeconds: number) => {
+      if (!infoHash || !Number.isInteger(id) || id <= 0 || !Number.isFinite(deltaSeconds) || deltaSeconds === 0) return;
+      const target = subtitleItems.find((item) => item.id === id);
+      if (!target) return;
+      const nextOffsetSeconds = normalizeSubtitleOffsetValue((target.offsetSeconds || 0) + deltaSeconds);
+      try {
+        await updatePlayerSubtitle({
+          infoHash,
+          subtitleId: id,
+          offsetSeconds: nextOffsetSeconds
+        });
+        await loadSubtitles();
+      } catch (error) {
+        const message = toErrorMessage(error, t("media.player.subtitleUploadFailed"));
+        notifications.show({ color: "red", message });
+      }
+    },
+    [infoHash, loadSubtitles, subtitleItems, t]
+  );
+
   const handleSubtitleUploadPick = useCallback(
     async (file: File | null) => {
       await handleUploadSubtitle(file);
@@ -2515,16 +2557,19 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
                 preload="metadata"
                 crossOrigin="anonymous"
               >
-                {subtitleItems.map((item) => (
-                  <track
-                    key={`${item.id}:${item.updatedAt}`}
-                    kind="subtitles"
-                    label={item.label || `Subtitle ${item.id}`}
-                    srcLang={normalizeSubtitleLanguage(item.language)}
-                    src={subtitleTrackSrcMap[item.id] || buildPlayerSubtitleContentURL(infoHash, item.id, item.updatedAt)}
-                    default={false}
-                  />
-                ))}
+                {subtitleItems.map((item) => {
+                  const trackSrc = subtitleTrackSrcMap[item.id] || buildPlayerSubtitleContentURL(infoHash, item.id, item.updatedAt);
+                  return (
+                    <track
+                      key={`${item.id}:${item.updatedAt}:${trackSrc}`}
+                      kind="subtitles"
+                      label={item.label || `Subtitle ${item.id}`}
+                      srcLang={normalizeSubtitleLanguage(item.language)}
+                      src={trackSrc}
+                      default={false}
+                    />
+                  );
+                })}
               </video>
             </div>
             {showPlaybackBusyOverlay ? (
@@ -2859,21 +2904,50 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
               {subtitleItems.map((item) => (
                 <div className="torrent-subtitle-item-card" key={item.id}>
                   <Group justify="space-between" align="center" gap="xs" wrap="nowrap">
-                    <Text fw={700} size="sm" className="torrent-subtitle-item-title">
-                      {item.label || `Subtitle ${item.id}`}
-                    </Text>
-                    <ActionIcon
-                      size="sm"
-                      color="red"
-                      variant="light"
-                      disabled={subtitleLoading}
-                      onClick={() => {
-                        void handleDeleteSubtitle(item.id);
-                      }}
-                      aria-label={t("media.player.subtitleDelete")}
-                    >
-                      <Trash2 size={14} />
-                    </ActionIcon>
+                    <Stack gap={2} style={{ minWidth: 0 }}>
+                      <Text fw={700} size="sm" className="torrent-subtitle-item-title">
+                        {item.label || `Subtitle ${item.id}`}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        {t("media.player.subtitleOffset")}: {formatSubtitleOffsetLabel(item.offsetSeconds || 0)}
+                      </Text>
+                    </Stack>
+                    <Group gap={4} wrap="nowrap">
+                      <ActionIcon
+                        size="sm"
+                        variant="light"
+                        disabled={subtitleLoading}
+                        onClick={() => {
+                          void handleAdjustSubtitleOffset(item.id, -0.5);
+                        }}
+                        aria-label={t("media.player.subtitleOffsetMinus")}
+                      >
+                        <Minus size={14} />
+                      </ActionIcon>
+                      <ActionIcon
+                        size="sm"
+                        variant="light"
+                        disabled={subtitleLoading}
+                        onClick={() => {
+                          void handleAdjustSubtitleOffset(item.id, 0.5);
+                        }}
+                        aria-label={t("media.player.subtitleOffsetPlus")}
+                      >
+                        <Plus size={14} />
+                      </ActionIcon>
+                      <ActionIcon
+                        size="sm"
+                        color="red"
+                        variant="light"
+                        disabled={subtitleLoading}
+                        onClick={() => {
+                          void handleDeleteSubtitle(item.id);
+                        }}
+                        aria-label={t("media.player.subtitleDelete")}
+                      >
+                        <Trash2 size={14} />
+                      </ActionIcon>
+                    </Group>
                   </Group>
                 </div>
               ))}
