@@ -10,7 +10,6 @@ import (
 	"math"
 	"net"
 	"net/http"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -59,6 +58,7 @@ func (b *builder) Apply(e *gin.Engine) error {
 	e.GET("/api/media/:id", b.detail)
 	e.POST("/api/media/player/transmission/bootstrap", b.playerTransmissionBootstrap)
 	e.POST("/api/media/player/transmission/select-file", b.playerTransmissionSelectFile)
+	e.GET("/api/media/player/transmission/audio-tracks", b.playerTransmissionAudioTracks)
 	e.GET("/api/media/player/transmission/status", b.playerTransmissionStatus)
 	e.GET("/api/media/player/transmission/status/batch", b.playerTransmissionBatchStatus)
 	e.GET("/api/media/player/transmission/stream", b.playerTransmissionStream)
@@ -219,10 +219,38 @@ func (b *builder) playerTransmissionBatchStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+func (b *builder) playerTransmissionAudioTracks(c *gin.Context) {
+	infoHash := strings.TrimSpace(c.Query("infoHash"))
+	fileIndex := parseInt(c.Query("fileIndex"), -1)
+	result, err := b.service.PlayerTransmissionAudioTracks(c.Request.Context(), media.PlayerTransmissionAudioTracksInput{
+		InfoHash:  infoHash,
+		FileIndex: fileIndex,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrInvalidInfoHash):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid infoHash"})
+		case errors.Is(err, media.ErrPlayerFileNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrPlayerDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player disabled"})
+		case errors.Is(err, media.ErrPlayerTransmissionDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player transmission disabled"})
+		case errors.Is(err, media.ErrPlayerTranscodeDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player transcode disabled"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
 func (b *builder) playerTransmissionStream(c *gin.Context) {
 	infoHash := strings.TrimSpace(c.Query("infoHash"))
 	fileIndex := parseInt(c.Query("fileIndex"), -1)
-	preferTranscode := parseBool(c.Query("transcode"), false)
+	preferTranscode := true
+	audioTrackIndex := parseInt(c.Query("audioTrack"), -1)
 	startSeconds := parseFloat(c.Query("start"), 0)
 	startBytes := parseInt64(c.Query("startBytes"), 0)
 	startedAt := time.Now()
@@ -236,6 +264,7 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 		zap.String("info_hash", infoHash),
 		zap.Int("file_index", fileIndex),
 		zap.Bool("prefer_transcode", preferTranscode),
+		zap.Int("audio_track_index", audioTrackIndex),
 		zap.Float64("start_seconds", startSeconds),
 		zap.Int64("start_bytes", startBytes),
 		zap.String("range", c.GetHeader("Range")),
@@ -278,6 +307,7 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 		FileIndex:       fileIndex,
 		RangeHeader:     c.GetHeader("Range"),
 		PreferTranscode: preferTranscode,
+		AudioTrackIndex: audioTrackIndex,
 		StartSeconds:    startSeconds,
 		StartBytes:      startBytes,
 	})
@@ -302,62 +332,12 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 		return
 	}
 
-	if resolveResult.Transcode.Enabled {
-		b.playerTransmissionStreamTranscoded(c, resolveResult)
+	if !resolveResult.Transcode.Enabled {
+		responseError = media.ErrPlayerTranscodeDisabled.Error()
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "player transcode disabled"})
 		return
 	}
-
-	file, err := os.Open(resolveResult.FilePath)
-	if err != nil {
-		responseError = fmt.Sprintf("stream file not found: %s (%v)", resolveResult.FilePath, err)
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": responseError,
-		})
-		return
-	}
-	defer file.Close()
-
-	if _, err := file.Seek(resolveResult.RangeStart, io.SeekStart); err != nil {
-		responseError = err.Error()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	contentLength := resolveResult.RangeEnd - resolveResult.RangeStart + 1
-	if contentLength < 0 {
-		responseError = "invalid range"
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid range"})
-		return
-	}
-
-	c.Header("Accept-Ranges", "bytes")
-	c.Header("Content-Type", resolveResult.ContentType)
-	c.Header("Content-Length", strconv.FormatInt(contentLength, 10))
-	c.Header("X-Bitmagnet-Stream-Source", "local")
-	c.Header("X-Bitmagnet-Stream-Path", resolveResult.FilePath)
-	if resolveResult.Partial {
-		c.Header(
-			"Content-Range",
-			"bytes "+strconv.FormatInt(resolveResult.RangeStart, 10)+
-				"-"+strconv.FormatInt(resolveResult.RangeEnd, 10)+
-				"/"+strconv.FormatInt(resolveResult.TotalLength, 10),
-		)
-	}
-
-	statusCode := http.StatusOK
-	if resolveResult.Partial {
-		statusCode = http.StatusPartialContent
-	}
-	c.Status(statusCode)
-
-	if c.Request.Method == http.MethodHead {
-		return
-	}
-
-	if _, err := io.CopyN(c.Writer, file, contentLength); err != nil && !errors.Is(err, io.EOF) && !isBenignStreamingError(err) {
-		responseError = err.Error()
-		c.Error(err)
-	}
+	b.playerTransmissionStreamTranscoded(c, resolveResult)
 }
 
 func (b *builder) playerSubtitleList(c *gin.Context) {
@@ -502,7 +482,7 @@ func (b *builder) playerTransmissionStreamTranscoded(c *gin.Context, resolveResu
 	transcodeStartSeconds := resolveResult.StartSeconds
 	transcodeSeekStartBytes := resolveResult.StartBytes
 
-	args := buildPlayerFFmpegArgs(inputPath, resolveResult.Transcode, transcodeStartSeconds)
+	args := buildPlayerFFmpegArgs(inputPath, resolveResult.Transcode, transcodeStartSeconds, resolveResult.AudioTrackIndex)
 	cmd := exec.CommandContext(c.Request.Context(), binaryPath, args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -519,6 +499,7 @@ func (b *builder) playerTransmissionStreamTranscoded(c *gin.Context, resolveResu
 	c.Header("X-Bitmagnet-Transcode-Binary", binaryPath)
 	c.Header("X-Bitmagnet-Transcode-Start", strconv.FormatFloat(transcodeStartSeconds, 'f', 3, 64))
 	c.Header("X-Bitmagnet-Transcode-Seek-Bytes", strconv.FormatInt(transcodeSeekStartBytes, 10))
+	c.Header("X-Bitmagnet-Transcode-Audio-Track", strconv.Itoa(resolveResult.AudioTrackIndex))
 	c.Header("X-Bitmagnet-Stream-Source", streamSource)
 	if streamPath != "" {
 		c.Header("X-Bitmagnet-Stream-Path", streamPath)
@@ -705,7 +686,7 @@ func isRetryableFFmpegFailure(message string) bool {
 	return true
 }
 
-func buildPlayerFFmpegArgs(filePath string, options media.PlayerFFmpegTranscodeSettings, startSeconds float64) []string {
+func buildPlayerFFmpegArgs(filePath string, options media.PlayerFFmpegTranscodeSettings, startSeconds float64, audioTrackIndex int) []string {
 	preset := strings.TrimSpace(options.Preset)
 	if preset == "" {
 		preset = "veryfast"
@@ -740,7 +721,7 @@ func buildPlayerFFmpegArgs(filePath string, options media.PlayerFFmpegTranscodeS
 	}
 	args = append(args,
 		"-map", "0:v:0",
-		"-map", "0:a?",
+		"-map", selectedAudioTrackMap(audioTrackIndex),
 		"-sn",
 		"-dn",
 		"-c:v", "libx264",
@@ -767,6 +748,13 @@ func buildPlayerFFmpegArgs(filePath string, options media.PlayerFFmpegTranscodeS
 	}
 	args = append(args, "-movflags", "+frag_keyframe+empty_moov+default_base_moof", "-f", "mp4", "pipe:1")
 	return args
+}
+
+func selectedAudioTrackMap(index int) string {
+	if index < 0 {
+		return "0:a?"
+	}
+	return fmt.Sprintf("0:a:%d?", index)
 }
 
 func (b *builder) cover(c *gin.Context) {

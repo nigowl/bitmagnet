@@ -223,6 +223,27 @@ type PlayerTransmissionSelectFileResult struct {
 	Status                       PlayerTransmissionStatusResult `json:"status"`
 }
 
+type PlayerTransmissionAudioTracksInput struct {
+	InfoHash  string `json:"infoHash"`
+	FileIndex int    `json:"fileIndex"`
+}
+
+type PlayerTransmissionAudioTrack struct {
+	Index       int    `json:"index"`
+	StreamIndex int    `json:"streamIndex"`
+	Label       string `json:"label"`
+	Language    string `json:"language"`
+	Codec       string `json:"codec"`
+	Channels    int    `json:"channels"`
+	Default     bool   `json:"default"`
+}
+
+type PlayerTransmissionAudioTracksResult struct {
+	InfoHash  string                         `json:"infoHash"`
+	FileIndex int                            `json:"fileIndex"`
+	Tracks    []PlayerTransmissionAudioTrack `json:"tracks"`
+}
+
 type PlayerSubtitle struct {
 	ID            int64     `json:"id"`
 	InfoHash      string    `json:"infoHash"`
@@ -341,20 +362,22 @@ type PlayerTransmissionResolveStreamInput struct {
 	FileIndex       int     `json:"fileIndex"`
 	RangeHeader     string  `json:"rangeHeader"`
 	PreferTranscode bool    `json:"preferTranscode"`
+	AudioTrackIndex int     `json:"audioTrackIndex"`
 	StartSeconds    float64 `json:"startSeconds"`
 	StartBytes      int64   `json:"startBytes"`
 }
 
 type PlayerTransmissionResolveStreamResult struct {
-	FilePath     string                        `json:"filePath"`
-	ContentType  string                        `json:"contentType"`
-	RangeStart   int64                         `json:"rangeStart"`
-	RangeEnd     int64                         `json:"rangeEnd"`
-	TotalLength  int64                         `json:"totalLength"`
-	Partial      bool                          `json:"partial"`
-	Transcode    PlayerFFmpegTranscodeSettings `json:"transcode"`
-	StartSeconds float64                       `json:"startSeconds"`
-	StartBytes   int64                         `json:"startBytes"`
+	FilePath        string                        `json:"filePath"`
+	ContentType     string                        `json:"contentType"`
+	RangeStart      int64                         `json:"rangeStart"`
+	RangeEnd        int64                         `json:"rangeEnd"`
+	TotalLength     int64                         `json:"totalLength"`
+	Partial         bool                          `json:"partial"`
+	Transcode       PlayerFFmpegTranscodeSettings `json:"transcode"`
+	AudioTrackIndex int                           `json:"audioTrackIndex"`
+	StartSeconds    float64                       `json:"startSeconds"`
+	StartBytes      int64                         `json:"startBytes"`
 }
 
 type CoverResult struct {

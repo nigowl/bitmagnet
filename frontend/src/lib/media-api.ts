@@ -225,6 +225,22 @@ export type PlayerTransmissionSelectFileResponse = {
   status: PlayerTransmissionStatusResponse;
 };
 
+export type PlayerTransmissionAudioTrack = {
+  index: number;
+  streamIndex: number;
+  label: string;
+  language: string;
+  codec: string;
+  channels: number;
+  default: boolean;
+};
+
+export type PlayerTransmissionAudioTracksResponse = {
+  infoHash: string;
+  fileIndex: number;
+  tracks: PlayerTransmissionAudioTrack[];
+};
+
 export type PlayerSubtitleItem = {
   id: number;
   infoHash: string;
@@ -451,11 +467,32 @@ export async function selectPlayerTransmissionFile(
   });
 }
 
+export async function fetchPlayerTransmissionAudioTracks(
+  infoHash: string,
+  fileIndex: number
+): Promise<PlayerTransmissionAudioTrack[]> {
+  const normalized = infoHash.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error("Missing infoHash.");
+  }
+  if (!Number.isInteger(fileIndex) || fileIndex < 0) {
+    throw new Error("Invalid fileIndex.");
+  }
+  const query = new URLSearchParams({
+    infoHash: normalized,
+    fileIndex: String(fileIndex)
+  });
+  const result = await apiRequest<PlayerTransmissionAudioTracksResponse>(
+    `/api/media/player/transmission/audio-tracks?${query.toString()}`
+  );
+  return Array.isArray(result.tracks) ? result.tracks : [];
+}
+
 export function buildPlayerTransmissionStreamURL(
   infoHash: string,
   fileIndex: number,
   cacheBust?: string,
-  options?: { transcode?: boolean; startSeconds?: number; startBytes?: number }
+  options?: { transcode?: boolean; startSeconds?: number; startBytes?: number; audioTrackIndex?: number }
 ): string {
   const query = new URLSearchParams({
     infoHash: infoHash.trim().toLowerCase(),
@@ -471,6 +508,9 @@ export function buildPlayerTransmissionStreamURL(
     }
     if (Number.isFinite(options.startBytes) && (options.startBytes || 0) > 0) {
       query.set("startBytes", String(Math.max(0, Math.floor(options.startBytes || 0))));
+    }
+    if (Number.isInteger(options.audioTrackIndex) && (options.audioTrackIndex || -1) >= 0) {
+      query.set("audioTrack", String(Math.max(0, Math.floor(options.audioTrackIndex || 0))));
     }
   }
   return `${apiBaseURL}/api/media/player/transmission/stream?${query.toString()}`;
