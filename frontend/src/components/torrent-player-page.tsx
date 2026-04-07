@@ -141,6 +141,8 @@ const STATUS_POLL_MS = 2500;
 const BOOTSTRAP_RETRY_MS = 1800;
 const BOOTSTRAP_MAX_WAIT_MS = 120000;
 const PLAYBACK_PROGRESS_KEY_PREFIX = "bitmagnet-player-progress-v1";
+const TRANSCODE_PREBUFFER_DEFAULT_SECONDS = 30;
+const TRANSCODE_PREBUFFER_MAX_WAIT_MS = 45000;
 
 type PlaybackProgressRecord = {
   infoHash: string;
@@ -633,6 +635,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const bootstrapRunTokenRef = useRef(0);
   const pendingResumeTargetRef = useRef<number | null>(null);
   const autoResumeWhenPlayableRef = useRef(false);
+  const prebufferWaitRef = useRef(false);
+  const prebufferStartedAtRef = useRef(0);
 
   const [bootstrapLoading, setBootstrapLoading] = useState(false);
   const [bootstrapped, setBootstrapped] = useState(false);
@@ -682,6 +686,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const [subtitleManagerTab, setSubtitleManagerTab] = useState<string | null>("files");
   const [diagnosticsOpened, setDiagnosticsOpened] = useState(false);
   const [playbackLoading, setPlaybackLoading] = useState(false);
+  const [transcodePrebufferSeconds, setTranscodePrebufferSeconds] = useState(TRANSCODE_PREBUFFER_DEFAULT_SECONDS);
+  const [prebufferBufferedAheadSeconds, setPrebufferBufferedAheadSeconds] = useState(0);
+  const [prebufferWaiting, setPrebufferWaiting] = useState(false);
 
   const [diagnostics, setDiagnostics] = useState<DiagnosticEntry[]>([]);
   const [resumePromptOpened, setResumePromptOpened] = useState(false);
@@ -843,6 +850,21 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     return nativeCurrent;
   }, []);
 
+  const resolveBufferedAheadSeconds = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return 0;
+    const current = Number.isFinite(video.currentTime) ? Math.max(0, video.currentTime) : 0;
+    const ranges = video.buffered;
+    if (!ranges || ranges.length <= 0) return 0;
+    for (let idx = 0; idx < ranges.length; idx += 1) {
+      const start = ranges.start(idx);
+      const end = ranges.end(idx);
+      if (current + 0.01 < start || current - 0.25 > end) continue;
+      return Math.max(0, end - current);
+    }
+    return 0;
+  }, []);
+
   const attemptResumePlayback = useCallback((reason: string, targetSeconds?: number) => {
     const video = videoRef.current;
     if (!video) return;
@@ -885,6 +907,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
   useEffect(() => {
     streamUrlRef.current = streamUrl;
+    prebufferWaitRef.current = false;
+    setPrebufferWaiting(false);
+    setPrebufferBufferedAheadSeconds(0);
   }, [streamUrl]);
 
   useEffect(() => {
@@ -1738,8 +1763,20 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       refreshAudioTracks();
       syncSelectedAudioTrack();
       if (autoplay) {
-        attemptResumePlayback("stream_loadedmetadata", resumeAt > 0 ? resumeAt : undefined);
+        if (activePreferTranscodeRef.current && transcodePrebufferSeconds > 0) {
+          prebufferWaitRef.current = true;
+          setPrebufferWaiting(true);
+          prebufferStartedAtRef.current = Date.now();
+          setPrebufferBufferedAheadSeconds(0);
+          setPlaybackLoading(true);
+          setPlayerStatus("buffering");
+          logInfo("prebuffer", "waiting transcode prebuffer", { targetSeconds: transcodePrebufferSeconds });
+        } else {
+          attemptResumePlayback("stream_loadedmetadata", resumeAt > 0 ? resumeAt : undefined);
+        }
       } else {
+        prebufferWaitRef.current = false;
+        setPrebufferWaiting(false);
         autoResumeWhenPlayableRef.current = false;
         pendingResumeTargetRef.current = null;
         setPlaybackLoading(false);
@@ -1753,7 +1790,37 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     return () => {
       video.removeEventListener("loadedmetadata", onLoaded);
     };
-  }, [attemptResumePlayback, emitTimelineRefreshEvents, refreshAudioTracks, streamUrl, syncSelectedAudioTrack, syncSelectedSubtitleTrack]);
+  }, [attemptResumePlayback, emitTimelineRefreshEvents, logInfo, refreshAudioTracks, streamUrl, syncSelectedAudioTrack, syncSelectedSubtitleTrack, transcodePrebufferSeconds]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const maybeStartPlaybackAfterPrebuffer = () => {
+      if (!prebufferWaitRef.current) return;
+      const bufferedAhead = resolveBufferedAheadSeconds();
+      setPrebufferBufferedAheadSeconds(bufferedAhead);
+      const elapsed = Date.now() - prebufferStartedAtRef.current;
+      if (bufferedAhead >= transcodePrebufferSeconds || elapsed >= TRANSCODE_PREBUFFER_MAX_WAIT_MS) {
+        prebufferWaitRef.current = false;
+        setPrebufferWaiting(false);
+        setPrebufferBufferedAheadSeconds(0);
+        attemptResumePlayback("transcode_prebuffer_ready");
+      }
+    };
+
+    const events: Array<keyof HTMLMediaElementEventMap> = ["progress", "canplay", "canplaythrough", "loadeddata", "timeupdate"];
+    for (const eventName of events) {
+      video.addEventListener(eventName, maybeStartPlaybackAfterPrebuffer);
+    }
+    const timer = window.setInterval(maybeStartPlaybackAfterPrebuffer, 500);
+    return () => {
+      for (const eventName of events) {
+        video.removeEventListener(eventName, maybeStartPlaybackAfterPrebuffer);
+      }
+      window.clearInterval(timer);
+    };
+  }, [attemptResumePlayback, resolveBufferedAheadSeconds, transcodePrebufferSeconds]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -1854,6 +1921,11 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     };
 
     const onCanPlay = () => {
+      if (prebufferWaitRef.current) {
+        setPlaybackLoading(true);
+        setPlayerStatus("buffering");
+        return;
+      }
       if (autoResumeWhenPlayableRef.current) {
         resumeIfPending();
         return;
@@ -1863,6 +1935,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     };
 
     const onPlaying = () => {
+      prebufferWaitRef.current = false;
+      setPrebufferWaiting(false);
+      setPrebufferBufferedAheadSeconds(0);
       autoResumeWhenPlayableRef.current = false;
       pendingResumeTargetRef.current = null;
       streamRetryRef.current = { key: "", attempts: 0 };
@@ -1873,6 +1948,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     };
 
     const onPause = () => {
+      prebufferWaitRef.current = false;
+      setPrebufferWaiting(false);
+      setPrebufferBufferedAheadSeconds(0);
       if (!autoResumeWhenPlayableRef.current) {
         setPlaybackLoading(false);
         setPlayerStatus("ready");
@@ -1881,6 +1959,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     };
 
     const onError = () => {
+      prebufferWaitRef.current = false;
+      setPrebufferWaiting(false);
+      setPrebufferBufferedAheadSeconds(0);
       autoResumeWhenPlayableRef.current = false;
       pendingResumeTargetRef.current = null;
       setPlaybackLoading(false);
@@ -2326,10 +2407,15 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     if (!video) return;
     const isPaused = video.paused;
     if (isPaused) {
+      prebufferWaitRef.current = false;
+      setPrebufferBufferedAheadSeconds(0);
       setIsVideoPaused(false);
       attemptResumePlayback("toggle_play");
       return;
     }
+    prebufferWaitRef.current = false;
+    setPrebufferWaiting(false);
+    setPrebufferBufferedAheadSeconds(0);
     autoResumeWhenPlayableRef.current = false;
     pendingResumeTargetRef.current = null;
     setPlaybackLoading(false);
@@ -2721,6 +2807,11 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
                   <Loader size="sm" />
                   <Text fw={600} size="sm">{t("media.player.waitingPlayableTitle")}</Text>
                   <Text c="dimmed" size="xs">{t("media.player.waitingPlayableHint")}</Text>
+                  {prebufferWaiting ? (
+                    <Text c="dimmed" size="xs">
+                      {t("media.player.prebufferStatus")} {Math.floor(prebufferBufferedAheadSeconds)}/{transcodePrebufferSeconds}s
+                    </Text>
+                  ) : null}
                 </Stack>
               </div>
             ) : null}
@@ -2863,6 +2954,24 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
                                 }}
                               >
                                 {rate.toFixed(rate % 1 === 0 ? 0 : 2).replace(/\.00$/, "")}x
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="torrent-inline-settings-section">
+                          <div className="torrent-inline-settings-title">{t("media.player.prebufferTitle")}</div>
+                          <div className="torrent-inline-rate-grid">
+                            {[0, 10, 20, 30, 45, 60].map((seconds) => (
+                              <button
+                                key={`prebuffer:${seconds}`}
+                                type="button"
+                                className={`torrent-inline-rate-btn${transcodePrebufferSeconds === seconds ? " is-active" : ""}`}
+                                onClick={() => {
+                                  setTranscodePrebufferSeconds(seconds);
+                                }}
+                              >
+                                {seconds <= 0 ? t("media.player.prebufferOff") : `${seconds}s`}
                               </button>
                             ))}
                           </div>
