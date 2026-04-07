@@ -119,34 +119,34 @@ type PlayerSettings struct {
 }
 
 type TransmissionSettings struct {
-	Enabled                      bool   `json:"enabled"`
-	URL                          string `json:"url"`
-	LocalDownloadDir             string `json:"localDownloadDir"`
-	DownloadMappingDirectory     string `json:"downloadMappingDirectory"`
-	Username                     string `json:"username"`
-	Password                     string `json:"password"`
-	InsecureTLS                  bool   `json:"insecureTls"`
-	TimeoutSeconds               int    `json:"timeoutSeconds"`
-	SequentialDownload           bool   `json:"sequentialDownload"`
-	AutoCleanupEnabled           bool   `json:"autoCleanupEnabled"`
-	AutoCleanupSlowTaskEnabled   bool   `json:"autoCleanupSlowTaskEnabled"`
-	AutoCleanupStorageEnabled    bool   `json:"autoCleanupStorageEnabled"`
-	AutoCleanupMaxTasks          int    `json:"autoCleanupMaxTasks"`
-	AutoCleanupMaxTotalSizeGB    int    `json:"autoCleanupMaxTotalSizeGB"`
-	AutoCleanupMinFreeSpaceGB    int    `json:"autoCleanupMinFreeSpaceGB"`
-	AutoCleanupSlowWindowMinutes int    `json:"autoCleanupSlowWindowMinutes"`
-	AutoCleanupSlowRateKbps      int    `json:"autoCleanupSlowRateKbps"`
+	Enabled                      bool     `json:"enabled"`
+	URL                          string   `json:"url"`
+	LocalDownloadDir             string   `json:"localDownloadDir"`
+	DownloadMappingDirectory     string   `json:"downloadMappingDirectory"`
+	DownloadVideoFormats         []string `json:"downloadVideoFormats"`
+	Username                     string   `json:"username"`
+	Password                     string   `json:"password"`
+	InsecureTLS                  bool     `json:"insecureTls"`
+	TimeoutSeconds               int      `json:"timeoutSeconds"`
+	SequentialDownload           bool     `json:"sequentialDownload"`
+	AutoCleanupEnabled           bool     `json:"autoCleanupEnabled"`
+	AutoCleanupSlowTaskEnabled   bool     `json:"autoCleanupSlowTaskEnabled"`
+	AutoCleanupStorageEnabled    bool     `json:"autoCleanupStorageEnabled"`
+	AutoCleanupMaxTasks          int      `json:"autoCleanupMaxTasks"`
+	AutoCleanupMaxTotalSizeGB    int      `json:"autoCleanupMaxTotalSizeGB"`
+	AutoCleanupMinFreeSpaceGB    int      `json:"autoCleanupMinFreeSpaceGB"`
+	AutoCleanupSlowWindowMinutes int      `json:"autoCleanupSlowWindowMinutes"`
+	AutoCleanupSlowRateKbps      int      `json:"autoCleanupSlowRateKbps"`
 }
 
 type FFmpegSettings struct {
-	Enabled                  bool   `json:"enabled"`
-	BinaryPath               string `json:"binaryPath"`
-	Preset                   string `json:"preset"`
-	CRF                      int    `json:"crf"`
-	AudioBitrateKbps         int    `json:"audioBitrateKbps"`
-	Threads                  int    `json:"threads"`
-	ExtraArgs                string `json:"extraArgs"`
-	ForceTranscodeExtensions string `json:"forceTranscodeExtensions"`
+	Enabled          bool   `json:"enabled"`
+	BinaryPath       string `json:"binaryPath"`
+	Preset           string `json:"preset"`
+	CRF              int    `json:"crf"`
+	AudioBitrateKbps int    `json:"audioBitrateKbps"`
+	Threads          int    `json:"threads"`
+	ExtraArgs        string `json:"extraArgs"`
 }
 
 type AuthSettings struct {
@@ -237,23 +237,23 @@ type PlayerSettingsInput struct {
 }
 
 type TransmissionSettingsInput struct {
-	Enabled                      *bool   `json:"enabled"`
-	URL                          *string `json:"url"`
-	LocalDownloadDir             *string `json:"localDownloadDir"`
-	DownloadMappingDirectory     *string `json:"downloadMappingDirectory"`
-	Username                     *string `json:"username"`
-	Password                     *string `json:"password"`
-	InsecureTLS                  *bool   `json:"insecureTls"`
-	TimeoutSeconds               *int    `json:"timeoutSeconds"`
-	SequentialDownload           *bool   `json:"sequentialDownload"`
-	AutoCleanupEnabled           *bool   `json:"autoCleanupEnabled"`
-	AutoCleanupSlowTaskEnabled   *bool   `json:"autoCleanupSlowTaskEnabled"`
-	AutoCleanupStorageEnabled    *bool   `json:"autoCleanupStorageEnabled"`
-	AutoCleanupMaxTasks          *int    `json:"autoCleanupMaxTasks"`
-	AutoCleanupMaxTotalSizeGB    *int    `json:"autoCleanupMaxTotalSizeGB"`
-	AutoCleanupMinFreeSpaceGB    *int    `json:"autoCleanupMinFreeSpaceGB"`
-	AutoCleanupSlowWindowMinutes *int    `json:"autoCleanupSlowWindowMinutes"`
-	AutoCleanupSlowRateKbps      *int    `json:"autoCleanupSlowRateKbps"`
+	URL                          *string   `json:"url"`
+	LocalDownloadDir             *string   `json:"localDownloadDir"`
+	DownloadMappingDirectory     *string   `json:"downloadMappingDirectory"`
+	DownloadVideoFormats         *[]string `json:"downloadVideoFormats"`
+	Username                     *string   `json:"username"`
+	Password                     *string   `json:"password"`
+	InsecureTLS                  *bool     `json:"insecureTls"`
+	TimeoutSeconds               *int      `json:"timeoutSeconds"`
+	SequentialDownload           *bool     `json:"sequentialDownload"`
+	AutoCleanupEnabled           *bool     `json:"autoCleanupEnabled"`
+	AutoCleanupSlowTaskEnabled   *bool     `json:"autoCleanupSlowTaskEnabled"`
+	AutoCleanupStorageEnabled    *bool     `json:"autoCleanupStorageEnabled"`
+	AutoCleanupMaxTasks          *int      `json:"autoCleanupMaxTasks"`
+	AutoCleanupMaxTotalSizeGB    *int      `json:"autoCleanupMaxTotalSizeGB"`
+	AutoCleanupMinFreeSpaceGB    *int      `json:"autoCleanupMinFreeSpaceGB"`
+	AutoCleanupSlowWindowMinutes *int      `json:"autoCleanupSlowWindowMinutes"`
+	AutoCleanupSlowRateKbps      *int      `json:"autoCleanupSlowRateKbps"`
 }
 
 type TransmissionTask struct {
@@ -299,14 +299,12 @@ type TransmissionTaskStats struct {
 }
 
 type FFmpegSettingsInput struct {
-	Enabled                  *bool   `json:"enabled"`
-	BinaryPath               *string `json:"binaryPath"`
-	Preset                   *string `json:"preset"`
-	CRF                      *int    `json:"crf"`
-	AudioBitrateKbps         *int    `json:"audioBitrateKbps"`
-	Threads                  *int    `json:"threads"`
-	ExtraArgs                *string `json:"extraArgs"`
-	ForceTranscodeExtensions *string `json:"forceTranscodeExtensions"`
+	BinaryPath       *string `json:"binaryPath"`
+	Preset           *string `json:"preset"`
+	CRF              *int    `json:"crf"`
+	AudioBitrateKbps *int    `json:"audioBitrateKbps"`
+	Threads          *int    `json:"threads"`
+	ExtraArgs        *string `json:"extraArgs"`
 }
 
 type AuthSettingsInput struct {
@@ -422,10 +420,11 @@ func NewService(p Params) Service {
 			MetadataTimeoutSeconds: 25,
 			HardTimeoutSeconds:     45,
 			Transmission: TransmissionSettings{
-				Enabled:                      false,
+				Enabled:                      true,
 				URL:                          "http://127.0.0.1:9091/transmission/rpc",
 				LocalDownloadDir:             "",
 				DownloadMappingDirectory:     "",
+				DownloadVideoFormats:         []string{".mp4", ".m4v", ".webm", ".mkv", ".mov", ".avi", ".flv", ".ts", ".m2ts", ".mpeg", ".mpg", ".wmv", ".asf", ".3gp", ".3g2", ".f4v", ".rm", ".rmvb", ".vob", ".mxf", ".divx", ".xvid"},
 				Username:                     "",
 				Password:                     "",
 				InsecureTLS:                  false,
@@ -441,14 +440,13 @@ func NewService(p Params) Service {
 				AutoCleanupSlowRateKbps:      100,
 			},
 			FFmpeg: FFmpegSettings{
-				Enabled:                  false,
-				BinaryPath:               "ffmpeg",
-				Preset:                   "veryfast",
-				CRF:                      23,
-				AudioBitrateKbps:         128,
-				Threads:                  0,
-				ExtraArgs:                "",
-				ForceTranscodeExtensions: ".mkv,.avi,.flv,.wmv,.rm,.rmvb,.ts,.m2ts,.mpeg,.mpg,.vob,.mxf,.divx,.xvid,.3gp,.3g2,.f4v",
+				Enabled:          true,
+				BinaryPath:       "ffmpeg",
+				Preset:           "veryfast",
+				CRF:              23,
+				AudioBitrateKbps: 128,
+				Threads:          0,
+				ExtraArgs:        "",
 			},
 		},
 		Auth: AuthSettings{
@@ -1384,11 +1382,6 @@ func applyPlayerUpdate(
 	}
 
 	if input.Transmission != nil {
-		if input.Transmission.Enabled != nil {
-			value := strconv.FormatBool(*input.Transmission.Enabled)
-			updates[runtimeconfig.KeyPlayerTransmissionEnabled] = &value
-			effective.Player.Transmission.Enabled = *input.Transmission.Enabled
-		}
 		if input.Transmission.URL != nil {
 			normalized := strings.TrimSpace(*input.Transmission.URL)
 			if normalized == "" {
@@ -1421,6 +1414,17 @@ func applyPlayerUpdate(
 				updates[runtimeconfig.KeyPlayerTransmissionLocalDownloadDir] = &normalized
 				effective.Player.Transmission.LocalDownloadDir = normalized
 				effective.Player.Transmission.DownloadMappingDirectory = normalized
+			}
+		}
+		if input.Transmission.DownloadVideoFormats != nil {
+			normalized := normalizeVideoFormatExtensions(*input.Transmission.DownloadVideoFormats)
+			if len(normalized) == 0 {
+				updates[runtimeconfig.KeyPlayerTransmissionDownloadVideoFormats] = nil
+				effective.Player.Transmission.DownloadVideoFormats = append([]string(nil), defaults.Transmission.DownloadVideoFormats...)
+			} else {
+				value := strings.Join(normalized, ",")
+				updates[runtimeconfig.KeyPlayerTransmissionDownloadVideoFormats] = &value
+				effective.Player.Transmission.DownloadVideoFormats = normalized
 			}
 		}
 		if input.Transmission.Username != nil {
@@ -1519,11 +1523,6 @@ func applyPlayerUpdate(
 	}
 
 	if input.FFmpeg != nil {
-		if input.FFmpeg.Enabled != nil {
-			value := strconv.FormatBool(*input.FFmpeg.Enabled)
-			updates[runtimeconfig.KeyPlayerFFmpegEnabled] = &value
-			effective.Player.FFmpeg.Enabled = *input.FFmpeg.Enabled
-		}
 		if input.FFmpeg.BinaryPath != nil {
 			normalized := strings.TrimSpace(*input.FFmpeg.BinaryPath)
 			if normalized == "" {
@@ -1578,16 +1577,19 @@ func applyPlayerUpdate(
 				effective.Player.FFmpeg.ExtraArgs = normalized
 			}
 		}
-		if input.FFmpeg.ForceTranscodeExtensions != nil {
-			normalized := normalizeFFmpegExtensionList(*input.FFmpeg.ForceTranscodeExtensions)
-			if normalized == "" {
-				updates[runtimeconfig.KeyPlayerFFmpegForceTranscodeExtensions] = nil
-				effective.Player.FFmpeg.ForceTranscodeExtensions = defaults.FFmpeg.ForceTranscodeExtensions
-			} else {
-				updates[runtimeconfig.KeyPlayerFFmpegForceTranscodeExtensions] = &normalized
-				effective.Player.FFmpeg.ForceTranscodeExtensions = normalized
-			}
-		}
+	}
+
+	// When online playback is enabled, Transmission acceleration and FFmpeg transcoding are required.
+	requiredEnabled := effective.Player.Enabled
+	if effective.Player.Transmission.Enabled != requiredEnabled {
+		value := strconv.FormatBool(requiredEnabled)
+		updates[runtimeconfig.KeyPlayerTransmissionEnabled] = &value
+		effective.Player.Transmission.Enabled = requiredEnabled
+	}
+	if effective.Player.FFmpeg.Enabled != requiredEnabled {
+		value := strconv.FormatBool(requiredEnabled)
+		updates[runtimeconfig.KeyPlayerFFmpegEnabled] = &value
+		effective.Player.FFmpeg.Enabled = requiredEnabled
 	}
 
 	return nil
@@ -1609,6 +1611,14 @@ func applyPlayerMerge(result *Settings, values map[string]string) {
 		normalized := strings.TrimSpace(raw)
 		result.Player.Transmission.LocalDownloadDir = normalized
 		result.Player.Transmission.DownloadMappingDirectory = normalized
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionDownloadVideoFormats]; ok {
+		normalized := normalizeVideoFormatExtensions(strings.FieldsFunc(raw, func(r rune) bool {
+			return r == ',' || r == '\n' || r == '\r' || r == '\t' || r == ';'
+		}))
+		if len(normalized) > 0 {
+			result.Player.Transmission.DownloadVideoFormats = normalized
+		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionUsername]; ok {
 		result.Player.Transmission.Username = strings.TrimSpace(raw)
@@ -1666,12 +1676,6 @@ func applyPlayerMerge(result *Settings, values map[string]string) {
 	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegExtraArgs]; ok {
 		result.Player.FFmpeg.ExtraArgs = strings.TrimSpace(raw)
 	}
-	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegForceTranscodeExtensions]; ok {
-		normalized := normalizeFFmpegExtensionList(raw)
-		if normalized != "" {
-			result.Player.FFmpeg.ForceTranscodeExtensions = normalized
-		}
-	}
 
 	applyInt := func(key string, min, max int, setter func(v int)) {
 		raw, ok := values[key]
@@ -1728,6 +1732,8 @@ func applyPlayerMerge(result *Settings, values map[string]string) {
 	if result.Player.Transmission.LocalDownloadDir == "" && result.Player.Transmission.DownloadMappingDirectory != "" {
 		result.Player.Transmission.LocalDownloadDir = result.Player.Transmission.DownloadMappingDirectory
 	}
+	result.Player.Transmission.Enabled = result.Player.Enabled
+	result.Player.FFmpeg.Enabled = result.Player.Enabled
 }
 
 func applyAuthUpdate(
@@ -1816,6 +1822,7 @@ func settingsToRuntimeValueMap(settings Settings) map[string]string {
 	if mappingDir == "" {
 		mappingDir = strings.TrimSpace(settings.Player.Transmission.LocalDownloadDir)
 	}
+	videoFormats := normalizeVideoFormatExtensions(settings.Player.Transmission.DownloadVideoFormats)
 
 	return map[string]string{
 		runtimeconfig.KeySystemLogLevel: settings.LogLevel,
@@ -1871,6 +1878,7 @@ func settingsToRuntimeValueMap(settings Settings) map[string]string {
 		runtimeconfig.KeyPlayerTransmissionEnabled:                  strconv.FormatBool(settings.Player.Transmission.Enabled),
 		runtimeconfig.KeyPlayerTransmissionURL:                      settings.Player.Transmission.URL,
 		runtimeconfig.KeyPlayerTransmissionLocalDownloadDir:         mappingDir,
+		runtimeconfig.KeyPlayerTransmissionDownloadVideoFormats:     strings.Join(videoFormats, ","),
 		runtimeconfig.KeyPlayerTransmissionUsername:                 settings.Player.Transmission.Username,
 		runtimeconfig.KeyPlayerTransmissionPassword:                 settings.Player.Transmission.Password,
 		runtimeconfig.KeyPlayerTransmissionInsecure:                 strconv.FormatBool(settings.Player.Transmission.InsecureTLS),
@@ -1891,7 +1899,6 @@ func settingsToRuntimeValueMap(settings Settings) map[string]string {
 		runtimeconfig.KeyPlayerFFmpegAudioBitrateKbps:               strconv.Itoa(settings.Player.FFmpeg.AudioBitrateKbps),
 		runtimeconfig.KeyPlayerFFmpegThreads:                        strconv.Itoa(settings.Player.FFmpeg.Threads),
 		runtimeconfig.KeyPlayerFFmpegExtraArgs:                      settings.Player.FFmpeg.ExtraArgs,
-		runtimeconfig.KeyPlayerFFmpegForceTranscodeExtensions:       settings.Player.FFmpeg.ForceTranscodeExtensions,
 
 		runtimeconfig.KeyAuthMembershipEnabled:   strconv.FormatBool(settings.Auth.MembershipEnabled),
 		runtimeconfig.KeyAuthRegistrationEnabled: strconv.FormatBool(settings.Auth.RegistrationEnabled),
@@ -1899,22 +1906,14 @@ func settingsToRuntimeValueMap(settings Settings) map[string]string {
 	}
 }
 
-func normalizeFFmpegExtensionList(raw string) string {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return ""
+func normalizeVideoFormatExtensions(raw []string) []string {
+	if len(raw) == 0 {
+		return nil
 	}
 
-	parts := strings.FieldsFunc(trimmed, func(r rune) bool {
-		return r == ',' || r == '\n' || r == '\r' || r == '\t' || r == ';'
-	})
-	if len(parts) == 0 {
-		return ""
-	}
-
-	seen := make(map[string]struct{}, len(parts))
-	normalized := make([]string, 0, len(parts))
-	for _, part := range parts {
+	seen := make(map[string]struct{}, len(raw))
+	normalized := make([]string, 0, len(raw))
+	for _, part := range raw {
 		item := strings.ToLower(strings.TrimSpace(part))
 		item = strings.TrimPrefix(item, "*")
 		if item == "" {
@@ -1941,10 +1940,10 @@ func normalizeFFmpegExtensionList(raw string) string {
 		normalized = append(normalized, item)
 	}
 	if len(normalized) == 0 {
-		return ""
+		return nil
 	}
 	sort.Strings(normalized)
-	return strings.Join(normalized, ",")
+	return normalized
 }
 
 func namedLogger(logger *zap.Logger, name string) *zap.Logger {

@@ -212,7 +212,6 @@ export type PlayerTransmissionBootstrapResponse = {
   selectedFileIndex: number;
   streamUrl: string;
   transcodeEnabled: boolean;
-  transcodePreferredExtensions: string[];
   status: PlayerTransmissionStatusResponse;
 };
 
@@ -221,7 +220,6 @@ export type PlayerTransmissionSelectFileResponse = {
   selectedFileIndex: number;
   streamUrl: string;
   transcodeEnabled: boolean;
-  transcodePreferredExtensions: string[];
   status: PlayerTransmissionStatusResponse;
 };
 
@@ -492,7 +490,7 @@ export function buildPlayerTransmissionStreamURL(
   infoHash: string,
   fileIndex: number,
   cacheBust?: string,
-  options?: { transcode?: boolean; startSeconds?: number; startBytes?: number; audioTrackIndex?: number }
+  options?: { transcode?: boolean; startSeconds?: number; startBytes?: number; audioTrackIndex?: number; outputResolution?: number }
 ): string {
   const query = new URLSearchParams({
     infoHash: infoHash.trim().toLowerCase(),
@@ -511,6 +509,9 @@ export function buildPlayerTransmissionStreamURL(
     }
     if (Number.isInteger(options.audioTrackIndex) && (options.audioTrackIndex || -1) >= 0) {
       query.set("audioTrack", String(Math.max(0, Math.floor(options.audioTrackIndex || 0))));
+    }
+    if (Number.isInteger(options.outputResolution) && (options.outputResolution || 0) > 0) {
+      query.set("resolution", String(Math.max(1, Math.floor(options.outputResolution || 0))));
     }
   }
   return `${apiBaseURL}/api/media/player/transmission/stream?${query.toString()}`;

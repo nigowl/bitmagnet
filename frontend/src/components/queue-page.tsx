@@ -20,8 +20,7 @@ import {
   Table,
   Text,
   Tooltip,
-  Title,
-  useMantineColorScheme
+  Title
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
@@ -40,6 +39,10 @@ import { useI18n } from "@/languages/provider";
 
 const ECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 const allFilterOption = "__all__";
+const CHART_TEXT_COLOR = "#a9b9d2";
+const CHART_LINE_COLOR = "rgba(169,185,210,0.2)";
+const CHART_TOOLTIP_BACKGROUND = "rgba(23,29,39,0.96)";
+const METRICS_CHART_PALETTE = ["#6cb6ff", "#59c9a5", "#f2cc60", "#ff9233", "#ff7b72"];
 
 const knownQueueNames = [
   "process_torrent",
@@ -103,7 +106,6 @@ type AdminSettingsResponse = {
 };
 
 export function QueuePage() {
-  const { colorScheme } = useMantineColorScheme();
   const { user, isAdmin, loading: authLoading } = useAuth();
   const { openLogin } = useAuthDialog();
   const [loading, setLoading] = useState(false);
@@ -201,15 +203,14 @@ export function QueuePage() {
   }, [normalizeQueueLabel, result?.aggregations.queue]);
 
   const metricsOption = useMemo(() => {
-    const chartTextColor = colorScheme === "dark" ? "#a9b9d2" : "#546072";
-    const chartLineColor = colorScheme === "dark" ? "rgba(169,185,210,0.2)" : "rgba(84,96,114,0.14)";
-    const chartTooltipBackground = colorScheme === "dark" ? "rgba(23,29,39,0.96)" : "rgba(255,255,255,0.96)";
-    const chartPalette = colorScheme === "dark"
-      ? ["#6cb6ff", "#59c9a5", "#f2cc60", "#ff9233", "#ff7b72"]
-      : ["#2f6fed", "#18a374", "#d97706", "#ff7a00", "#dc2626"];
     const latestBuckets = metricsBuckets.slice(-140);
     const bucketLabels = Array.from(new Set(latestBuckets.map((item) => item.createdAtBucket))).sort();
     const labels = bucketLabels.map((value) => value.slice(11, 16));
+    const bucketStatusMap = new Map<string, number>();
+    for (const item of latestBuckets) {
+      const key = `${item.createdAtBucket}@@${item.status}`;
+      bucketStatusMap.set(key, (bucketStatusMap.get(key) || 0) + item.count);
+    }
 
     const series = queueStatuses.map((status) => {
       return {
@@ -219,38 +220,34 @@ export function QueuePage() {
         showSymbol: false,
         stack: "total",
         areaStyle: { opacity: 0.25 },
-        data: bucketLabels.map((bucket) =>
-          latestBuckets
-            .filter((item) => item.createdAtBucket === bucket && item.status === status)
-            .reduce((sum, item) => sum + item.count, 0)
-        )
+        data: bucketLabels.map((bucket) => bucketStatusMap.get(`${bucket}@@${status}`) || 0)
       };
     });
 
     return {
-      color: chartPalette,
+      color: METRICS_CHART_PALETTE,
       tooltip: {
         trigger: "axis",
-        backgroundColor: chartTooltipBackground,
-        borderColor: chartLineColor,
-        textStyle: { color: chartTextColor }
+        backgroundColor: CHART_TOOLTIP_BACKGROUND,
+        borderColor: CHART_LINE_COLOR,
+        textStyle: { color: CHART_TEXT_COLOR }
       },
-      legend: { textStyle: { color: chartTextColor }, bottom: 0 },
+      legend: { textStyle: { color: CHART_TEXT_COLOR }, bottom: 0 },
       grid: { left: 34, right: 16, top: 40, bottom: 64, containLabel: true },
       xAxis: {
         type: "category",
         data: labels,
-        axisLabel: { color: chartTextColor, margin: 12 },
-        axisLine: { lineStyle: { color: chartLineColor } }
+        axisLabel: { color: CHART_TEXT_COLOR, margin: 12 },
+        axisLine: { lineStyle: { color: CHART_LINE_COLOR } }
       },
       yAxis: {
         type: "value",
-        axisLabel: { color: chartTextColor },
-        splitLine: { lineStyle: { color: chartLineColor } }
+        axisLabel: { color: CHART_TEXT_COLOR },
+        splitLine: { lineStyle: { color: CHART_LINE_COLOR } }
       },
       series
     };
-  }, [colorScheme, metricsBuckets, renderStatusLabel]);
+  }, [metricsBuckets, renderStatusLabel]);
 
   const load = useCallback(async () => {
     if (!isAdmin) return;

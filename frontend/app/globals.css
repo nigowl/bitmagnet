@@ -296,46 +296,6 @@ body {
   background: color-mix(in srgb, var(--card-bg) 74%, var(--brand-muted));
 }
 
-.nav-theme-icon-stack {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.nav-theme-icon-stack-sm {
-  width: 15px;
-  height: 15px;
-}
-
-.nav-theme-icon-stack-md {
-  width: 17px;
-  height: 17px;
-}
-
-.nav-theme-icon {
-  position: absolute;
-  transition:
-    opacity 160ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.nav-theme-icon-stack[data-ready="false"] .nav-theme-icon {
-  transition: none;
-}
-
-.nav-theme-icon-stack[data-theme="dark"] .nav-theme-icon-sun,
-.nav-theme-icon-stack[data-theme="light"] .nav-theme-icon-moon {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-.nav-theme-icon-stack[data-theme="dark"] .nav-theme-icon-moon,
-.nav-theme-icon-stack[data-theme="light"] .nav-theme-icon-sun {
-  opacity: 0;
-  transform: translateY(2px) scale(0.92);
-}
-
 .brand-dot {
   width: 10px;
   height: 10px;
@@ -441,6 +401,7 @@ body {
 .mantine-Drawer-header {
   background: transparent;
   border-bottom: 1px solid var(--card-border);
+  margin-bottom: 10px;
 }
 
 .mantine-Modal-body,
@@ -2150,6 +2111,55 @@ body {
   box-shadow: 0 24px 60px rgba(7, 12, 24, 0.45);
 }
 
+.torrent-player-header {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--card-border) 82%, transparent);
+  background:
+    radial-gradient(circle at 8% 6%, color-mix(in srgb, var(--brand-muted) 42%, transparent), transparent 40%),
+    linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 90%, var(--muted-surface)), color-mix(in srgb, var(--card-bg) 84%, #0f172a));
+  align-items: flex-start;
+}
+
+.torrent-player-header-main {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.torrent-player-title-row {
+  row-gap: 6px;
+}
+
+.torrent-player-main-title {
+  line-height: 1.22;
+  letter-spacing: 0.2px;
+  color: color-mix(in srgb, var(--page-text) 92%, #f5f8ff);
+}
+
+.torrent-player-subline {
+  overflow-wrap: anywhere;
+}
+
+.torrent-player-meta-row,
+.torrent-player-tag-row {
+  row-gap: 6px;
+}
+
+.torrent-player-header .mantine-Badge-root[data-variant="light"] {
+  background: color-mix(in srgb, var(--card-bg) 72%, var(--muted-surface));
+  color: color-mix(in srgb, var(--page-text) 86%, #d6e0f5);
+}
+
+.torrent-player-header .mantine-Badge-root[data-variant="outline"] {
+  border-color: color-mix(in srgb, var(--card-border) 86%, transparent);
+  color: color-mix(in srgb, var(--page-text) 88%, #deebff);
+}
+
+.torrent-player-status-row {
+  row-gap: 6px;
+}
+
 .torrent-player-video {
   width: 100%;
   height: 100%;
@@ -2216,7 +2226,7 @@ body {
   background: #000;
 }
 
-.torrent-plyr .plyr__control--overlaid {
+.torrent-player-shell .plyr__control--overlaid {
   background: rgba(8, 12, 18, 0.62);
   border: 1px solid rgba(255, 255, 255, 0.64);
 }
@@ -2226,37 +2236,39 @@ body {
   display: none !important;
 }
 
-.torrent-plyr .plyr__captions {
-  padding-bottom: 54px;
+.torrent-player-shell .plyr__captions {
+  padding-bottom: 0;
+  bottom: calc(54px + var(--torrent-subtitle-vertical-percent, 0%));
+  transition: bottom 140ms ease;
 }
 
-.torrent-plyr .plyr__menu__container {
+.torrent-player-shell .plyr__menu__container {
   border-radius: 12px;
   border: 1px solid rgba(142, 162, 208, 0.22);
 }
 
-.torrent-plyr .plyr__captions {
+.torrent-player-shell .plyr__captions {
   font-size: calc(1em * var(--torrent-subtitle-scale, 1));
   line-height: 1.45;
   color: var(--torrent-subtitle-color, #f6f9ff);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
 }
 
-.torrent-plyr .plyr__captions .plyr__caption {
+.torrent-player-shell .plyr__captions .plyr__caption {
   font-size: calc(1em * var(--torrent-subtitle-scale, 1)) !important;
   line-height: 1.45 !important;
   color: var(--torrent-subtitle-color, #f6f9ff) !important;
   background-color: var(--torrent-subtitle-bg, rgba(0, 0, 0, 0.55)) !important;
 }
 
-.torrent-plyr .plyr__captions .plyr__caption *,
-.torrent-plyr .plyr__captions span {
+.torrent-player-shell .plyr__captions .plyr__caption *,
+.torrent-player-shell .plyr__captions span {
   color: inherit !important;
   font-size: inherit !important;
   line-height: inherit !important;
 }
 
-.torrent-plyr video::cue {
+.torrent-player-shell video::cue {
   font-size: calc(1em * var(--torrent-subtitle-scale, 1));
   line-height: 1.45;
   color: var(--torrent-subtitle-color, #f6f9ff);

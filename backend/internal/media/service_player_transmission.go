@@ -133,8 +133,8 @@ func (s *service) PlayerTransmissionBootstrap(
 		return PlayerTransmissionBootstrapResult{}, ErrPlayerFileNotFound
 	}
 
-	selected := playerTransmissionDefaultFileIndex(snapshot.Files)
-	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, selected, len(snapshot.Files)); err != nil {
+	selected := playerTransmissionDefaultFileIndex(snapshot.Files, settings.TransmissionDownloadVideoFormats)
+	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, selected, snapshot.Files); err != nil {
 		return PlayerTransmissionBootstrapResult{}, err
 	}
 	_ = s.playerTransmissionTryStart(ctx, settings, infoHash)
@@ -145,13 +145,12 @@ func (s *service) PlayerTransmissionBootstrap(
 	}
 
 	return PlayerTransmissionBootstrapResult{
-		InfoHash:                     infoHash,
-		TorrentID:                    status.TorrentID,
-		SelectedFileIndex:            status.SelectedFileIndex,
-		StreamURL:                    playerTransmissionBuildStreamURL(infoHash, status.SelectedFileIndex),
-		TranscodeEnabled:             settings.FFmpeg.Enabled,
-		TranscodePreferredExtensions: append([]string(nil), settings.FFmpeg.ForceTranscodeExtensions...),
-		Status:                       status,
+		InfoHash:          infoHash,
+		TorrentID:         status.TorrentID,
+		SelectedFileIndex: status.SelectedFileIndex,
+		StreamURL:         playerTransmissionBuildStreamURL(infoHash, status.SelectedFileIndex),
+		TranscodeEnabled:  true,
+		Status:            status,
 	}, nil
 }
 
@@ -172,7 +171,7 @@ func (s *service) PlayerTransmissionSelectFile(
 		return PlayerTransmissionSelectFileResult{}, ErrPlayerFileNotFound
 	}
 
-	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, input.FileIndex, len(snapshot.Files)); err != nil {
+	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, input.FileIndex, snapshot.Files); err != nil {
 		return PlayerTransmissionSelectFileResult{}, err
 	}
 	_ = s.playerTransmissionTryStart(ctx, settings, infoHash)
@@ -183,12 +182,11 @@ func (s *service) PlayerTransmissionSelectFile(
 	}
 
 	return PlayerTransmissionSelectFileResult{
-		InfoHash:                     infoHash,
-		SelectedFileIndex:            status.SelectedFileIndex,
-		StreamURL:                    playerTransmissionBuildStreamURL(infoHash, status.SelectedFileIndex),
-		TranscodeEnabled:             settings.FFmpeg.Enabled,
-		TranscodePreferredExtensions: append([]string(nil), settings.FFmpeg.ForceTranscodeExtensions...),
-		Status:                       status,
+		InfoHash:          infoHash,
+		SelectedFileIndex: status.SelectedFileIndex,
+		StreamURL:         playerTransmissionBuildStreamURL(infoHash, status.SelectedFileIndex),
+		TranscodeEnabled:  true,
+		Status:            status,
 	}, nil
 }
 
@@ -199,12 +197,9 @@ func (s *service) PlayerTransmissionAudioTracks(
 	if input.FileIndex < 0 {
 		return PlayerTransmissionAudioTracksResult{}, ErrPlayerFileNotFound
 	}
-	_, _, _, settings, err := s.loadPlayerTransmissionBase(ctx, input.InfoHash)
+	_, _, _, _, err := s.loadPlayerTransmissionBase(ctx, input.InfoHash)
 	if err != nil {
 		return PlayerTransmissionAudioTracksResult{}, err
-	}
-	if !settings.FFmpeg.Enabled {
-		return PlayerTransmissionAudioTracksResult{}, ErrPlayerTranscodeDisabled
 	}
 
 	resolveResult, err := s.PlayerTransmissionResolveStream(ctx, PlayerTransmissionResolveStreamInput{
@@ -331,6 +326,7 @@ func (s *service) PlayerTransmissionResolveStream(
 	if input.AudioTrackIndex < 0 {
 		input.AudioTrackIndex = -1
 	}
+	input.OutputResolution = normalizePlayerOutputResolution(input.OutputResolution)
 
 	snapshot, err := s.playerTransmissionEnsureTorrent(ctx, settings, infoHash, torrent.MagnetURI())
 	if err != nil {
@@ -340,7 +336,7 @@ func (s *service) PlayerTransmissionResolveStream(
 		return PlayerTransmissionResolveStreamResult{}, ErrPlayerFileNotFound
 	}
 
-	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, input.FileIndex, len(snapshot.Files)); err != nil {
+	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, input.FileIndex, snapshot.Files); err != nil {
 		return PlayerTransmissionResolveStreamResult{}, err
 	}
 	_ = s.playerTransmissionTryStart(ctx, settings, infoHash)
@@ -441,19 +437,28 @@ func (s *service) PlayerTransmissionResolveStream(
 		TotalLength: fileLength,
 		Partial:     partial,
 		Transcode: PlayerFFmpegTranscodeSettings{
-			Enabled:                  input.PreferTranscode && settings.FFmpeg.Enabled,
-			BinaryPath:               settings.FFmpeg.BinaryPath,
-			Preset:                   settings.FFmpeg.Preset,
-			CRF:                      settings.FFmpeg.CRF,
-			AudioBitrateKbps:         settings.FFmpeg.AudioBitrateKbps,
-			Threads:                  settings.FFmpeg.Threads,
-			ExtraArgs:                settings.FFmpeg.ExtraArgs,
-			ForceTranscodeExtensions: append([]string(nil), settings.FFmpeg.ForceTranscodeExtensions...),
+			Enabled:          true,
+			BinaryPath:       settings.FFmpeg.BinaryPath,
+			Preset:           settings.FFmpeg.Preset,
+			CRF:              settings.FFmpeg.CRF,
+			AudioBitrateKbps: settings.FFmpeg.AudioBitrateKbps,
+			Threads:          settings.FFmpeg.Threads,
+			ExtraArgs:        settings.FFmpeg.ExtraArgs,
 		},
-		AudioTrackIndex: input.AudioTrackIndex,
-		StartSeconds:    input.StartSeconds,
-		StartBytes:      input.StartBytes,
+		AudioTrackIndex:  input.AudioTrackIndex,
+		OutputResolution: input.OutputResolution,
+		StartSeconds:     input.StartSeconds,
+		StartBytes:       input.StartBytes,
 	}, nil
+}
+
+func normalizePlayerOutputResolution(raw int) int {
+	switch raw {
+	case 480, 720, 1080, 2160:
+		return raw
+	default:
+		return 0
+	}
 }
 
 type playerFFprobeStream struct {
@@ -767,15 +772,33 @@ func (s *service) playerTransmissionSetOnlyWantedFile(
 	settings playerBootstrapSettings,
 	infoHash string,
 	fileIndex int,
-	fileCount int,
+	files []playerTransmissionRPCFile,
 ) error {
+	fileCount := len(files)
 	if fileIndex < 0 || fileIndex >= fileCount {
 		return ErrPlayerFileNotFound
 	}
 
-	unwanted := make([]int, 0, fileCount-1)
-	for idx := 0; idx < fileCount; idx++ {
+	wantedSet := make(map[int]struct{}, fileCount)
+	wantedSet[fileIndex] = struct{}{}
+	allowedVideoExtensions := playerTransmissionAllowedVideoExtensions(settings.TransmissionDownloadVideoFormats)
+	for idx, file := range files {
 		if idx == fileIndex {
+			continue
+		}
+		if playerTransmissionIsVideoFile(file.Name, allowedVideoExtensions) {
+			wantedSet[idx] = struct{}{}
+		}
+	}
+	wanted := make([]int, 0, len(wantedSet))
+	priorityNormal := make([]int, 0, len(wantedSet))
+	unwanted := make([]int, 0, fileCount)
+	for idx := 0; idx < fileCount; idx++ {
+		if _, ok := wantedSet[idx]; ok {
+			wanted = append(wanted, idx)
+			if idx != fileIndex {
+				priorityNormal = append(priorityNormal, idx)
+			}
 			continue
 		}
 		unwanted = append(unwanted, idx)
@@ -785,10 +808,10 @@ func (s *service) playerTransmissionSetOnlyWantedFile(
 		Method: "torrent-set",
 		Arguments: playerTransmissionRPCArguments{
 			IDs:            []any{infoHash},
-			FilesWanted:    []int{fileIndex},
+			FilesWanted:    wanted,
 			FilesUnwanted:  unwanted,
 			PriorityHigh:   []int{fileIndex},
-			PriorityNormal: []int{},
+			PriorityNormal: priorityNormal,
 			PriorityLow:    []int{},
 			Sequential:     boolPtr(settings.TransmissionSequential),
 		},
@@ -1201,12 +1224,13 @@ func (s *service) playerTransmissionLoadStatus(
 	if err != nil {
 		return PlayerTransmissionStatusResult{}, err
 	}
-	return playerTransmissionBuildStatus(infoHash, snapshot), nil
+	return playerTransmissionBuildStatus(infoHash, snapshot, settings.TransmissionDownloadVideoFormats), nil
 }
 
 func playerTransmissionBuildStatus(
 	infoHash string,
 	snapshot *playerTransmissionRPCTorrent,
+	allowedVideoExtensions []string,
 ) PlayerTransmissionStatusResult {
 	files := make([]PlayerTransmissionFile, 0, len(snapshot.Files))
 	selectedIndex := -1
@@ -1222,7 +1246,7 @@ func playerTransmissionBuildStatus(
 			BytesCompleted: stats.BytesCompleted,
 			Wanted:         stats.Wanted,
 			Priority:       stats.Priority,
-			IsVideo:        playerTransmissionIsVideoFile(file.Name),
+			IsVideo:        playerTransmissionIsVideoFile(file.Name, allowedVideoExtensions),
 		}
 		files = append(files, item)
 		if selectedIndex < 0 && item.Wanted {
@@ -1230,7 +1254,7 @@ func playerTransmissionBuildStatus(
 		}
 	}
 	if selectedIndex < 0 && len(snapshot.Files) > 0 {
-		selectedIndex = playerTransmissionDefaultFileIndex(snapshot.Files)
+		selectedIndex = playerTransmissionDefaultFileIndex(snapshot.Files, allowedVideoExtensions)
 	}
 
 	selectedBytes := int64(0)
@@ -1297,26 +1321,33 @@ func playerTransmissionBuildStreamURL(infoHash string, fileIndex int) string {
 	return "/api/media/player/transmission/stream?" + query.Encode()
 }
 
-func playerTransmissionDefaultFileIndex(files []playerTransmissionRPCFile) int {
+func playerTransmissionDefaultFileIndex(files []playerTransmissionRPCFile, allowedVideoExtensions []string) int {
 	if len(files) == 0 {
 		return -1
 	}
 	for idx, file := range files {
-		if playerTransmissionIsVideoFile(file.Name) {
+		if playerTransmissionIsVideoFile(file.Name, allowedVideoExtensions) {
 			return idx
 		}
 	}
 	return 0
 }
 
-func playerTransmissionIsVideoFile(name string) bool {
+func playerTransmissionIsVideoFile(name string, allowedVideoExtensions []string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(name))
-	for _, ext := range playerVideoExtensions {
+	for _, ext := range playerTransmissionAllowedVideoExtensions(allowedVideoExtensions) {
 		if strings.HasSuffix(normalized, ext) {
 			return true
 		}
 	}
 	return false
+}
+
+func playerTransmissionAllowedVideoExtensions(configured []string) []string {
+	if len(configured) == 0 {
+		return playerVideoExtensions
+	}
+	return configured
 }
 
 func playerTransmissionStatusLabel(value int) string {

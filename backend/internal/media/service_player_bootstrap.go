@@ -21,6 +21,7 @@ const defaultPlayerEnabled = true
 const defaultPlayerTransmissionRPCURL = "http://127.0.0.1:9091/transmission/rpc"
 const defaultPlayerTransmissionTimeoutSeconds = 8
 const defaultPlayerTransmissionSequentialDownload = true
+const defaultPlayerTransmissionDownloadVideoFormats = ".mp4,.m4v,.webm,.mkv,.mov,.avi,.flv,.ts,.m2ts,.mpeg,.mpg,.wmv,.asf,.3gp,.3g2,.f4v,.rm,.rmvb,.vob,.mxf,.divx,.xvid"
 const defaultPlayerTransmissionCleanupEnabled = false
 const defaultPlayerTransmissionCleanupSlowTaskEnabled = true
 const defaultPlayerTransmissionCleanupStorageEnabled = true
@@ -34,7 +35,6 @@ const defaultPlayerFFmpegPreset = "veryfast"
 const defaultPlayerFFmpegCRF = 23
 const defaultPlayerFFmpegAudioBitrateKbps = 128
 const defaultPlayerFFmpegThreads = 0
-const defaultPlayerFFmpegForceTranscodeExtensions = ".mkv,.avi,.flv,.wmv,.rm,.rmvb,.ts,.m2ts,.mpeg,.mpg,.vob,.mxf,.divx,.xvid,.3gp,.3g2,.f4v"
 const transmissionSessionHeader = "X-Transmission-Session-Id"
 
 type playerBootstrapSettings struct {
@@ -49,6 +49,7 @@ type playerBootstrapSettings struct {
 	TransmissionInsecureTLS              bool
 	TransmissionTimeoutSeconds           int
 	TransmissionSequential               bool
+	TransmissionDownloadVideoFormats     []string
 	TransmissionCleanupEnabled           bool
 	TransmissionCleanupSlowTaskEnabled   bool
 	TransmissionCleanupStorageEnabled    bool
@@ -70,7 +71,7 @@ func (s *service) loadPlayerBootstrapSettings(ctx context.Context, db *gorm.DB) 
 		PlayerEnabled:                        defaultPlayerEnabled,
 		MetadataTimeoutSeconds:               defaultPlayerMetadataTimeoutSeconds,
 		HardTimeoutSeconds:                   defaultPlayerHardTimeoutSeconds,
-		TransmissionEnabled:                  false,
+		TransmissionEnabled:                  true,
 		TransmissionURL:                      defaultPlayerTransmissionRPCURL,
 		TransmissionLocalDownloadDir:         "",
 		TransmissionUsername:                 "",
@@ -78,6 +79,7 @@ func (s *service) loadPlayerBootstrapSettings(ctx context.Context, db *gorm.DB) 
 		TransmissionInsecureTLS:              false,
 		TransmissionTimeoutSeconds:           defaultPlayerTransmissionTimeoutSeconds,
 		TransmissionSequential:               defaultPlayerTransmissionSequentialDownload,
+		TransmissionDownloadVideoFormats:     parsePlayerExtensionList(defaultPlayerTransmissionDownloadVideoFormats),
 		TransmissionCleanupEnabled:           defaultPlayerTransmissionCleanupEnabled,
 		TransmissionCleanupSlowTaskEnabled:   defaultPlayerTransmissionCleanupSlowTaskEnabled,
 		TransmissionCleanupStorageEnabled:    defaultPlayerTransmissionCleanupStorageEnabled,
@@ -87,14 +89,13 @@ func (s *service) loadPlayerBootstrapSettings(ctx context.Context, db *gorm.DB) 
 		TransmissionCleanupSlowWindowMinutes: defaultPlayerTransmissionCleanupSlowWindowMinutes,
 		TransmissionCleanupSlowRateKbps:      defaultPlayerTransmissionCleanupSlowRateKbps,
 		FFmpeg: PlayerFFmpegTranscodeSettings{
-			Enabled:                  false,
-			BinaryPath:               defaultPlayerFFmpegBinaryPath,
-			Preset:                   defaultPlayerFFmpegPreset,
-			CRF:                      defaultPlayerFFmpegCRF,
-			AudioBitrateKbps:         defaultPlayerFFmpegAudioBitrateKbps,
-			Threads:                  defaultPlayerFFmpegThreads,
-			ExtraArgs:                "",
-			ForceTranscodeExtensions: parsePlayerFFmpegExtensionList(defaultPlayerFFmpegForceTranscodeExtensions),
+			Enabled:          true,
+			BinaryPath:       defaultPlayerFFmpegBinaryPath,
+			Preset:           defaultPlayerFFmpegPreset,
+			CRF:              defaultPlayerFFmpegCRF,
+			AudioBitrateKbps: defaultPlayerFFmpegAudioBitrateKbps,
+			Threads:          defaultPlayerFFmpegThreads,
+			ExtraArgs:        "",
 		},
 	}
 
@@ -153,6 +154,11 @@ func (s *service) loadPlayerBootstrapSettings(ctx context.Context, db *gorm.DB) 
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionSequential]; ok {
 		if parsed, parseErr := strconv.ParseBool(strings.TrimSpace(raw)); parseErr == nil {
 			settings.TransmissionSequential = parsed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionDownloadVideoFormats]; ok {
+		if formats := parsePlayerExtensionList(raw); len(formats) > 0 {
+			settings.TransmissionDownloadVideoFormats = formats
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupEnabled]; ok {
@@ -228,16 +234,16 @@ func (s *service) loadPlayerBootstrapSettings(ctx context.Context, db *gorm.DB) 
 	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegExtraArgs]; ok {
 		settings.FFmpeg.ExtraArgs = strings.TrimSpace(raw)
 	}
-	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegForceTranscodeExtensions]; ok {
-		if extensions := parsePlayerFFmpegExtensionList(raw); len(extensions) > 0 {
-			settings.FFmpeg.ForceTranscodeExtensions = extensions
-		}
+	settings.TransmissionEnabled = settings.PlayerEnabled
+	settings.FFmpeg.Enabled = settings.PlayerEnabled
+	if len(settings.TransmissionDownloadVideoFormats) == 0 {
+		settings.TransmissionDownloadVideoFormats = parsePlayerExtensionList(defaultPlayerTransmissionDownloadVideoFormats)
 	}
 
 	return settings, nil
 }
 
-func parsePlayerFFmpegExtensionList(raw string) []string {
+func parsePlayerExtensionList(raw string) []string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return nil

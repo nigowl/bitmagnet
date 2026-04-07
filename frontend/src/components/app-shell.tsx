@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import {
-  ActionIcon,
   AppShell,
   Avatar,
   Burger,
@@ -16,11 +15,9 @@ import {
   PasswordInput,
   SegmentedControl,
   Stack,
-  Text,
-  useComputedColorScheme,
-  useMantineColorScheme
+  Text
 } from "@mantine/core";
-import { useDisclosure, useMounted } from "@mantine/hooks";
+import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import {
   CircleUserRound,
@@ -32,11 +29,9 @@ import {
   ListOrdered,
   LogIn,
   LogOut,
-  MoonStar,
   Radar,
   ScrollText,
   Settings,
-  SunMedium,
   Tv,
   Users,
   UserPlus,
@@ -93,9 +88,6 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
   const [opened, { toggle, close }] = useDisclosure(false);
   const [passwordModalOpened, { open: openPasswordModal, close: closePasswordModal }] = useDisclosure(false);
   const { t, locale, setLocale } = useI18n();
-  const { setColorScheme } = useMantineColorScheme();
-  const computedColorScheme = useComputedColorScheme("light", { getInitialValueInEffect: true });
-  const themeReady = useMounted();
   const { user, isAdmin, logout, changePassword, loading: authLoading, accessSettings } = useAuth();
   const { openLogin, openRegister } = useAuthDialog();
   const [oldPassword, setOldPassword] = useState("");
@@ -119,10 +111,6 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
     router.replace(`/login?redirect=${encodeURIComponent(pathname || "/")}`);
   }, [accessSettings.membershipEnabled, authLoading, pathname, router, user]);
 
-  const toggleTheme = () => {
-    setColorScheme(computedColorScheme === "dark" ? "light" : "dark");
-  };
-
   const submitPasswordChange = async () => {
     if (newPassword !== confirmPassword) {
       notifications.show({ color: "yellow", message: t("auth.passwordMismatch") });
@@ -143,18 +131,6 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
       setSavingPassword(false);
     }
   };
-  const resolvedColorScheme = themeReady ? computedColorScheme : "light";
-  const renderThemeIcon = (variant: "sm" | "md") => (
-    <span
-      className={variant === "sm" ? "nav-theme-icon-stack nav-theme-icon-stack-sm" : "nav-theme-icon-stack nav-theme-icon-stack-md"}
-      data-ready={themeReady ? "true" : "false"}
-      data-theme={resolvedColorScheme}
-      aria-hidden="true"
-    >
-      <SunMedium size={variant === "sm" ? 15 : 17} className="nav-theme-icon nav-theme-icon-sun" />
-      <MoonStar size={variant === "sm" ? 15 : 17} className="nav-theme-icon nav-theme-icon-moon" />
-    </span>
-  );
   const isAuthStandaloneRoute = isRouteActive(pathname, "/login") || isRouteActive(pathname, "/register");
 
   if (isAuthStandaloneRoute) {
@@ -210,17 +186,6 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
                   { label: "中文", value: "zh" }
                 ]}
               />
-
-              <ActionIcon
-                className="app-icon-btn nav-utility-button"
-                variant="default"
-                radius="xl"
-                size={38}
-                onClick={toggleTheme}
-                aria-label={resolvedColorScheme === "dark" ? t("nav.themeLight") : t("nav.themeDark")}
-              >
-                {renderThemeIcon("md")}
-              </ActionIcon>
 
               <Menu shadow="md" width={220} position="bottom-end">
                 <Menu.Target>
@@ -289,26 +254,16 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
 
       <Drawer opened={opened} onClose={close} title="bitmagnet" padding="md" size="xs" hiddenFrom="lg">
         <Stack gap="md">
-          <Group grow>
-            <SegmentedControl
-              size="xs"
-              radius="xl"
-              value={locale}
-              onChange={(value) => setLocale(value as "en" | "zh")}
-              data={[
-                { label: "EN", value: "en" },
-                { label: "中文", value: "zh" }
-              ]}
-            />
-            <Button
-              variant="default"
-              radius="xl"
-              leftSection={renderThemeIcon("sm")}
-              onClick={toggleTheme}
-            >
-              {resolvedColorScheme === "dark" ? t("nav.themeLight") : t("nav.themeDark")}
-            </Button>
-          </Group>
+          <SegmentedControl
+            size="xs"
+            radius="xl"
+            value={locale}
+            onChange={(value) => setLocale(value as "en" | "zh")}
+            data={[
+              { label: "EN", value: "en" },
+              { label: "中文", value: "zh" }
+            ]}
+          />
 
           <Text c="dimmed" size="sm">
             {t("nav.main")}

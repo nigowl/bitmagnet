@@ -28,6 +28,7 @@ const (
 	KeyPlayerTransmissionInsecure                 = "system.player.transmission.insecure_tls"
 	KeyPlayerTransmissionTimeoutSec               = "system.player.transmission.timeout_seconds"
 	KeyPlayerTransmissionSequential               = "system.player.transmission.sequential_download"
+	KeyPlayerTransmissionDownloadVideoFormats     = "system.player.transmission.download_video_formats"
 	KeyPlayerTransmissionCleanupEnabled           = "system.player.transmission.cleanup.enabled"
 	KeyPlayerTransmissionCleanupSlowTaskEnabled   = "system.player.transmission.cleanup.slow_task.enabled"
 	KeyPlayerTransmissionCleanupStorageEnabled    = "system.player.transmission.cleanup.storage.enabled"
@@ -44,7 +45,6 @@ const (
 	KeyPlayerFFmpegAudioBitrateKbps               = "system.player.ffmpeg.audio_bitrate_kbps"
 	KeyPlayerFFmpegThreads                        = "system.player.ffmpeg.threads"
 	KeyPlayerFFmpegExtraArgs                      = "system.player.ffmpeg.extra_args"
-	KeyPlayerFFmpegForceTranscodeExtensions       = "system.player.ffmpeg.force_transcode_extensions"
 
 	KeyAuthMembershipEnabled   = "system.auth.membership.enabled"
 	KeyAuthRegistrationEnabled = "system.auth.registration.enabled"
@@ -183,6 +183,7 @@ func PlayerKeys() []string {
 		KeyPlayerTransmissionInsecure,
 		KeyPlayerTransmissionTimeoutSec,
 		KeyPlayerTransmissionSequential,
+		KeyPlayerTransmissionDownloadVideoFormats,
 		KeyPlayerTransmissionCleanupEnabled,
 		KeyPlayerTransmissionCleanupSlowTaskEnabled,
 		KeyPlayerTransmissionCleanupStorageEnabled,
@@ -198,7 +199,6 @@ func PlayerKeys() []string {
 		KeyPlayerFFmpegAudioBitrateKbps,
 		KeyPlayerFFmpegThreads,
 		KeyPlayerFFmpegExtraArgs,
-		KeyPlayerFFmpegForceTranscodeExtensions,
 	}
 }
 

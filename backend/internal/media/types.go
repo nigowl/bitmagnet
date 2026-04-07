@@ -200,13 +200,12 @@ type PlayerTransmissionBootstrapInput struct {
 }
 
 type PlayerTransmissionBootstrapResult struct {
-	InfoHash                     string                         `json:"infoHash"`
-	TorrentID                    int64                          `json:"torrentId"`
-	SelectedFileIndex            int                            `json:"selectedFileIndex"`
-	StreamURL                    string                         `json:"streamUrl"`
-	TranscodeEnabled             bool                           `json:"transcodeEnabled"`
-	TranscodePreferredExtensions []string                       `json:"transcodePreferredExtensions"`
-	Status                       PlayerTransmissionStatusResult `json:"status"`
+	InfoHash          string                         `json:"infoHash"`
+	TorrentID         int64                          `json:"torrentId"`
+	SelectedFileIndex int                            `json:"selectedFileIndex"`
+	StreamURL         string                         `json:"streamUrl"`
+	TranscodeEnabled  bool                           `json:"transcodeEnabled"`
+	Status            PlayerTransmissionStatusResult `json:"status"`
 }
 
 type PlayerTransmissionSelectFileInput struct {
@@ -215,12 +214,11 @@ type PlayerTransmissionSelectFileInput struct {
 }
 
 type PlayerTransmissionSelectFileResult struct {
-	InfoHash                     string                         `json:"infoHash"`
-	SelectedFileIndex            int                            `json:"selectedFileIndex"`
-	StreamURL                    string                         `json:"streamUrl"`
-	TranscodeEnabled             bool                           `json:"transcodeEnabled"`
-	TranscodePreferredExtensions []string                       `json:"transcodePreferredExtensions"`
-	Status                       PlayerTransmissionStatusResult `json:"status"`
+	InfoHash          string                         `json:"infoHash"`
+	SelectedFileIndex int                            `json:"selectedFileIndex"`
+	StreamURL         string                         `json:"streamUrl"`
+	TranscodeEnabled  bool                           `json:"transcodeEnabled"`
+	Status            PlayerTransmissionStatusResult `json:"status"`
 }
 
 type PlayerTransmissionAudioTracksInput struct {
@@ -289,14 +287,13 @@ type PlayerSubtitleContentResult struct {
 }
 
 type PlayerFFmpegTranscodeSettings struct {
-	Enabled                  bool     `json:"enabled"`
-	BinaryPath               string   `json:"binaryPath"`
-	Preset                   string   `json:"preset"`
-	CRF                      int      `json:"crf"`
-	AudioBitrateKbps         int      `json:"audioBitrateKbps"`
-	Threads                  int      `json:"threads"`
-	ExtraArgs                string   `json:"extraArgs"`
-	ForceTranscodeExtensions []string `json:"forceTranscodeExtensions,omitempty"`
+	Enabled          bool   `json:"enabled"`
+	BinaryPath       string `json:"binaryPath"`
+	Preset           string `json:"preset"`
+	CRF              int    `json:"crf"`
+	AudioBitrateKbps int    `json:"audioBitrateKbps"`
+	Threads          int    `json:"threads"`
+	ExtraArgs        string `json:"extraArgs"`
 }
 
 type PlayerTransmissionStatusInput struct {
@@ -358,26 +355,28 @@ type PlayerTransmissionFile struct {
 }
 
 type PlayerTransmissionResolveStreamInput struct {
-	InfoHash        string  `json:"infoHash"`
-	FileIndex       int     `json:"fileIndex"`
-	RangeHeader     string  `json:"rangeHeader"`
-	PreferTranscode bool    `json:"preferTranscode"`
-	AudioTrackIndex int     `json:"audioTrackIndex"`
-	StartSeconds    float64 `json:"startSeconds"`
-	StartBytes      int64   `json:"startBytes"`
+	InfoHash         string  `json:"infoHash"`
+	FileIndex        int     `json:"fileIndex"`
+	RangeHeader      string  `json:"rangeHeader"`
+	PreferTranscode  bool    `json:"preferTranscode"`
+	AudioTrackIndex  int     `json:"audioTrackIndex"`
+	OutputResolution int     `json:"outputResolution"`
+	StartSeconds     float64 `json:"startSeconds"`
+	StartBytes       int64   `json:"startBytes"`
 }
 
 type PlayerTransmissionResolveStreamResult struct {
-	FilePath        string                        `json:"filePath"`
-	ContentType     string                        `json:"contentType"`
-	RangeStart      int64                         `json:"rangeStart"`
-	RangeEnd        int64                         `json:"rangeEnd"`
-	TotalLength     int64                         `json:"totalLength"`
-	Partial         bool                          `json:"partial"`
-	Transcode       PlayerFFmpegTranscodeSettings `json:"transcode"`
-	AudioTrackIndex int                           `json:"audioTrackIndex"`
-	StartSeconds    float64                       `json:"startSeconds"`
-	StartBytes      int64                         `json:"startBytes"`
+	FilePath         string                        `json:"filePath"`
+	ContentType      string                        `json:"contentType"`
+	RangeStart       int64                         `json:"rangeStart"`
+	RangeEnd         int64                         `json:"rangeEnd"`
+	TotalLength      int64                         `json:"totalLength"`
+	Partial          bool                          `json:"partial"`
+	Transcode        PlayerFFmpegTranscodeSettings `json:"transcode"`
+	AudioTrackIndex  int                           `json:"audioTrackIndex"`
+	OutputResolution int                           `json:"outputResolution"`
+	StartSeconds     float64                       `json:"startSeconds"`
+	StartBytes       int64                         `json:"startBytes"`
 }
 
 type CoverResult struct {

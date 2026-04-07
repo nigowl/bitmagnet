@@ -251,6 +251,7 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 	fileIndex := parseInt(c.Query("fileIndex"), -1)
 	preferTranscode := true
 	audioTrackIndex := parseInt(c.Query("audioTrack"), -1)
+	outputResolution := parseInt(c.Query("resolution"), 0)
 	startSeconds := parseFloat(c.Query("start"), 0)
 	startBytes := parseInt64(c.Query("startBytes"), 0)
 	startedAt := time.Now()
@@ -265,6 +266,7 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 		zap.Int("file_index", fileIndex),
 		zap.Bool("prefer_transcode", preferTranscode),
 		zap.Int("audio_track_index", audioTrackIndex),
+		zap.Int("output_resolution", outputResolution),
 		zap.Float64("start_seconds", startSeconds),
 		zap.Int64("start_bytes", startBytes),
 		zap.String("range", c.GetHeader("Range")),
@@ -303,13 +305,14 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 	}()
 
 	resolveResult, err := b.service.PlayerTransmissionResolveStream(c.Request.Context(), media.PlayerTransmissionResolveStreamInput{
-		InfoHash:        infoHash,
-		FileIndex:       fileIndex,
-		RangeHeader:     c.GetHeader("Range"),
-		PreferTranscode: preferTranscode,
-		AudioTrackIndex: audioTrackIndex,
-		StartSeconds:    startSeconds,
-		StartBytes:      startBytes,
+		InfoHash:         infoHash,
+		FileIndex:        fileIndex,
+		RangeHeader:      c.GetHeader("Range"),
+		PreferTranscode:  preferTranscode,
+		AudioTrackIndex:  audioTrackIndex,
+		OutputResolution: outputResolution,
+		StartSeconds:     startSeconds,
+		StartBytes:       startBytes,
 	})
 	if err != nil {
 		responseError = err.Error()
@@ -482,7 +485,13 @@ func (b *builder) playerTransmissionStreamTranscoded(c *gin.Context, resolveResu
 	transcodeStartSeconds := resolveResult.StartSeconds
 	transcodeSeekStartBytes := resolveResult.StartBytes
 
-	args := buildPlayerFFmpegArgs(inputPath, resolveResult.Transcode, transcodeStartSeconds, resolveResult.AudioTrackIndex)
+	args := buildPlayerFFmpegArgs(
+		inputPath,
+		resolveResult.Transcode,
+		transcodeStartSeconds,
+		resolveResult.AudioTrackIndex,
+		resolveResult.OutputResolution,
+	)
 	cmd := exec.CommandContext(c.Request.Context(), binaryPath, args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -500,6 +509,7 @@ func (b *builder) playerTransmissionStreamTranscoded(c *gin.Context, resolveResu
 	c.Header("X-Bitmagnet-Transcode-Start", strconv.FormatFloat(transcodeStartSeconds, 'f', 3, 64))
 	c.Header("X-Bitmagnet-Transcode-Seek-Bytes", strconv.FormatInt(transcodeSeekStartBytes, 10))
 	c.Header("X-Bitmagnet-Transcode-Audio-Track", strconv.Itoa(resolveResult.AudioTrackIndex))
+	c.Header("X-Bitmagnet-Transcode-Resolution", strconv.Itoa(resolveResult.OutputResolution))
 	c.Header("X-Bitmagnet-Stream-Source", streamSource)
 	if streamPath != "" {
 		c.Header("X-Bitmagnet-Stream-Path", streamPath)
@@ -686,7 +696,13 @@ func isRetryableFFmpegFailure(message string) bool {
 	return true
 }
 
-func buildPlayerFFmpegArgs(filePath string, options media.PlayerFFmpegTranscodeSettings, startSeconds float64, audioTrackIndex int) []string {
+func buildPlayerFFmpegArgs(
+	filePath string,
+	options media.PlayerFFmpegTranscodeSettings,
+	startSeconds float64,
+	audioTrackIndex int,
+	outputResolution int,
+) []string {
 	preset := strings.TrimSpace(options.Preset)
 	if preset == "" {
 		preset = "veryfast"
@@ -740,6 +756,9 @@ func buildPlayerFFmpegArgs(filePath string, options media.PlayerFFmpegTranscodeS
 		"-max_interleave_delta", "0",
 		"-max_muxing_queue_size", "4096",
 	)
+	if outputResolution > 0 {
+		args = append(args, "-vf", fmt.Sprintf("scale=w=-2:h=%d:force_original_aspect_ratio=decrease:force_divisible_by=2", outputResolution))
+	}
 	if options.Threads > 0 {
 		args = append(args, "-threads", strconv.Itoa(options.Threads))
 	}

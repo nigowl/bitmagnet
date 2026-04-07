@@ -21,7 +21,6 @@ export const metadata: Metadata = {
 type Locale = "en" | "zh";
 
 const localeCookieKey = "bitmagnet-locale";
-const colorSchemeCookieKey = "bitmagnet-color-scheme";
 
 function normalizeLocale(locale: string | null | undefined): Locale | undefined {
   if (locale === "en" || locale === "zh") {
@@ -41,14 +40,12 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const initialLocale =
     normalizeLocale(cookieStore.get(localeCookieKey)?.value) ??
     localeFromAcceptLanguage(headerStore.get("accept-language"));
-  const storedColorScheme = cookieStore.get(colorSchemeCookieKey)?.value;
-  const initialColorScheme = storedColorScheme === "dark" ? "dark" : "light";
 
   return (
     <html
       lang={initialLocale === "zh" ? "zh-CN" : "en"}
       className={`${sans.variable} ${mono.variable}`}
-      data-mantine-color-scheme={initialColorScheme}
+      data-mantine-color-scheme="dark"
       suppressHydrationWarning
     >
       <head />

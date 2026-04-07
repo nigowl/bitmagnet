@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { ActionIcon, Badge, Button, Card, Group, Loader, ScrollArea, SimpleGrid, Stack, Table, Text, Title, Tooltip, useMantineColorScheme } from "@mantine/core";
+import { ActionIcon, Badge, Button, Card, Group, Loader, ScrollArea, SimpleGrid, Stack, Table, Text, Title, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { Activity, LogIn, RefreshCw } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
@@ -12,6 +12,11 @@ import { HEALTH_QUERY, QUEUE_METRICS_QUERY, TORRENT_METRICS_QUERY, VERSION_QUERY
 import { useI18n } from "@/languages/provider";
 
 const ECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
+const CHART_TEXT_COLOR = "#a9b9d2";
+const CHART_LINE_COLOR = "rgba(169,185,210,0.2)";
+const CHART_TOOLTIP_BACKGROUND = "rgba(23,29,39,0.96)";
+const QUEUE_CHART_PALETTE = ["#ff9233", "#59c9a5", "#6cb6ff", "#d2a8ff", "#f2cc60"];
+const TORRENT_CHART_PALETTE = ["#6cb6ff", "#ff9233", "#59c9a5", "#d2a8ff", "#f2cc60", "#ff7b72"];
 
 type HealthResponse = {
   health: {
@@ -65,7 +70,6 @@ type TorrentMetricsResponse = {
 
 export function MonitorPage() {
   const { t } = useI18n();
-  const { colorScheme } = useMantineColorScheme();
   const { user, isAdmin, loading: authLoading } = useAuth();
   const { openLogin } = useAuthDialog();
   const [loading, setLoading] = useState(true);
@@ -212,35 +216,34 @@ export function MonitorPage() {
   }, [sourceNameMap, torrentBuckets]);
 
   const queueOption = useMemo(() => {
-    const chartTextColor = colorScheme === "dark" ? "#a9b9d2" : "#546072";
-    const chartLineColor = colorScheme === "dark" ? "rgba(169,185,210,0.2)" : "rgba(84,96,114,0.14)";
-    const chartTooltipBackground = colorScheme === "dark" ? "rgba(23,29,39,0.96)" : "rgba(255,255,255,0.96)";
-    const chartPalette = colorScheme === "dark"
-      ? ["#ff9233", "#59c9a5", "#6cb6ff", "#d2a8ff", "#f2cc60"]
-      : ["#ff7a00", "#18a374", "#2f6fed", "#8b5cf6", "#d97706"];
     const points = queueBuckets.slice(-180);
     const statuses = Array.from(new Set(points.map((item) => item.status))).sort();
     const buckets = Array.from(new Set(points.map((item) => item.createdAtBucket))).sort();
+    const bucketStatusMap = new Map<string, number>();
+    for (const item of points) {
+      const key = `${item.createdAtBucket}@@${item.status}`;
+      bucketStatusMap.set(key, (bucketStatusMap.get(key) || 0) + item.count);
+    }
     return {
-      color: chartPalette,
+      color: QUEUE_CHART_PALETTE,
       tooltip: {
         trigger: "axis",
-        backgroundColor: chartTooltipBackground,
-        borderColor: chartLineColor,
-        textStyle: { color: chartTextColor }
+        backgroundColor: CHART_TOOLTIP_BACKGROUND,
+        borderColor: CHART_LINE_COLOR,
+        textStyle: { color: CHART_TEXT_COLOR }
       },
-      legend: { textStyle: { color: chartTextColor } },
+      legend: { textStyle: { color: CHART_TEXT_COLOR } },
       grid: { left: 34, right: 16, top: 40, bottom: 28 },
       xAxis: {
         type: "category",
         data: buckets.map((item) => item.slice(5, 16).replace("T", " ")),
-        axisLabel: { color: chartTextColor },
-        axisLine: { lineStyle: { color: chartLineColor } }
+        axisLabel: { color: CHART_TEXT_COLOR },
+        axisLine: { lineStyle: { color: CHART_LINE_COLOR } }
       },
       yAxis: {
         type: "value",
-        axisLabel: { color: chartTextColor },
-        splitLine: { lineStyle: { color: chartLineColor } }
+        axisLabel: { color: CHART_TEXT_COLOR },
+        splitLine: { lineStyle: { color: CHART_LINE_COLOR } }
       },
       series: statuses.map((status) => ({
         name: status,
@@ -249,59 +252,50 @@ export function MonitorPage() {
         smooth: true,
         showSymbol: false,
         areaStyle: { opacity: 0.25 },
-        data: buckets.map((bucket) =>
-          points
-            .filter((item) => item.createdAtBucket === bucket && item.status === status)
-            .reduce((sum, item) => sum + item.count, 0)
-        )
+        data: buckets.map((bucket) => bucketStatusMap.get(`${bucket}@@${status}`) || 0)
       }))
     };
-  }, [colorScheme, queueBuckets]);
+  }, [queueBuckets]);
 
   const torrentOption = useMemo(() => {
-    const chartTextColor = colorScheme === "dark" ? "#a9b9d2" : "#546072";
-    const chartLineColor = colorScheme === "dark" ? "rgba(169,185,210,0.2)" : "rgba(84,96,114,0.14)";
-    const chartTooltipBackground = colorScheme === "dark" ? "rgba(23,29,39,0.96)" : "rgba(255,255,255,0.96)";
-    const chartPalette = colorScheme === "dark"
-      ? ["#6cb6ff", "#ff9233", "#59c9a5", "#d2a8ff", "#f2cc60", "#ff7b72"]
-      : ["#2f6fed", "#ff7a00", "#18a374", "#8b5cf6", "#d97706", "#dc2626"];
     const points = torrentBuckets.slice(-180);
     const topSources = torrentSummary.sourceRows.slice(0, 6).map((item) => ({ key: item.source, label: item.name }));
     const buckets = Array.from(new Set(points.map((item) => item.bucket))).sort();
+    const bucketSourceMap = new Map<string, number>();
+    for (const item of points) {
+      const key = `${item.bucket}@@${item.source}`;
+      bucketSourceMap.set(key, (bucketSourceMap.get(key) || 0) + item.count);
+    }
     return {
-      color: chartPalette,
+      color: TORRENT_CHART_PALETTE,
       tooltip: {
         trigger: "axis",
-        backgroundColor: chartTooltipBackground,
-        borderColor: chartLineColor,
-        textStyle: { color: chartTextColor }
+        backgroundColor: CHART_TOOLTIP_BACKGROUND,
+        borderColor: CHART_LINE_COLOR,
+        textStyle: { color: CHART_TEXT_COLOR }
       },
-      legend: { textStyle: { color: chartTextColor } },
+      legend: { textStyle: { color: CHART_TEXT_COLOR } },
       grid: { left: 34, right: 16, top: 40, bottom: 28 },
       xAxis: {
         type: "category",
         data: buckets.map((item) => item.slice(5, 16).replace("T", " ")),
-        axisLabel: { color: chartTextColor },
-        axisLine: { lineStyle: { color: chartLineColor } }
+        axisLabel: { color: CHART_TEXT_COLOR },
+        axisLine: { lineStyle: { color: CHART_LINE_COLOR } }
       },
       yAxis: {
         type: "value",
-        axisLabel: { color: chartTextColor },
-        splitLine: { lineStyle: { color: chartLineColor } }
+        axisLabel: { color: CHART_TEXT_COLOR },
+        splitLine: { lineStyle: { color: CHART_LINE_COLOR } }
       },
       series: topSources.map((source) => ({
         name: source.label,
         type: "line",
         smooth: true,
         showSymbol: false,
-        data: buckets.map((bucket) =>
-          points
-            .filter((item) => item.bucket === bucket && item.source === source.key)
-            .reduce((sum, item) => sum + item.count, 0)
-        )
+        data: buckets.map((bucket) => bucketSourceMap.get(`${bucket}@@${source.key}`) || 0)
       }))
     };
-  }, [colorScheme, torrentBuckets, torrentSummary.sourceRows]);
+  }, [torrentBuckets, torrentSummary.sourceRows]);
 
   if (authLoading) {
     return (
