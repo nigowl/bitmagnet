@@ -11,7 +11,11 @@ import { useI18n } from "@/languages/provider";
 import { fetchMediaList, type MediaListItem } from "@/lib/media-api";
 import { buildMediaDetailHref, extractMediaFacts, getDisplayTitle, getPosterUrl, pickBestQualityTag } from "@/lib/media";
 
-const HOME_SECTION_LIMIT = 16;
+const HOME_SECTION_TARGET_COUNT = 20;
+const HOME_SECTION_POOL_LIMIT = 48;
+const HOME_SECTION_MIN_CARD_WIDTH = 188;
+const HOME_SECTION_GRID_GAP = 16;
+const HIGH_SCORE_FETCH_MAX_PAGES = 8;
 const DAILY_CAROUSEL_INTERVAL_MS = 5600;
 
 type HomeSettings = {
@@ -42,6 +46,19 @@ const DEFAULT_HOME_SETTINGS: HomeSettings = {
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function resolveAdaptiveSectionCount(containerWidth: number, targetCount: number = HOME_SECTION_TARGET_COUNT): number {
+  if (!Number.isFinite(containerWidth) || containerWidth <= 0) {
+    return targetCount;
+  }
+  const columns = Math.max(1, Math.floor((containerWidth + HOME_SECTION_GRID_GAP) / (HOME_SECTION_MIN_CARD_WIDTH + HOME_SECTION_GRID_GAP)));
+  const lower = Math.max(columns, Math.floor(targetCount / columns) * columns);
+  const upper = Math.max(columns, Math.ceil(targetCount / columns) * columns);
+  if (Math.abs(targetCount - lower) <= Math.abs(upper - targetCount)) {
+    return lower;
+  }
+  return upper;
 }
 
 function normalizeHomeSettings(input: unknown): HomeSettings {
@@ -101,6 +118,15 @@ function seededUnit(seed: number): number {
   return x - Math.floor(x);
 }
 
+function stringSeed(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(index);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
 function pickDailyRecommendations(items: MediaListItem[], count: number, dayToken: number): MediaListItem[] {
   if (items.length <= count) return items;
   const start = dayToken % items.length;
@@ -111,39 +137,57 @@ function pickDailyRecommendations(items: MediaListItem[], count: number, dayToke
 function pickHighScoreRecommendations(
   items: MediaListItem[],
   count: number,
-  config: HomeSettings["highScore"],
   dayToken: number
 ): MediaListItem[] {
   if (items.length <= count) return items;
+  const randomized = [...items].sort((left, right) => {
+    const leftSeed = seededUnit(dayToken + (stringSeed(String(left.id || "")) * 0.001));
+    const rightSeed = seededUnit(dayToken + (stringSeed(String(right.id || "")) * 0.001));
+    if (leftSeed === rightSeed) {
+      return String(left.id).localeCompare(String(right.id));
+    }
+    return leftSeed - rightSeed;
+  });
+  return randomized.slice(0, count);
+}
+
+async function fetchHighScorePool(
+  config: HomeSettings["highScore"],
+  minimumPoolSize: number
+): Promise<MediaListItem[]> {
   const minScore = clampNumber(config.minScore, 0, 10);
   const maxScore = clampNumber(Math.max(config.maxScore, minScore), 0, 10);
-  const windowSpan = clampNumber(config.window, 0.1, 10);
-  const availableSpan = Math.max(0, maxScore - minScore);
-  const actualWindow = Math.min(windowSpan, availableSpan || windowSpan);
-  const randomStart = availableSpan > actualWindow
-    ? minScore + (seededUnit(dayToken + 97) * (availableSpan - actualWindow))
-    : minScore;
-  const randomEnd = Math.min(maxScore, randomStart + actualWindow);
+  const targetPoolSize = Math.max(1, Math.round(Math.max(config.poolLimit, minimumPoolSize)));
+  const perPage = Math.max(1, Math.min(120, targetPoolSize));
+  const result: MediaListItem[] = [];
+  const seen = new Set<string>();
 
-  const inRandomBand = items.filter((item) => typeof item.voteAverage === "number" &&
-    item.voteAverage >= randomStart &&
-    item.voteAverage <= randomEnd);
-  const inConfiguredBand = items.filter((item) => typeof item.voteAverage === "number" &&
-    item.voteAverage >= minScore &&
-    item.voteAverage <= maxScore &&
-    !inRandomBand.includes(item));
+  for (let page = 1; page <= HIGH_SCORE_FETCH_MAX_PAGES; page += 1) {
+    const data = await fetchMediaList({
+      sort: "rating",
+      scoreMin: minScore,
+      scoreMax: maxScore,
+      limit: perPage,
+      page
+    });
+    const items = data.items || [];
+    if (items.length === 0) {
+      break;
+    }
 
-  const merged = [...inRandomBand, ...inConfiguredBand];
-  if (merged.length < count) {
     for (const item of items) {
-      if (!merged.includes(item)) {
-        merged.push(item);
-      }
-      if (merged.length >= count) break;
+      const id = String(item.id || "").trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      result.push(item);
+    }
+
+    if (result.length >= targetPoolSize || items.length < perPage) {
+      break;
     }
   }
 
-  return pickDailyRecommendations(merged, count, dayToken);
+  return result.slice(0, targetPoolSize);
 }
 
 async function fetchHomeSettings(): Promise<HomeSettings> {
@@ -234,15 +278,16 @@ function MediaWallCard({ item, t, titleLanguage }: {
   );
 }
 
-function HomeSection({ title, items, loading, emptyText, t, titleLanguage }: {
+function HomeSection({ title, items, displayLimit, loading, emptyText, t, titleLanguage }: {
   title: string;
   items: MediaListItem[];
+  displayLimit: number;
   loading: boolean;
   emptyText: string;
   t: (key: string) => string;
   titleLanguage: "zh" | "en";
 }) {
-  const sectionItems = items.slice(0, HOME_SECTION_LIMIT);
+  const sectionItems = items.slice(0, displayLimit);
 
   return (
     <Stack gap="sm">
@@ -271,20 +316,21 @@ function HomeSection({ title, items, loading, emptyText, t, titleLanguage }: {
   );
 }
 
-function DailyPicksCarousel({ title, items, loading, emptyText, t, titleLanguage }: {
+function DailyPicksCarousel({ title, items, displayLimit, loading, emptyText, t, titleLanguage }: {
   title: string;
   items: MediaListItem[];
+  displayLimit: number;
   loading: boolean;
   emptyText: string;
   t: (key: string) => string;
   titleLanguage: "zh" | "en";
 }) {
-  const sectionItems = items.slice(0, HOME_SECTION_LIMIT);
+  const sectionItems = items.slice(0, displayLimit);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<Array<HTMLDivElement | null>>([]);
   const loopResetTimerRef = useRef<number | null>(null);
   const [paused, setPaused] = useState(false);
-  const [activeVirtualIndex, setActiveVirtualIndex] = useState(HOME_SECTION_LIMIT);
+  const [activeVirtualIndex, setActiveVirtualIndex] = useState(displayLimit);
   const loopSize = sectionItems.length;
   const loopedItems = useMemo(
     () => (loopSize > 1 ? [...sectionItems, ...sectionItems, ...sectionItems] : sectionItems),
@@ -438,17 +484,19 @@ function DailyPicksCarousel({ title, items, loading, emptyText, t, titleLanguage
 export function HomePage() {
   const { t, locale } = useI18n();
   const titleLanguage = locale === "en" ? "en" : "zh";
+  const homeLayoutRef = useRef<HTMLDivElement | null>(null);
   const [loading, setLoading] = useState(true);
+  const [displayLimit, setDisplayLimit] = useState(HOME_SECTION_TARGET_COUNT);
   const [homeSettings, setHomeSettings] = useState<HomeSettings>(DEFAULT_HOME_SETTINGS);
   const [activeDayToken, setActiveDayToken] = useState<number>(buildRecommendationDayToken(DEFAULT_HOME_SETTINGS.daily.refreshHour));
-  const [dailyPicks, setDailyPicks] = useState<MediaListItem[]>([]);
-  const [highScore, setHighScore] = useState<MediaListItem[]>([]);
+  const [dailyPicksPool, setDailyPicksPool] = useState<MediaListItem[]>([]);
+  const [highScorePool, setHighScorePool] = useState<MediaListItem[]>([]);
   const [movies, setMovies] = useState<MediaListItem[]>([]);
   const [series, setSeries] = useState<MediaListItem[]>([]);
   const [anime, setAnime] = useState<MediaListItem[]>([]);
 
-  const loadSection = useCallback(async (category: "movie" | "series" | "anime", limit: number) => {
-    const data = await fetchMediaList({ category, sort: "popular", limit, page: 1 });
+  const loadSection = useCallback(async (category: "movie" | "series" | "anime") => {
+    const data = await fetchMediaList({ category, sort: "popular", limit: HOME_SECTION_POOL_LIMIT, page: 1 });
     return data.items || [];
   }, []);
 
@@ -457,19 +505,18 @@ export function HomePage() {
     try {
       const latestHomeSettings = await fetchHomeSettings();
       const dayToken = buildRecommendationDayToken(latestHomeSettings.daily.refreshHour);
-      const [popularData, ratingData, movieItems, seriesItems, animeItems] = await Promise.all([
+      const [popularData, highScoreItems, movieItems, seriesItems, animeItems] = await Promise.all([
         fetchMediaList({ sort: "popular", limit: latestHomeSettings.daily.poolLimit, page: 1 }),
-        fetchMediaList({ sort: "rating", limit: latestHomeSettings.highScore.poolLimit, page: 1 }),
-        loadSection("movie", HOME_SECTION_LIMIT),
-        loadSection("series", HOME_SECTION_LIMIT),
-        loadSection("anime", HOME_SECTION_LIMIT)
+        fetchHighScorePool(latestHomeSettings.highScore, HOME_SECTION_POOL_LIMIT),
+        loadSection("movie"),
+        loadSection("series"),
+        loadSection("anime")
       ]);
 
-      const popularItems = popularData.items || [];
       setHomeSettings(latestHomeSettings);
       setActiveDayToken(dayToken);
-      setDailyPicks(pickDailyRecommendations(popularItems, HOME_SECTION_LIMIT, dayToken));
-      setHighScore(pickHighScoreRecommendations(ratingData.items || [], HOME_SECTION_LIMIT, latestHomeSettings.highScore, dayToken));
+      setDailyPicksPool(popularData.items || []);
+      setHighScorePool(highScoreItems);
       setMovies(movieItems);
       setSeries(seriesItems);
       setAnime(animeItems);
@@ -494,8 +541,58 @@ export function HomePage() {
     return () => window.clearInterval(timer);
   }, [activeDayToken, homeSettings.daily.refreshHour, load]);
 
+  useEffect(() => {
+    const element = homeLayoutRef.current;
+    if (!element) return;
+
+    let frameId: number | null = null;
+    const updateLimit = () => {
+      const next = resolveAdaptiveSectionCount(element.clientWidth, HOME_SECTION_TARGET_COUNT);
+      setDisplayLimit((current) => (current === next ? current : next));
+    };
+    const scheduleUpdate = () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        updateLimit();
+      });
+    };
+
+    updateLimit();
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(scheduleUpdate);
+      observer.observe(element);
+    } else {
+      window.addEventListener("resize", scheduleUpdate, { passive: true });
+    }
+
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      observer?.disconnect();
+      if (!observer) {
+        window.removeEventListener("resize", scheduleUpdate);
+      }
+    };
+  }, []);
+
+  const dailyPicks = useMemo(
+    () => pickDailyRecommendations(dailyPicksPool, displayLimit, activeDayToken),
+    [activeDayToken, dailyPicksPool, displayLimit]
+  );
+  const highScore = useMemo(
+    () => pickHighScoreRecommendations(highScorePool, displayLimit, activeDayToken),
+    [activeDayToken, displayLimit, highScorePool]
+  );
+
   return (
-    <Stack gap="md">
+    <div ref={homeLayoutRef}>
+      <Stack gap="md">
       {/* <Card className="glass-card da-search-card" withBorder>
         <Group justify="space-between" align="flex-start" wrap="wrap">
           <Stack gap={4} className="page-heading">
@@ -521,11 +618,20 @@ export function HomePage() {
         </Group>
       </Card> */}
 
-      <DailyPicksCarousel title={t("home.dailyPicks")} items={dailyPicks} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
-      <HomeSection title={t("home.highRated")} items={highScore} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
-      <HomeSection title={t("home.hotMovies")} items={movies} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
-      <HomeSection title={t("home.hotSeries")} items={series} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
-      <HomeSection title={t("home.hotAnime")} items={anime} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
-    </Stack>
+      <DailyPicksCarousel
+        title={t("home.dailyPicks")}
+        items={dailyPicks}
+        displayLimit={displayLimit}
+        loading={loading}
+        emptyText={t("media.noResults")}
+        t={t}
+        titleLanguage={titleLanguage}
+      />
+      <HomeSection title={t("home.highRated")} items={highScore} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
+      <HomeSection title={t("home.hotMovies")} items={movies} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
+      <HomeSection title={t("home.hotSeries")} items={series} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
+      <HomeSection title={t("home.hotAnime")} items={anime} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
+      </Stack>
+    </div>
   );
 }

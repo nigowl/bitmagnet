@@ -141,6 +141,12 @@ function parsePositiveIntParam(raw: string | null, fallback: number): number {
   return Math.trunc(parsed);
 }
 
+function normalizeTorrentContentType(type?: string | null): string {
+  const normalized = typeof type === "string" ? type.trim().toLowerCase() : "";
+  if (!normalized || normalized === "0") return "";
+  return normalized;
+}
+
 export function TorrentsPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -275,10 +281,11 @@ export function TorrentsPage() {
 
   const renderContentType = useCallback(
     (type?: string | null) => {
-      if (!type) return "-";
-      const key = `contentTypes.${type}`;
+      const normalized = normalizeTorrentContentType(type);
+      if (!normalized) return "";
+      const key = `contentTypes.${normalized}`;
       const translated = t(key);
-      return translated === key ? type : translated;
+      return translated === key ? normalized : translated;
     },
     [t]
   );
@@ -301,20 +308,25 @@ export function TorrentsPage() {
   const contentTypeCounts = useMemo(() => {
     const counts = new Map<string, number>();
     (result?.aggregations.contentType || []).forEach((item) => {
-      if (!item.value) return;
-      counts.set(item.value, item.count);
+      const normalizedValue = normalizeTorrentContentType(item.value);
+      if (!normalizedValue) return;
+      counts.set(normalizedValue, item.count);
     });
     return counts;
   }, [result?.aggregations.contentType]);
 
   const contentTypeBlockOptions = useMemo(
-    () =>
-      contentTypes.map((key) => ({
-        value: key,
-        label: t(`contentTypes.${key}`),
-        count: contentTypeCounts.get(key) ?? 0
-      })),
-    [contentTypeCounts, t]
+    () => {
+      const selected = new Set(contentTypeFilters);
+      return contentTypes
+        .map((key) => ({
+          value: key,
+          label: t(`contentTypes.${key}`),
+          count: contentTypeCounts.get(key) ?? 0
+        }))
+        .filter((item) => item.count > 0 || selected.has(item.value));
+    },
+    [contentTypeCounts, contentTypeFilters, t]
   );
 
   const totalPages = useMemo(() => {
@@ -656,9 +668,11 @@ export function TorrentsPage() {
                               {item.title || item.torrent.name}
                             </Text>
                           </Link>
-                          <Badge variant="light" color="violet">
-                            {renderContentType(item.contentType)}
-                          </Badge>
+                          {renderContentType(item.contentType) ? (
+                            <Badge variant="light" color="violet">
+                              {renderContentType(item.contentType)}
+                            </Badge>
+                          ) : null}
                         </Group>
                       </Group>
 
@@ -744,7 +758,9 @@ export function TorrentsPage() {
           <Stack gap="md">
             <Text c="dimmed">{activeItem.content?.overview || "-"}</Text>
             <Group gap={6}>
-              <Badge variant="light">{renderContentType(activeItem.contentType)}</Badge>
+              {renderContentType(activeItem.contentType) ? (
+                <Badge variant="light">{renderContentType(activeItem.contentType)}</Badge>
+              ) : null}
               <Badge variant="light">{t("torrents.table.seeders")}: {activeItem.seeders ?? "-"}</Badge>
               <Badge variant="light">{t("torrents.table.leechers")}: {activeItem.leechers ?? "-"}</Badge>
               <Badge variant="light">{formatBytes(activeItem.torrent.size)}</Badge>

@@ -1310,6 +1310,13 @@ func maxInt64(left int64, right int64) int64 {
 	return right
 }
 
+func minInt64(left int64, right int64) int64 {
+	if left < right {
+		return left
+	}
+	return right
+}
+
 func playerTransmissionTorrentSizeHint(item playerTransmissionRPCTorrent) int64 {
 	return maxInt64(item.SizeWhenDone, item.LeftUntilDone)
 }
@@ -1424,12 +1431,25 @@ func playerTransmissionContiguousBytesFromStart(
 	if playerTransmissionFileFullyCompleted(snapshot, fileIndex) {
 		return fileLength
 	}
-	if fileLength <= 0 || snapshot.PieceSize <= 0 || strings.TrimSpace(snapshot.Pieces) == "" {
+	if fileLength <= 0 {
+		return 0
+	}
+	completedBytes := playerTransmissionFileCompletedBytes(snapshot, fileIndex)
+	if completedBytes <= 0 {
+		return 0
+	}
+	if snapshot.PieceSize <= 0 || strings.TrimSpace(snapshot.Pieces) == "" {
+		if snapshot.Sequential {
+			return minInt64(completedBytes, fileLength)
+		}
 		return 0
 	}
 
 	pieceBits, err := base64.StdEncoding.DecodeString(snapshot.Pieces)
 	if err != nil || len(pieceBits) == 0 {
+		if snapshot.Sequential {
+			return minInt64(completedBytes, fileLength)
+		}
 		return 0
 	}
 
@@ -1444,26 +1464,110 @@ func playerTransmissionContiguousBytesFromStart(
 
 	firstPiece := int(fileOffset / snapshot.PieceSize)
 	lastPiece := int(fileEndGlobal / snapshot.PieceSize)
-	missingPiece := -1
-	for piece := firstPiece; piece <= lastPiece; piece++ {
-		if !playerTransmissionHasPiece(pieceBits, piece) {
-			missingPiece = piece
-			break
-		}
-	}
-
-	if missingPiece < 0 {
-		return fileLength
-	}
-
-	contiguousGlobalEnd := int64(missingPiece)*snapshot.PieceSize - 1
-	if contiguousGlobalEnd < fileOffset {
+	if firstPiece < 0 || lastPiece < firstPiece {
 		return 0
 	}
-	if contiguousGlobalEnd > fileEndGlobal {
-		contiguousGlobalEnd = fileEndGlobal
+
+	contiguousBytes := int64(0)
+	for piece := firstPiece; piece <= lastPiece; piece++ {
+		pieceBytes := playerTransmissionPieceOverlapBytes(fileOffset, fileEndGlobal, snapshot.PieceSize, piece)
+		if pieceBytes <= 0 {
+			continue
+		}
+		if playerTransmissionHasPiece(pieceBits, piece) {
+			contiguousBytes += pieceBytes
+			continue
+		}
+		if piece == firstPiece && snapshot.Sequential {
+			// A file can start in the middle of a piece shared with another file. In that case
+			// the piece bit may stay unset even though the selected file's bytes are already ready.
+			optimisticPrefix := minInt64(completedBytes, pieceBytes)
+			if optimisticPrefix > contiguousBytes {
+				contiguousBytes = optimisticPrefix
+			}
+			if optimisticPrefix >= pieceBytes {
+				continue
+			}
+		}
+		break
 	}
-	return contiguousGlobalEnd - fileOffset + 1
+
+	if contiguousBytes > fileLength {
+		return fileLength
+	}
+	if contiguousBytes < 0 {
+		return 0
+	}
+	return contiguousBytes
+}
+
+func playerTransmissionPieceOverlapBytes(
+	fileOffset int64,
+	fileEndGlobal int64,
+	pieceSize int64,
+	piece int,
+) int64 {
+	if fileEndGlobal < fileOffset || pieceSize <= 0 || piece < 0 {
+		return 0
+	}
+	pieceStart := int64(piece) * pieceSize
+	pieceEnd := pieceStart + pieceSize - 1
+	if pieceEnd < fileOffset || pieceStart > fileEndGlobal {
+		return 0
+	}
+	if pieceStart < fileOffset {
+		pieceStart = fileOffset
+	}
+	if pieceEnd > fileEndGlobal {
+		pieceEnd = fileEndGlobal
+	}
+	if pieceEnd < pieceStart {
+		return 0
+	}
+	return pieceEnd - pieceStart + 1
+}
+
+func playerTransmissionMergeRanges(ranges []PlayerFileRange) []PlayerFileRange {
+	if len(ranges) == 0 {
+		return nil
+	}
+	normalized := make([]PlayerFileRange, 0, len(ranges))
+	for _, item := range ranges {
+		start := clampRatio(item.StartRatio)
+		end := clampRatio(item.EndRatio)
+		if end <= start {
+			continue
+		}
+		normalized = append(normalized, PlayerFileRange{
+			StartRatio: start,
+			EndRatio:   end,
+		})
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	sort.Slice(normalized, func(i, j int) bool {
+		if normalized[i].StartRatio == normalized[j].StartRatio {
+			return normalized[i].EndRatio < normalized[j].EndRatio
+		}
+		return normalized[i].StartRatio < normalized[j].StartRatio
+	})
+	merged := make([]PlayerFileRange, 0, len(normalized))
+	for _, item := range normalized {
+		if len(merged) == 0 {
+			merged = append(merged, item)
+			continue
+		}
+		last := &merged[len(merged)-1]
+		if item.StartRatio <= last.EndRatio+1e-9 {
+			if item.EndRatio > last.EndRatio {
+				last.EndRatio = item.EndRatio
+			}
+			continue
+		}
+		merged = append(merged, item)
+	}
+	return merged
 }
 
 func playerTransmissionAvailableRanges(
@@ -1482,13 +1586,25 @@ func playerTransmissionAvailableRanges(
 			},
 		}
 	}
-	if fileLength <= 0 || snapshot.PieceSize <= 0 || strings.TrimSpace(snapshot.Pieces) == "" {
+	if fileLength <= 0 {
 		return nil
+	}
+
+	ranges := make([]PlayerFileRange, 0, 64)
+	contiguousBytes := playerTransmissionContiguousBytesFromStart(snapshot, fileIndex)
+	if contiguousBytes > 0 {
+		ranges = append(ranges, PlayerFileRange{
+			StartRatio: 0,
+			EndRatio:   clampRatio(float64(contiguousBytes) / float64(fileLength)),
+		})
+	}
+	if snapshot.PieceSize <= 0 || strings.TrimSpace(snapshot.Pieces) == "" {
+		return playerTransmissionMergeRanges(ranges)
 	}
 
 	pieceBits, err := base64.StdEncoding.DecodeString(snapshot.Pieces)
 	if err != nil || len(pieceBits) == 0 {
-		return nil
+		return playerTransmissionMergeRanges(ranges)
 	}
 
 	fileOffset := int64(0)
@@ -1497,17 +1613,16 @@ func playerTransmissionAvailableRanges(
 	}
 	fileEndGlobal := fileOffset + fileLength - 1
 	if fileEndGlobal < fileOffset {
-		return nil
+		return playerTransmissionMergeRanges(ranges)
 	}
 
 	firstPiece := int(fileOffset / snapshot.PieceSize)
 	lastPiece := int(fileEndGlobal / snapshot.PieceSize)
 	if firstPiece < 0 || lastPiece < firstPiece {
-		return nil
+		return playerTransmissionMergeRanges(ranges)
 	}
 
 	const maxRanges = 1200
-	ranges := make([]PlayerFileRange, 0, 64)
 	currentStart := -1
 	flush := func(runStart int, runEnd int) {
 		if runStart < 0 || runEnd < runStart || len(ranges) >= maxRanges {
@@ -1554,8 +1669,7 @@ func playerTransmissionAvailableRanges(
 	if currentStart >= 0 && len(ranges) < maxRanges {
 		flush(currentStart, lastPiece)
 	}
-
-	return ranges
+	return playerTransmissionMergeRanges(ranges)
 }
 
 func playerTransmissionHasPiece(pieceBits []byte, piece int) bool {
@@ -1731,6 +1845,10 @@ func playerTransmissionRangeAvailable(
 		return false
 	}
 	if playerTransmissionFileFullyCompleted(snapshot, fileIndex) {
+		return true
+	}
+	contiguous := playerTransmissionContiguousBytesFromStart(snapshot, fileIndex)
+	if contiguous > 0 && end < contiguous {
 		return true
 	}
 	if snapshot.PieceSize <= 0 {

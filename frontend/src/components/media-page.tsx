@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ActionIcon,
   Badge,
@@ -26,6 +26,9 @@ import { buildMediaDetailHref, extractMediaFacts, getDisplayTitle, getPosterUrl,
 
 type MediaCategory = "movie" | "series" | "anime";
 type FilterRowKey = "quality" | "year" | "genre" | "language" | "country" | "network" | "studio" | "awards" | "sort";
+const MEDIA_LIST_TARGET_COUNT = 40;
+const MEDIA_LIST_MIN_CARD_WIDTH = 188;
+const MEDIA_LIST_GRID_GAP = 16;
 
 type FilterOption = {
   value: string;
@@ -62,6 +65,19 @@ function localizeGenreLabel(value: string, t: (key: string) => string): string {
   return translated === translationKey ? value : translated;
 }
 
+function resolveAdaptiveMediaListCount(containerWidth: number, targetCount: number = MEDIA_LIST_TARGET_COUNT): number {
+  if (!Number.isFinite(containerWidth) || containerWidth <= 0) {
+    return targetCount;
+  }
+  const columns = Math.max(1, Math.floor((containerWidth + MEDIA_LIST_GRID_GAP) / (MEDIA_LIST_MIN_CARD_WIDTH + MEDIA_LIST_GRID_GAP)));
+  const lower = Math.max(columns, Math.floor(targetCount / columns) * columns);
+  const upper = Math.max(columns, Math.ceil(targetCount / columns) * columns);
+  if (Math.abs(targetCount - lower) <= Math.abs(upper - targetCount)) {
+    return lower;
+  }
+  return upper;
+}
+
 function FilterRow({
   label,
   currentValue,
@@ -83,9 +99,10 @@ function FilterRow({
   const [expandedHeight, setExpandedHeight] = useState(240);
   const isExpanded = expanded && canExpand;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = optionsRef.current;
     if (!element) return;
+    let frameId: number | null = null;
 
     const updateLayout = () => {
       const children = Array.from(element.children).filter((child): child is HTMLElement => child instanceof HTMLElement);
@@ -106,18 +123,36 @@ function FilterRow({
       setExpandedHeight(element.scrollHeight);
     };
 
-    updateLayout();
+    const scheduleUpdate = () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        updateLayout();
+      });
+    };
 
-    if (typeof ResizeObserver === "undefined") {
-      return;
+    scheduleUpdate();
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(scheduleUpdate);
+      observer.observe(element);
+    } else {
+      window.addEventListener("resize", scheduleUpdate, { passive: true });
     }
 
-    const observer = new ResizeObserver(() => updateLayout());
-    observer.observe(element);
-    Array.from(element.children).forEach((child) => observer.observe(child));
-
-    return () => observer.disconnect();
-  }, [options]);
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      observer?.disconnect();
+      if (!observer) {
+        window.removeEventListener("resize", scheduleUpdate);
+      }
+    };
+  }, [options, expanded]);
 
   return (
     <div
@@ -163,6 +198,8 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
+  const [mediaLayoutElement, setMediaLayoutElement] = useState<HTMLDivElement | null>(null);
+  const [pageSize, setPageSize] = useState(MEDIA_LIST_TARGET_COUNT);
   const [searchInput, setSearchInput] = useState("");
   const [expandedRows, setExpandedRows] = useState<Record<FilterRowKey, boolean>>({
     quality: false,
@@ -182,7 +219,10 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const advancedFiltersRef = useRef<HTMLDivElement | null>(null);
   const [advancedFiltersHeight, setAdvancedFiltersHeight] = useState(0);
-  const pageSize = 32;
+
+  const setMediaLayoutRef = useCallback((node: HTMLDivElement | null) => {
+    setMediaLayoutElement(node);
+  }, []);
 
   const quality = normalizeSimpleValue(searchParams.get("quality"), "all");
   const year = normalizeSimpleValue(searchParams.get("year"), "all");
@@ -226,6 +266,48 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
     });
   }, [debouncedSearch, searchValue, updateQuery]);
 
+  useLayoutEffect(() => {
+    const element = mediaLayoutElement;
+    if (!element) return;
+
+    let frameId: number | null = null;
+    const updatePageSize = () => {
+      const next = resolveAdaptiveMediaListCount(element.clientWidth, MEDIA_LIST_TARGET_COUNT);
+      setPageSize((current) => (current === next ? current : next));
+    };
+    const scheduleUpdate = () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        updatePageSize();
+      });
+    };
+
+    scheduleUpdate();
+    const settleTimer = window.setTimeout(scheduleUpdate, 0);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(scheduleUpdate);
+      observer.observe(element);
+    } else {
+      window.addEventListener("resize", scheduleUpdate, { passive: true });
+    }
+
+    return () => {
+      window.clearTimeout(settleTimer);
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      observer?.disconnect();
+      if (!observer) {
+        window.removeEventListener("resize", scheduleUpdate);
+      }
+    };
+  }, [mediaLayoutElement, pathname]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -252,13 +334,19 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
     } finally {
       setLoading(false);
     }
-  }, [awards, country, fixedCategory, genre, language, network, page, quality, searchValue, sort, studio, year]);
+  }, [awards, country, fixedCategory, genre, language, network, page, pageSize, quality, searchValue, sort, studio, year]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(totalCount / pageSize)), [totalCount]);
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(totalCount / pageSize)), [pageSize, totalCount]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (page <= totalPages) return;
+    updateQuery({ page: String(totalPages) });
+  }, [loading, page, totalPages, updateQuery]);
 
   const yearOptions = useMemo<FilterOption[]>(() => {
     const currentYear = new Date().getFullYear();
@@ -421,27 +509,59 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
     [t]
   );
 
-  useEffect(() => {
+  const syncAdvancedFiltersHeight = useCallback(() => {
     const element = advancedFiltersRef.current;
-    if (!element) {
-      return;
-    }
+    if (!element) return;
+    const nextHeight = element.scrollHeight;
+    setAdvancedFiltersHeight((current) => (current === nextHeight ? current : nextHeight));
+  }, []);
 
-    const syncHeight = () => {
-      const nextHeight = element.scrollHeight;
-      setAdvancedFiltersHeight((current) => (current === nextHeight ? current : nextHeight));
+  useLayoutEffect(() => {
+    if (!showAdvancedFilters) return;
+    let frameId: number | null = window.requestAnimationFrame(() => {
+      frameId = null;
+      syncAdvancedFiltersHeight();
+    });
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
     };
+  }, [
+    awardsOptions,
+    countryOptions,
+    expandedRows,
+    genreOptions,
+    languageOptions,
+    networkOptions,
+    qualityOptions,
+    showAdvancedFilters,
+    sortOptions,
+    studioOptions,
+    syncAdvancedFiltersHeight,
+    yearOptions
+  ]);
 
-    syncHeight();
-
-    if (typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const observer = new ResizeObserver(() => syncHeight());
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [awardsOptions, countryOptions, genreOptions, languageOptions, networkOptions, qualityOptions, showAdvancedFilters, sortOptions, studioOptions, yearOptions]);
+  useEffect(() => {
+    if (!showAdvancedFilters) return;
+    let frameId: number | null = null;
+    const scheduleSync = () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        syncAdvancedFiltersHeight();
+      });
+    };
+    window.addEventListener("resize", scheduleSync, { passive: true });
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      window.removeEventListener("resize", scheduleSync);
+    };
+  }, [showAdvancedFilters, syncAdvancedFiltersHeight]);
 
   const clearFilters = () => {
     setSearchInput("");
@@ -464,7 +584,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
       : t("media.category.animeSubtitle");
 
   return (
-    <div className="media-cinema-shell">
+    <div ref={setMediaLayoutRef} className="media-cinema-shell">
       <Card className="glass-card media-hero-panel" withBorder>
         <Stack gap="lg">
           <Group justify="space-between" align="flex-start" wrap="wrap">

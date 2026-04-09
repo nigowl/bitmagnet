@@ -296,6 +296,8 @@ export async function fetchMediaList(params: {
   studio?: string;
   awards?: string;
   sort?: string;
+  scoreMin?: number;
+  scoreMax?: number;
   limit?: number;
   page?: number;
 }) {
@@ -332,6 +334,12 @@ export async function fetchMediaList(params: {
   }
   if (params.sort?.trim() && params.sort !== "latest") {
     query.set("sort", params.sort.trim());
+  }
+  if (typeof params.scoreMin === "number" && Number.isFinite(params.scoreMin)) {
+    query.set("scoreMin", String(params.scoreMin));
+  }
+  if (typeof params.scoreMax === "number" && Number.isFinite(params.scoreMax)) {
+    query.set("scoreMax", String(params.scoreMax));
   }
   if (params.limit) {
     query.set("limit", String(params.limit));

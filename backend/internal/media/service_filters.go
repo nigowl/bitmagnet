@@ -1,6 +1,7 @@
 package media
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,13 @@ func normalizeSort(value string) string {
 	default:
 		return sortLatest
 	}
+}
+
+func normalizeScoreBound(value *float64) (float64, bool) {
+	if value == nil || math.IsNaN(*value) || math.IsInf(*value, 0) {
+		return 0, false
+	}
+	return math.Min(10, math.Max(0, *value)), true
 }
 
 func applyQualityFilter(db *gorm.DB, quality string) *gorm.DB {

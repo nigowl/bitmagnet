@@ -14,6 +14,8 @@ type ListInput struct {
 	Studio   string
 	Awards   string
 	Sort     string
+	ScoreMin *float64
+	ScoreMax *float64
 	Limit    int
 	Page     int
 }

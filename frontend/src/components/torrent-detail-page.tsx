@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Badge, Button, Card, Group, Loader, Stack, Table, Text, Title } from "@mantine/core";
+import { ActionIcon, Badge, Button, Card, Group, Loader, Stack, Table, Text, Title, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { ArrowLeft, ExternalLink, Heart, HeartOff, RefreshCw } from "lucide-react";
+import { ArrowLeft, ExternalLink, Heart, HeartOff, Play, RefreshCw } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { graphqlRequest } from "@/lib/api";
@@ -67,6 +67,22 @@ function formatBytes(size: number): string {
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[index]}`;
 }
 
+const PLAYER_FILE_VIDEO_EXTENSIONS = [
+  ".mp4", ".m4v", ".webm", ".mkv", ".mov", ".avi", ".flv", ".ts", ".m2ts", ".mpeg", ".mpg",
+  ".wmv", ".asf", ".3gp", ".3g2", ".f4v", ".rm", ".rmvb", ".vob", ".mxf", ".divx", ".xvid"
+];
+
+function isPlayableVideoFile(path: string, fileType?: string | null): boolean {
+  const normalizedPath = String(path || "").trim().toLowerCase();
+  if (!normalizedPath) return false;
+  if (PLAYER_FILE_VIDEO_EXTENSIONS.some((ext) => normalizedPath.endsWith(ext))) {
+    return true;
+  }
+  const normalizedType = String(fileType || "").trim().toLowerCase();
+  if (!normalizedType) return false;
+  return normalizedType.includes("video");
+}
+
 export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
   const { t } = useI18n();
   const { openLogin } = useAuthDialog();
@@ -87,6 +103,10 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
 
   const typeSpecificRows = useMemo(() => {
     if (!item) return [];
+    const normalizedContentType = String(item.contentType || "").trim().toLowerCase();
+    if (!normalizedContentType || normalizedContentType === "0") {
+      return [];
+    }
 
     const attributes = item.content?.attributes || [];
     const findAttribute = (keys: string[]) => {
@@ -95,7 +115,7 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
       return matched?.value;
     };
 
-    if (item.contentType === "movie" || item.contentType === "tv_show") {
+    if (normalizedContentType === "movie" || normalizedContentType === "tv_show") {
       const genres =
         item.content?.collections
           ?.filter((collection) => collection.type === "genre")
@@ -107,7 +127,7 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
       ].filter((row) => !!row.value);
     }
 
-    if (item.contentType === "music") {
+    if (normalizedContentType === "music") {
       return [
         { label: t("torrents.fields.artist"), value: findAttribute(["artist", "album_artist"]) },
         { label: t("torrents.fields.album"), value: findAttribute(["album"]) },
@@ -115,7 +135,7 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
       ].filter((row) => !!row.value);
     }
 
-    if (["ebook", "comic", "audiobook"].includes(item.contentType || "")) {
+    if (["ebook", "comic", "audiobook"].includes(normalizedContentType)) {
       return [
         { label: t("torrents.fields.author"), value: findAttribute(["author", "writer"]) },
         { label: t("torrents.fields.publisher"), value: findAttribute(["publisher"]) },
@@ -123,7 +143,7 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
       ].filter((row) => !!row.value);
     }
 
-    if (["game", "software"].includes(item.contentType || "")) {
+    if (["game", "software"].includes(normalizedContentType)) {
       return [
         { label: t("torrents.fields.platform"), value: findAttribute(["platform", "os", "system"]) },
         { label: t("torrents.fields.version"), value: findAttribute(["version", "build"]) }
@@ -131,7 +151,7 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
     }
 
     return [
-      { label: t("torrents.fields.category"), value: item.contentType || undefined },
+      { label: t("torrents.fields.category"), value: normalizedContentType || undefined },
       { label: t("torrents.fields.releaseYear"), value: item.content?.releaseYear ? String(item.content.releaseYear) : undefined }
     ].filter((row) => !!row.value);
   }, [item, t]);
@@ -207,6 +227,8 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
   }
 
   const favoriteActive = hasFavorite(infoHash);
+  const normalizedContentType = String(item.contentType || "").trim().toLowerCase();
+  const hasVisibleContentType = normalizedContentType !== "" && normalizedContentType !== "0";
 
   return (
     <Stack gap="md">
@@ -248,7 +270,7 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
           <Title order={2} className="entity-title">{item.content?.title || item.title || item.torrent.name}</Title>
           <Text c="dimmed" className="entity-subtitle">{item.content?.overview || item.torrent.name}</Text>
           <Group gap="xs" className="card-meta-row">
-            <Badge variant="light">{renderContentType(item.contentType)}</Badge>
+            {hasVisibleContentType ? <Badge variant="light">{renderContentType(normalizedContentType)}</Badge> : null}
             <Badge variant="light">{t("torrents.table.seeders")}: {item.seeders ?? "-"}</Badge>
             <Badge variant="light">{t("torrents.table.leechers")}: {item.leechers ?? "-"}</Badge>
             <Badge variant="light">{formatBytes(item.torrent.size)}</Badge>
@@ -310,12 +332,13 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
               <Table.Th>{t("torrents.table.path")}</Table.Th>
               <Table.Th>{t("torrents.table.type")}</Table.Th>
               <Table.Th>{t("torrents.table.size")}</Table.Th>
+              <Table.Th>{t("media.player.play")}</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {displayFiles.length === 0 ? (
               <Table.Tr>
-                <Table.Td colSpan={4}>
+                <Table.Td colSpan={5}>
                   <Text c="dimmed" ta="center" py="md">
                     {t("torrents.noFiles")}
                   </Text>
@@ -328,6 +351,26 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
                   <Table.Td>{file.path}</Table.Td>
                   <Table.Td>{file.fileType || "-"}</Table.Td>
                   <Table.Td>{formatBytes(file.size)}</Table.Td>
+                  <Table.Td>
+                    {isPlayableVideoFile(file.path, file.fileType) ? (
+                      <Tooltip label={t("media.player.play")} withArrow>
+                        <ActionIcon
+                          className="app-icon-btn"
+                          variant="light"
+                          color="orange"
+                          aria-label={t("media.player.play")}
+                          renderRoot={(props) => (
+                            <Link
+                              href={`/player/${encodeURIComponent(infoHash)}?fileIndex=${encodeURIComponent(String(file.index))}`}
+                              {...props}
+                            />
+                          )}
+                        >
+                          <Play size={14} />
+                        </ActionIcon>
+                      </Tooltip>
+                    ) : null}
+                  </Table.Td>
                 </Table.Tr>
               ))
             )}

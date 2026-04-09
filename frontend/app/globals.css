@@ -1098,21 +1098,11 @@ body {
 
 .home-daily-carousel-shell {
   position: relative;
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-  margin-right: calc(50% - 50vw);
+  width: 100%;
   --daily-card-width: clamp(180px, 19vw, 252px);
   --daily-side-padding: calc(50% - (var(--daily-card-width) / 2));
   border-radius: var(--radius-lg);
   overflow: hidden;
-}
-
-@supports (width: 100dvw) {
-  .home-daily-carousel-shell {
-    width: 100dvw;
-    margin-left: calc(50% - 50dvw);
-    margin-right: calc(50% - 50dvw);
-  }
 }
 
 .home-daily-carousel-track {
@@ -1311,7 +1301,9 @@ body {
   overflow: hidden;
   opacity: 0;
   transform: translateY(-8px);
-  transition: max-height 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.24s ease, transform 0.24s ease;
+  transition: max-height 0.22s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease, transform 0.18s ease;
+  will-change: max-height, opacity, transform;
+  contain: layout paint;
 }
 
 .media-advanced-filters-open {
@@ -1365,7 +1357,8 @@ body {
   flex-wrap: wrap;
   overflow: hidden;
   padding: 2px 0;
-  transition: max-height 0.22s ease;
+  transition: max-height 0.16s ease;
+  will-change: max-height;
 }
 
 .media-filter-expand {

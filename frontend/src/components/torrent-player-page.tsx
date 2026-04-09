@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import {
   ActionIcon,
@@ -804,7 +805,15 @@ function audioTrackSelectionKey(track: NativeAudioTrack, index: number): string 
 export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: string }) {
   const { t } = useI18n();
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const infoHash = routeInfoHash.trim().toLowerCase();
+  const requestedFileIndex = useMemo(() => {
+    const raw = searchParams.get("fileIndex");
+    if (!raw) return -1;
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed < 0) return -1;
+    return parsed;
+  }, [searchParams]);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const playerStageRef = useRef<HTMLDivElement | null>(null);
@@ -840,6 +849,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const prebufferStartedAtRef = useRef(0);
   const globalPreferencesHydratedRef = useRef(false);
   const trackPreferencesHydratedKeyRef = useRef("");
+  const pendingRequestedFileIndexRef = useRef<number | null>(null);
 
   const [bootstrapLoading, setBootstrapLoading] = useState(false);
   const [bootstrapped, setBootstrapped] = useState(false);
@@ -940,6 +950,10 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   useEffect(() => {
     selectedFileIndexRef.current = selectedFileIndex;
   }, [selectedFileIndex]);
+
+  useEffect(() => {
+    pendingRequestedFileIndexRef.current = requestedFileIndex >= 0 ? requestedFileIndex : null;
+  }, [infoHash, requestedFileIndex]);
 
   useEffect(() => {
     isSeekingDragRef.current = isSeekingDrag;
@@ -1951,6 +1965,17 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     void bootstrapPlayer();
     void loadSubtitles();
   }, [bootstrapPlayer, infoHash, loadSubtitles, loadTorrentDetail, t]);
+
+  useEffect(() => {
+    if (!bootstrapped) return;
+    const target = pendingRequestedFileIndexRef.current;
+    if (!Number.isInteger(target) || (target || -1) < 0) return;
+    const targetIndex = Number(target);
+    pendingRequestedFileIndexRef.current = null;
+    if (selectedFileIndexRef.current === targetIndex) return;
+    if (!fileOptions.some((item) => item.index === targetIndex)) return;
+    void handleSelectFile(targetIndex, "panel");
+  }, [bootstrapped, fileOptions, handleSelectFile, requestedFileIndex]);
 
   useEffect(() => {
     if (!infoHash) return;

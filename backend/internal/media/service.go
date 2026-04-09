@@ -265,6 +265,21 @@ func (s *service) List(ctx context.Context, input ListInput) (ListResult, error)
 		db = applyMetadataFilter(db, awardsFilterPatterns(awards))
 	}
 
+	scoreMin, hasScoreMin := normalizeScoreBound(input.ScoreMin)
+	scoreMax, hasScoreMax := normalizeScoreBound(input.ScoreMax)
+	if hasScoreMin || hasScoreMax {
+		if !hasScoreMin {
+			scoreMin = 0
+		}
+		if !hasScoreMax {
+			scoreMax = 10
+		}
+		if scoreMax < scoreMin {
+			scoreMax = scoreMin
+		}
+		db = db.Where("me.vote_average IS NOT NULL").Where("me.vote_average >= ? AND me.vote_average <= ?", scoreMin, scoreMax)
+	}
+
 	baseQuery := db.Session(&gorm.Session{})
 
 	var totalCount int64

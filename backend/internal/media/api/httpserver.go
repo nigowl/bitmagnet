@@ -77,6 +77,8 @@ func (b *builder) Apply(e *gin.Engine) error {
 func (b *builder) list(c *gin.Context) {
 	limit := parseInt(c.Query("limit"), 24)
 	page := parseInt(c.Query("page"), 1)
+	scoreMin := parseOptionalFloat(c.Query("scoreMin"))
+	scoreMax := parseOptionalFloat(c.Query("scoreMax"))
 
 	result, err := b.service.List(c.Request.Context(), media.ListInput{
 		Category: c.Query("category"),
@@ -90,6 +92,8 @@ func (b *builder) list(c *gin.Context) {
 		Studio:   c.Query("studio"),
 		Awards:   c.Query("awards"),
 		Sort:     c.Query("sort"),
+		ScoreMin: scoreMin,
+		ScoreMax: scoreMax,
 		Limit:    limit,
 		Page:     page,
 	})
@@ -880,6 +884,18 @@ func parseFloat(raw string, fallback float64) float64 {
 		return fallback
 	}
 	return value
+}
+
+func parseOptionalFloat(raw string) *float64 {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil
+	}
+	value, err := strconv.ParseFloat(trimmed, 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+		return nil
+	}
+	return &value
 }
 
 func parseInt64(raw string, fallback int64) int64 {
