@@ -11,6 +11,7 @@ import (
 	"github.com/nigowl/bitmagnet/internal/media"
 	"github.com/nigowl/bitmagnet/internal/model"
 	"github.com/nigowl/bitmagnet/internal/queue"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -31,8 +32,9 @@ const (
 )
 
 type MaintenanceTaskInput struct {
-	Type  string `json:"type"`
-	Limit int    `json:"limit"`
+	Type      string `json:"type"`
+	Limit     int    `json:"limit"`
+	BatchSize int    `json:"batchSize"`
 }
 
 type MaintenanceStats struct {
@@ -65,23 +67,45 @@ func (s *service) StartMaintenanceTask(ctx context.Context, input MaintenanceTas
 		return MaintenanceTask{}, err
 	}
 
-	limit := normalizeMaintenanceLimit(input.Limit)
-	job, err := newMaintenanceQueueJob(taskType, uint(limit))
-	if err != nil {
-		return MaintenanceTask{}, err
+	totalLimit := normalizeMaintenanceLimit(input.Limit)
+	batchSize := normalizeMaintenanceBatchSize(input.BatchSize, totalLimit)
+	batchLimits := splitMaintenanceBatchLimits(totalLimit, batchSize)
+	if len(batchLimits) == 0 {
+		return MaintenanceTask{}, fmt.Errorf("%w: limit", ErrInvalidInput)
 	}
 
 	db, err := s.db.Get()
 	if err != nil {
 		return MaintenanceTask{}, err
 	}
-	if err := db.WithContext(ctx).Create(&job).Error; err != nil {
+
+	jobs := make([]model.QueueJob, 0, len(batchLimits))
+	for index, itemLimit := range batchLimits {
+		job, jobErr := newMaintenanceQueueJob(taskType, uint(itemLimit))
+		if jobErr != nil {
+			return MaintenanceTask{}, jobErr
+		}
+		if len(batchLimits) > 1 {
+			job.Fingerprint = fmt.Sprintf("%s:batch-%d-of-%d", job.Fingerprint, index+1, len(batchLimits))
+		}
+		jobs = append(jobs, job)
+	}
+
+	if err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for index := range jobs {
+			if createErr := tx.Create(&jobs[index]).Error; createErr != nil {
+				return createErr
+			}
+		}
+		return nil
+	}); err != nil {
 		return MaintenanceTask{}, err
 	}
 
-	task := maintenanceTaskFromQueueJob(job, taskType, limit)
+	task := maintenanceTaskFromQueueJob(jobs[0], taskType, batchLimits[0])
 	task.Message = "queued"
-	appendMaintenanceLog(&task, fmt.Sprintf("queued in queue %s", job.Queue))
+	appendMaintenanceLog(&task, fmt.Sprintf("queued %d job(s), total=%d, batchSize=%d", len(batchLimits), totalLimit, batchSize))
+	appendMaintenanceLog(&task, fmt.Sprintf("first job queue=%s limit=%d", jobs[0].Queue, batchLimits[0]))
 	return task, nil
 }
 
@@ -89,6 +113,39 @@ func (s *service) GetMaintenanceStats(ctx context.Context, taskType string) (Mai
 	normalizedType, err := normalizeMaintenanceTaskType(taskType)
 	if err != nil {
 		return MaintenanceStats{}, err
+	}
+
+	if s.mediaService != nil {
+		switch normalizedType {
+		case MaintenanceTaskTypeFixLocalized:
+			pending, countErr := s.mediaService.CountPendingLocalizedMetadata(ctx)
+			if countErr == nil {
+				return MaintenanceStats{
+					Type:    normalizedType,
+					Pending: pending,
+				}, nil
+			}
+			if s.logger != nil {
+				s.logger.Warn("maintenance stats fallback to queue pending count",
+					zap.String("type", normalizedType),
+					zap.Error(countErr),
+				)
+			}
+		case MaintenanceTaskTypeFixCoverCache:
+			pending, countErr := s.mediaService.CountPendingCoverCache(ctx)
+			if countErr == nil {
+				return MaintenanceStats{
+					Type:    normalizedType,
+					Pending: pending,
+				}, nil
+			}
+			if s.logger != nil {
+				s.logger.Warn("maintenance stats fallback to queue pending count",
+					zap.String("type", normalizedType),
+					zap.Error(countErr),
+				)
+			}
+		}
 	}
 
 	db, err := s.db.Get()
@@ -168,6 +225,39 @@ func normalizeMaintenanceLimit(limit int) int {
 		return 2000
 	}
 	return limit
+}
+
+func normalizeMaintenanceBatchSize(batchSize int, totalLimit int) int {
+	if totalLimit <= 0 {
+		return 1
+	}
+	if batchSize <= 0 {
+		return totalLimit
+	}
+	if batchSize > totalLimit {
+		return totalLimit
+	}
+	return batchSize
+}
+
+func splitMaintenanceBatchLimits(totalLimit int, batchSize int) []int {
+	if totalLimit <= 0 {
+		return nil
+	}
+	if batchSize <= 0 {
+		batchSize = totalLimit
+	}
+	remaining := totalLimit
+	batches := make([]int, 0, (totalLimit+batchSize-1)/batchSize)
+	for remaining > 0 {
+		next := batchSize
+		if remaining < next {
+			next = remaining
+		}
+		batches = append(batches, next)
+		remaining -= next
+	}
+	return batches
 }
 
 func maintenanceQueueName(taskType string) string {

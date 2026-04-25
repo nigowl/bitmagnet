@@ -415,8 +415,9 @@ func (b *builder) backfillLocalizedMetadata(c *gin.Context) {
 }
 
 type startMaintenanceTaskRequest struct {
-	Type  string `json:"type"`
-	Limit int    `json:"limit"`
+	Type      string `json:"type"`
+	Limit     int    `json:"limit"`
+	BatchSize int    `json:"batchSize"`
 }
 
 type maintenanceStatsQuery struct {
@@ -431,8 +432,9 @@ func (b *builder) startMaintenanceTask(c *gin.Context) {
 	}
 
 	task, err := b.service.StartMaintenanceTask(c.Request.Context(), MaintenanceTaskInput{
-		Type:  req.Type,
-		Limit: req.Limit,
+		Type:      req.Type,
+		Limit:     req.Limit,
+		BatchSize: req.BatchSize,
 	})
 	if err != nil {
 		switch {

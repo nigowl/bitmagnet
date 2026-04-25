@@ -24,6 +24,7 @@ import { LogIn, PlayCircle, RefreshCw, Trash2 } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { apiRequest } from "@/lib/api";
+import { useTabsUnderline } from "@/lib/use-tabs-underline";
 import { useI18n } from "@/languages/provider";
 
 type MaintenanceTaskType = "fix_localized_metadata" | "fix_cover_cache";
@@ -112,11 +113,13 @@ type AdminSettingsResponse = {
 
 export function MaintenancePage() {
   const { t } = useI18n();
+  const tabsRef = useTabsUnderline();
   const { user, isAdmin, loading: authLoading } = useAuth();
   const { openLogin } = useAuthDialog();
   const [activeTab, setActiveTab] = useState<string>("tasks");
   const [taskType, setTaskType] = useState<MaintenanceTaskType>("fix_localized_metadata");
   const [limit, setLimit] = useState(10);
+  const [batchSize, setBatchSize] = useState(20);
   const [starting, setStarting] = useState(false);
   const [task, setTask] = useState<MaintenanceTask | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -272,24 +275,47 @@ export function MaintenancePage() {
   }, [activeTab, playerEnabled]);
 
   const startTask = async () => {
+    const normalizedLimit = Math.max(1, Math.min(2000, Number(limit) || 10));
+    const normalizedBatchSize = Math.max(1, Math.min(normalizedLimit, Number(batchSize) || normalizedLimit));
+    const queuedJobs = Math.max(1, Math.ceil(normalizedLimit / normalizedBatchSize));
+
     setStarting(true);
     try {
       const data = await apiRequest<StartMaintenanceResponse>("/api/admin/maintenance/tasks", {
         method: "POST",
         data: {
           type: taskType,
-          limit
+          limit: normalizedLimit,
+          batchSize: normalizedBatchSize
         }
       });
       setTask(data.task);
       void refreshPending(taskType);
-      notifications.show({ color: "green", message: t("maintenance.started") });
+      notifications.show({
+        color: "green",
+        message: queuedJobs > 1
+          ? `${t("maintenance.started")} (${queuedJobs} x ${normalizedBatchSize})`
+          : t("maintenance.started")
+      });
     } catch (error) {
       notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
     } finally {
       setStarting(false);
     }
   };
+
+  const normalizedLimitPreview = useMemo(
+    () => Math.max(1, Math.min(2000, Number(limit) || 10)),
+    [limit]
+  );
+  const normalizedBatchPreview = useMemo(
+    () => Math.max(1, Math.min(normalizedLimitPreview, Number(batchSize) || normalizedLimitPreview)),
+    [batchSize, normalizedLimitPreview]
+  );
+  const queuedJobsPreview = useMemo(
+    () => Math.max(1, Math.ceil(normalizedLimitPreview / normalizedBatchPreview)),
+    [normalizedBatchPreview, normalizedLimitPreview]
+  );
 
   const progressPercent = useMemo(() => {
     if (!task || task.requested <= 0) {
@@ -363,7 +389,7 @@ export function MaintenancePage() {
       </Card>
 
       <Card className="glass-card" withBorder>
-        <Tabs className="app-tabs" value={activeTab} onChange={(value) => setActiveTab(value || "tasks")}>
+        <Tabs ref={tabsRef} className="app-tabs" value={activeTab} onChange={(value) => setActiveTab(value || "tasks")}>
           <Tabs.List grow>
             <Tabs.Tab value="tasks">{t("maintenance.tabTasks")}</Tabs.Tab>
             {playerEnabled ? <Tabs.Tab value="transmission">{t("maintenance.tabTransmission")}</Tabs.Tab> : null}
@@ -408,6 +434,19 @@ export function MaintenancePage() {
                     step={1}
                     onChange={(value) => setLimit(Number(value) || 10)}
                   />
+
+                  <NumberInput
+                    label={t("maintenance.batchSize")}
+                    value={batchSize}
+                    min={1}
+                    max={2000}
+                    step={1}
+                    onChange={(value) => setBatchSize(Number(value) || 20)}
+                  />
+
+                  <Text size="sm" c="dimmed">
+                    {t("maintenance.batchPreview")}: {queuedJobsPreview} x {normalizedBatchPreview} = {normalizedLimitPreview}
+                  </Text>
                 </Stack>
               </Card>
 

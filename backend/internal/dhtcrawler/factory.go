@@ -86,6 +86,7 @@ func New(params Params) Result {
 						metainfoRequester:            params.MetainfoRequester,
 						banningChecker:               params.BanningChecker,
 						bootstrapNodes:               cfg.BootstrapNodes,
+						bootstrapDNSResolvers:        cfg.BootstrapDNSResolvers,
 						reseedBootstrapNodesInterval: cfg.ReseedBootstrapNodesInterval,
 						getOldestNodesInterval:       cfg.GetOldestNodesInterval,
 						oldPeerThreshold:             cfg.OldPeerThreshold,

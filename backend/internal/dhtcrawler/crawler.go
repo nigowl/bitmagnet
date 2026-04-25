@@ -27,6 +27,7 @@ type crawler struct {
 	metainfoRequester            metainforequester.Requester
 	banningChecker               banning.Checker
 	bootstrapNodes               []string
+	bootstrapDNSResolvers        []string
 	reseedBootstrapNodesInterval time.Duration
 	getOldestNodesInterval       time.Duration
 	oldPeerThreshold             time.Duration

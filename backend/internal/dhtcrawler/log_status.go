@@ -17,6 +17,7 @@ func (c *crawler) logStatus(ctx context.Context) {
 		"dht crawler status logging enabled",
 		"interval", c.statusLogInterval.String(),
 		"bootstrap_nodes", len(c.bootstrapNodes),
+		"bootstrap_dns_resolvers", len(c.bootstrapDNSResolvers),
 	)
 
 	for {

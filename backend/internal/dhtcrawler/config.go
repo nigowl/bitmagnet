@@ -11,6 +11,7 @@ type Config struct {
 	// conditions; your mileage may vary here...
 	ScalingFactor                uint
 	BootstrapNodes               []string
+	BootstrapDNSResolvers        []string
 	ReseedBootstrapNodesInterval time.Duration
 	// SaveFilesThreshold specifies a maximum number of files in a torrent before file information is discarded.
 	// Some torrents contain thousands of files which can severely impact performance and uses a lot of disk space.
@@ -34,6 +35,7 @@ func NewDefaultConfig() Config {
 	return Config{
 		ScalingFactor:                10,
 		BootstrapNodes:               defaultBootstrapNodes,
+		BootstrapDNSResolvers:        defaultBootstrapDNSResolvers,
 		ReseedBootstrapNodesInterval: time.Minute,
 		SaveFilesThreshold:           100,
 		SavePieces:                   false,
@@ -52,4 +54,13 @@ var defaultBootstrapNodes = []string{
 	"dht.aelitis.com:6881",     // Vuze
 	"router.silotis.us:6881",   // IPv6
 	"dht.libtorrent.org:25401", // @arvidn's
+}
+
+var defaultBootstrapDNSResolvers = []string{
+	"https://cloudflare-dns.com/dns-query",
+	"https://dns.google/dns-query",
+	"https://dns.quad9.net/dns-query",
+	"1.1.1.1:53",
+	"8.8.8.8:53",
+	"9.9.9.9:53",
 }

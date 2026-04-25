@@ -195,6 +195,8 @@
     "taskType": "Task Type",
     "pendingCount": "Pending Count",
     "limit": "Processing Limit",
+    "batchSize": "Batch Size",
+    "batchPreview": "Batch Queue Preview",
     "start": "Start Task",
     "started": "Task queued. Execution is handled by queue workers.",
     "currentTask": "Current Task",

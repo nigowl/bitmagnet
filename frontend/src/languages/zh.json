@@ -195,6 +195,8 @@
     "taskType": "任务类型",
     "pendingCount": "待处理数量",
     "limit": "处理数量",
+    "batchSize": "每批处理数量",
+    "batchPreview": "批量入队预览",
     "start": "开始执行",
     "started": "任务已入队，实际执行由队列 worker 完成。",
     "currentTask": "当前任务",
