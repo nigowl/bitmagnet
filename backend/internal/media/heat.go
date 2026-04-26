@@ -119,9 +119,8 @@ func refreshMediaHeat(ctx context.Context, db *gorm.DB, mediaIDs []string, days 
 	days = clampHomeHotDays(days)
 	intervalDays := days - 1
 
-	if err := db.WithContext(ctx).
-		Where("media_id IN ?", mediaIDs).
-		Delete(&model.MediaEntryHeatDaily{}).Error; err != nil {
+	deleteSQL := fmt.Sprintf(`DELETE FROM %s WHERE media_id IN ?`, model.TableNameMediaEntryHeatDaily)
+	if err := db.WithContext(ctx).Exec(deleteSQL, mediaIDs).Error; err != nil {
 		return err
 	}
 

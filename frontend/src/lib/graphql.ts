@@ -217,19 +217,6 @@ query TorrentFiles($input: TorrentFilesQueryInput!) {
 }
 `;
 
-export const TORRENT_SUGGEST_TAGS_QUERY = `
-query TorrentSuggestTags($input: SuggestTagsQueryInput!) {
-  torrent {
-    suggestTags(input: $input) {
-      suggestions {
-        name
-        count
-      }
-    }
-  }
-}
-`;
-
 export const TORRENT_DELETE_MUTATION = `
 mutation TorrentDelete($infoHashes: [Hash20!]!) {
   torrent {

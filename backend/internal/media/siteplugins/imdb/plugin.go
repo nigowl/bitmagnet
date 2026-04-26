@@ -16,10 +16,6 @@ type Plugin struct {
 	logger *zap.Logger
 }
 
-func New() *Plugin {
-	return &Plugin{logger: zap.NewNop()}
-}
-
 func NewWithLogger(logger *zap.Logger) *Plugin {
 	if logger == nil {
 		logger = zap.NewNop()

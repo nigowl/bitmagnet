@@ -965,7 +965,7 @@ export function SettingsPage() {
     } finally {
       setTransmissionTaskStatsLoading(false);
     }
-  }, [isAdmin, resolvePlayerEnabled]);
+  }, [isAdmin]);
 
   useEffect(() => {
     if (!isAdmin) return;

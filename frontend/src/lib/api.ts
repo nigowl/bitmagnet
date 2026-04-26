@@ -44,7 +44,7 @@ function clearTokenCookie() {
   document.cookie = `${authTokenCookieKey}=; Path=/; Max-Age=0; SameSite=Lax`;
 }
 
-export function getAuthToken(): string {
+function getAuthToken(): string {
   if (typeof window === "undefined") return "";
   const fromStorage = window.localStorage.getItem(authTokenStorageKey) || "";
   if (fromStorage.trim()) {

@@ -20,14 +20,6 @@ type Plugin struct {
 	tmdbClient lazy.Lazy[tmdbapi.Client]
 }
 
-func New() *Plugin {
-	return &Plugin{logger: zap.NewNop()}
-}
-
-func NewWithLogger(logger *zap.Logger) *Plugin {
-	return NewWithDeps(nil, logger)
-}
-
 func NewWithDeps(tmdbClient lazy.Lazy[tmdbapi.Client], logger *zap.Logger) *Plugin {
 	if logger == nil {
 		logger = zap.NewNop()
