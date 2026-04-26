@@ -78,6 +78,9 @@ type SystemSettings = {
       refreshHour: number;
       poolLimit: number;
     };
+    hot: {
+      days: number;
+    };
     highScore: {
       poolLimit: number;
       minScore: number;
@@ -421,6 +424,22 @@ const DEFAULT_AUTH_SETTINGS: SystemSettings["auth"] = {
   inviteRequired: false
 };
 
+const DEFAULT_HOME_SETTINGS: SystemSettings["home"] = {
+  daily: {
+    refreshHour: 2,
+    poolLimit: 96
+  },
+  hot: {
+    days: 30
+  },
+  highScore: {
+    poolLimit: 120,
+    minScore: 8,
+    maxScore: 9.9,
+    window: 1
+  }
+};
+
 export function SettingsPage() {
   const { t } = useI18n();
   const { user, isAdmin, loading: authLoading } = useAuth();
@@ -473,16 +492,7 @@ export function SettingsPage() {
       }
     },
     home: {
-      daily: {
-        refreshHour: 2,
-        poolLimit: 96
-      },
-      highScore: {
-        poolLimit: 120,
-        minScore: 8,
-        maxScore: 9.9,
-        window: 1
-      }
+      ...DEFAULT_HOME_SETTINGS
     },
     player: { ...DEFAULT_PLAYER_SETTINGS },
     auth: { ...DEFAULT_AUTH_SETTINGS }
@@ -557,6 +567,22 @@ export function SettingsPage() {
         auth: {
           ...DEFAULT_AUTH_SETTINGS,
           ...data.settings.auth
+        },
+        home: {
+          ...DEFAULT_HOME_SETTINGS,
+          ...data.settings.home,
+          daily: {
+            ...DEFAULT_HOME_SETTINGS.daily,
+            ...data.settings.home?.daily
+          },
+          hot: {
+            ...DEFAULT_HOME_SETTINGS.hot,
+            ...data.settings.home?.hot
+          },
+          highScore: {
+            ...DEFAULT_HOME_SETTINGS.highScore,
+            ...data.settings.home?.highScore
+          }
         }
       };
       setSettings(normalized);
@@ -651,6 +677,22 @@ export function SettingsPage() {
         auth: {
           ...DEFAULT_AUTH_SETTINGS,
           ...data.settings.auth
+        },
+        home: {
+          ...DEFAULT_HOME_SETTINGS,
+          ...data.settings.home,
+          daily: {
+            ...DEFAULT_HOME_SETTINGS.daily,
+            ...data.settings.home?.daily
+          },
+          hot: {
+            ...DEFAULT_HOME_SETTINGS.hot,
+            ...data.settings.home?.hot
+          },
+          highScore: {
+            ...DEFAULT_HOME_SETTINGS.highScore,
+            ...data.settings.home?.highScore
+          }
         }
       };
       setSettings(normalized);
@@ -834,6 +876,7 @@ export function SettingsPage() {
   const updateHomeSettings = (
     updates: {
       daily?: Partial<SystemSettings["home"]["daily"]>;
+      hot?: Partial<SystemSettings["home"]["hot"]>;
       highScore?: Partial<SystemSettings["home"]["highScore"]>;
     }
   ) => {
@@ -843,6 +886,10 @@ export function SettingsPage() {
         daily: {
           ...current.home.daily,
           ...(updates.daily || {})
+        },
+        hot: {
+          ...current.home.hot,
+          ...(updates.hot || {})
         },
         highScore: {
           ...current.home.highScore,
@@ -1656,6 +1703,30 @@ export function SettingsPage() {
                             onChange={(value) => {
                               if (typeof value === "number" && Number.isFinite(value)) {
                                 updateHomeSettings({ daily: { poolLimit: value } });
+                              }
+                            }}
+                          />
+                        </SimpleGrid>
+                      </Stack>
+                    </Card>
+                  </Accordion.Panel>
+                </Accordion.Item>
+
+                <Accordion.Item value="home-hot">
+                  <Accordion.Control>{t("settings.homeHotTitle")}</Accordion.Control>
+                  <Accordion.Panel>
+                    <Card className="settings-section-block" radius="lg">
+                      <Stack gap="sm">
+                        <Text c="dimmed" size="sm">{t("settings.homeHotHint")}</Text>
+                        <SimpleGrid cols={{ base: 1, md: 2 }}>
+                          <NumberInput
+                            label={t("settings.homeHotDays")}
+                            min={1}
+                            max={3650}
+                            value={settings.home.hot.days}
+                            onChange={(value) => {
+                              if (typeof value === "number" && Number.isFinite(value)) {
+                                updateHomeSettings({ hot: { days: value } });
                               }
                             }}
                           />

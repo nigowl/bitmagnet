@@ -29,6 +29,8 @@ type MediaEntry struct {
 	HomepageURL         NullString                     `gorm:"column:homepage_url" json:"homepageUrl"`
 	Runtime             NullUint16                     `gorm:"column:runtime" json:"runtime"`
 	Popularity          NullFloat32                    `gorm:"column:popularity" json:"popularity"`
+	HeatScoreTotal      int64                          `gorm:"column:heat_score_total;not null" json:"heatScoreTotal"`
+	HeatScoreRecent     int64                          `gorm:"column:heat_score_recent;not null" json:"heatScoreRecent"`
 	VoteCount           NullUint                       `gorm:"column:vote_count" json:"voteCount"`
 	PosterPath          NullString                     `gorm:"column:poster_path" json:"posterPath"`
 	BackdropPath        NullString                     `gorm:"column:backdrop_path" json:"backdropPath"`

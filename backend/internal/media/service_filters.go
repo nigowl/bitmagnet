@@ -343,10 +343,16 @@ func awardsFilterPatterns(award string) []string {
 	}
 }
 
-func applySort(db *gorm.DB, sort string) *gorm.DB {
+func applySort(db *gorm.DB, sort string, popularOrderExpr string) *gorm.DB {
+	if strings.TrimSpace(popularOrderExpr) == "" {
+		popularOrderExpr = "COALESCE(me.heat_score_recent, 0)"
+	}
+
 	switch sort {
 	case sortPopular:
-		return db.Order("COALESCE(me.popularity, 0) DESC").
+		return db.Order(popularOrderExpr + " DESC").
+			Order("COALESCE(me.heat_score_total, 0) DESC").
+			Order("COALESCE(me.popularity, 0) DESC").
 			Order("COALESCE(me.vote_count, 0) DESC").
 			Order("COALESCE(me.max_seeders, 0) DESC")
 	case sortDownload:

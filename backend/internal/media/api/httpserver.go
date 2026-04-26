@@ -77,6 +77,7 @@ func (b *builder) Apply(e *gin.Engine) error {
 func (b *builder) list(c *gin.Context) {
 	limit := parseInt(c.Query("limit"), 24)
 	page := parseInt(c.Query("page"), 1)
+	heatDays := parseOptionalPositiveInt(c.Query("heatDays"))
 	scoreMin := parseOptionalFloat(c.Query("scoreMin"))
 	scoreMax := parseOptionalFloat(c.Query("scoreMax"))
 
@@ -92,6 +93,7 @@ func (b *builder) list(c *gin.Context) {
 		Studio:   c.Query("studio"),
 		Awards:   c.Query("awards"),
 		Sort:     c.Query("sort"),
+		HeatDays: heatDays,
 		ScoreMin: scoreMin,
 		ScoreMax: scoreMax,
 		Limit:    limit,
@@ -103,6 +105,20 @@ func (b *builder) list(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+func parseOptionalPositiveInt(value string) *int {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return nil
+	}
+
+	return &parsed
 }
 
 func (b *builder) detail(c *gin.Context) {

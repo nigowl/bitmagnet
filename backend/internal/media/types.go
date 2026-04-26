@@ -14,6 +14,7 @@ type ListInput struct {
 	Studio   string
 	Awards   string
 	Sort     string
+	HeatDays *int
 	ScoreMin *float64
 	ScoreMax *float64
 	Limit    int

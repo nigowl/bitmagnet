@@ -52,6 +52,7 @@ const (
 
 	KeyHomeDailyRefreshHour   = "system.home.daily.refresh_hour"
 	KeyHomeDailyPoolLimit     = "system.home.daily.pool_limit"
+	KeyHomeHotDays            = "system.home.hot.days"
 	KeyHomeHighScorePoolLimit = "system.home.high_score.pool_limit"
 	KeyHomeHighScoreMin       = "system.home.high_score.min"
 	KeyHomeHighScoreMax       = "system.home.high_score.max"
@@ -163,6 +164,7 @@ func HomeKeys() []string {
 	return []string{
 		KeyHomeDailyRefreshHour,
 		KeyHomeDailyPoolLimit,
+		KeyHomeHotDays,
 		KeyHomeHighScorePoolLimit,
 		KeyHomeHighScoreMin,
 		KeyHomeHighScoreMax,

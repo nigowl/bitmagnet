@@ -17,6 +17,7 @@ var defaultTableNames = map[*string]string{
 	&TableNameKeyValue:                 "key_values",
 	&TableNameMetadataSource:           "metadata_sources",
 	&TableNameMediaEntry:               "media_entries",
+	&TableNameMediaEntryHeatDaily:      "media_entry_heat_daily",
 	&TableNameMediaEntryTorrent:        "media_entry_torrents",
 	&TableNameQueueJob:                 "queue_jobs",
 	&TableNameTorrent:                  "torrents",

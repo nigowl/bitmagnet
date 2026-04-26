@@ -95,12 +95,17 @@ type MediaPerformanceSettings struct {
 
 type HomeSettings struct {
 	Daily     HomeDailySettings     `json:"daily"`
+	Hot       HomeHotSettings       `json:"hot"`
 	HighScore HomeHighScoreSettings `json:"highScore"`
 }
 
 type HomeDailySettings struct {
 	RefreshHour int `json:"refreshHour"`
 	PoolLimit   int `json:"poolLimit"`
+}
+
+type HomeHotSettings struct {
+	Days int `json:"days"`
 }
 
 type HomeHighScoreSettings struct {
@@ -213,12 +218,17 @@ type MediaPerformanceSettingsInput struct {
 
 type HomeSettingsInput struct {
 	Daily     *HomeDailySettingsInput     `json:"daily"`
+	Hot       *HomeHotSettingsInput       `json:"hot"`
 	HighScore *HomeHighScoreSettingsInput `json:"highScore"`
 }
 
 type HomeDailySettingsInput struct {
 	RefreshHour *int `json:"refreshHour"`
 	PoolLimit   *int `json:"poolLimit"`
+}
+
+type HomeHotSettingsInput struct {
+	Days *int `json:"days"`
 }
 
 type HomeHighScoreSettingsInput struct {
@@ -407,6 +417,9 @@ func NewService(p Params) Service {
 			Daily: HomeDailySettings{
 				RefreshHour: 2,
 				PoolLimit:   96,
+			},
+			Hot: HomeHotSettings{
+				Days: 30,
 			},
 			HighScore: HomeHighScoreSettings{
 				PoolLimit: 120,
@@ -806,8 +819,14 @@ func (s *service) Update(ctx context.Context, input UpdateInput) (Settings, erro
 	}
 
 	if invalidator, ok := s.mediaService.(mediaRuntimeCacheInvalidator); ok &&
-		hasUpdateWithAnyPrefix(updates, "system.media.", "system.performance.media.") {
+		hasUpdateWithAnyPrefix(updates, "system.media.", "system.performance.media.", "system.home.hot.") {
 		invalidator.InvalidateRuntimeSettingsCache()
+	}
+
+	if _, ok := updates[runtimeconfig.KeyHomeHotDays]; ok {
+		if err := media.RefreshRecentHeatWindow(ctx, db, effective.Home.Hot.Days); err != nil {
+			return Settings{}, err
+		}
 	}
 
 	if s.workerRegistry != nil {
@@ -1110,6 +1129,17 @@ func applyHomeUpdate(
 		}
 	}
 
+	if hot := input.Hot; hot != nil {
+		if hot.Days != nil {
+			if *hot.Days < 1 || *hot.Days > 3650 {
+				return fmt.Errorf("%w: home.hot.days", ErrInvalidInput)
+			}
+			value := strconv.Itoa(*hot.Days)
+			updates[runtimeconfig.KeyHomeHotDays] = &value
+			effective.Home.Hot.Days = *hot.Days
+		}
+	}
+
 	if high := input.HighScore; high != nil {
 		if high.PoolLimit != nil {
 			if *high.PoolLimit < 24 || *high.PoolLimit > 240 {
@@ -1323,6 +1353,9 @@ func applyHomeMerge(result *Settings, values map[string]string) {
 	})
 	applyInt(runtimeconfig.KeyHomeDailyPoolLimit, 24, 240, func(v int) {
 		result.Home.Daily.PoolLimit = v
+	})
+	applyInt(runtimeconfig.KeyHomeHotDays, 1, 3650, func(v int) {
+		result.Home.Hot.Days = v
 	})
 	applyInt(runtimeconfig.KeyHomeHighScorePoolLimit, 24, 240, func(v int) {
 		result.Home.HighScore.PoolLimit = v
@@ -1867,6 +1900,7 @@ func settingsToRuntimeValueMap(settings Settings) map[string]string {
 
 		runtimeconfig.KeyHomeDailyRefreshHour:   strconv.Itoa(settings.Home.Daily.RefreshHour),
 		runtimeconfig.KeyHomeDailyPoolLimit:     strconv.Itoa(settings.Home.Daily.PoolLimit),
+		runtimeconfig.KeyHomeHotDays:            strconv.Itoa(settings.Home.Hot.Days),
 		runtimeconfig.KeyHomeHighScorePoolLimit: strconv.Itoa(settings.Home.HighScore.PoolLimit),
 		runtimeconfig.KeyHomeHighScoreMin:       strconv.FormatFloat(settings.Home.HighScore.MinScore, 'f', 4, 64),
 		runtimeconfig.KeyHomeHighScoreMax:       strconv.FormatFloat(settings.Home.HighScore.MaxScore, 'f', 4, 64),

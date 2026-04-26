@@ -234,6 +234,10 @@ func SyncEntries(ctx context.Context, db *gorm.DB, refs []model.ContentRef) erro
 		return err
 	}
 
+	if err := refreshMediaHeat(ctx, db, mediaIDs, loadHomeHotDays(ctx, db)); err != nil {
+		return err
+	}
+
 	mappingWhereClause, mappingArgs := buildContentRefWhereClause("tc.content_type", "tc.content_source", "tc.content_id", filteredRefs)
 
 	insertMappingsSQL := fmt.Sprintf(

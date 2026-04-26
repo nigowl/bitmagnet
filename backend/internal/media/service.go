@@ -108,10 +108,12 @@ func NewService(p Params) Service {
 			defaults: mediaRuntimeOptions{
 				autoCacheCover:     true,
 				autoFetchBilingual: true,
+				homeHotDays:        defaultHomeHotDays,
 			},
 			cached: mediaRuntimeOptions{
 				autoCacheCover:     true,
 				autoFetchBilingual: true,
+				homeHotDays:        defaultHomeHotDays,
 			},
 		},
 	}
@@ -155,6 +157,7 @@ type mediaRuntimeSettings struct {
 type mediaRuntimeOptions struct {
 	autoCacheCover     bool
 	autoFetchBilingual bool
+	homeHotDays        int
 }
 
 func (s *service) List(ctx context.Context, input ListInput) (ListResult, error) {
@@ -281,6 +284,7 @@ func (s *service) List(ctx context.Context, input ListInput) (ListResult, error)
 	}
 
 	baseQuery := db.Session(&gorm.Session{})
+	runtimeOptions := s.loadRuntimeOptions(ctx, baseQuery)
 
 	var totalCount int64
 	if err := baseQuery.Count(&totalCount).Error; err != nil {
@@ -294,7 +298,20 @@ func (s *service) List(ctx context.Context, input ListInput) (ListResult, error)
 		return ListResult{}, err
 	}
 
-	db = applySort(baseQuery.Session(&gorm.Session{}), normalizeSort(input.Sort))
+	sortKey := normalizeSort(input.Sort)
+	popularDays := runtimeOptions.homeHotDays
+	if input.HeatDays != nil {
+		popularDays = clampHomeHotDays(*input.HeatDays)
+	}
+
+	sortedQuery := baseQuery.Session(&gorm.Session{})
+	popularOrderExpr := "COALESCE(me.heat_score_recent, 0)"
+	if sortKey == sortPopular && popularDays != runtimeOptions.homeHotDays {
+		sortedQuery = applyPopularHeatDaysScope(sortedQuery, popularDays)
+		popularOrderExpr = "COALESCE(popular_heat.popular_heat_score, 0)"
+	}
+
+	db = applySort(sortedQuery, sortKey, popularOrderExpr)
 
 	var rows []model.MediaEntry
 	if err := db.Select("me.*").
@@ -722,6 +739,7 @@ func (s *service) loadRuntimeOptions(ctx context.Context, db *gorm.DB) mediaRunt
 	values, err := runtimeconfig.ReadValues(ctx, db, []string{
 		runtimeconfig.KeyMediaAutoCacheCover,
 		runtimeconfig.KeyMediaAutoFetchBilingual,
+		runtimeconfig.KeyHomeHotDays,
 	})
 	if err != nil {
 		return cached
@@ -729,17 +747,25 @@ func (s *service) loadRuntimeOptions(ctx context.Context, db *gorm.DB) mediaRunt
 
 	parsed := defaults
 	for rawKey, value := range values {
-		rawValue := strings.TrimSpace(value)
-		value, err := strconv.ParseBool(rawValue)
-		if err != nil {
-			continue
-		}
-
 		switch rawKey {
 		case runtimeconfig.KeyMediaAutoCacheCover:
-			parsed.autoCacheCover = value
+			parsedValue, err := strconv.ParseBool(strings.TrimSpace(value))
+			if err != nil {
+				continue
+			}
+			parsed.autoCacheCover = parsedValue
 		case runtimeconfig.KeyMediaAutoFetchBilingual:
-			parsed.autoFetchBilingual = value
+			parsedValue, err := strconv.ParseBool(strings.TrimSpace(value))
+			if err != nil {
+				continue
+			}
+			parsed.autoFetchBilingual = parsedValue
+		case runtimeconfig.KeyHomeHotDays:
+			parsedValue, err := strconv.Atoi(strings.TrimSpace(value))
+			if err != nil {
+				continue
+			}
+			parsed.homeHotDays = clampHomeHotDays(parsedValue)
 		}
 	}
 

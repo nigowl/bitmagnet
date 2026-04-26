@@ -23,6 +23,9 @@ type HomeSettings = {
     refreshHour: number;
     poolLimit: number;
   };
+  hot: {
+    days: number;
+  };
   highScore: {
     poolLimit: number;
     minScore: number;
@@ -35,6 +38,9 @@ const DEFAULT_HOME_SETTINGS: HomeSettings = {
   daily: {
     refreshHour: 2,
     poolLimit: 96
+  },
+  hot: {
+    days: 30
   },
   highScore: {
     poolLimit: 120,
@@ -66,6 +72,9 @@ function normalizeHomeSettings(input: unknown): HomeSettings {
   const rawDaily: Partial<HomeSettings["daily"]> = (raw.daily && typeof raw.daily === "object")
     ? (raw.daily as Partial<HomeSettings["daily"]>)
     : {};
+  const rawHot: Partial<HomeSettings["hot"]> = (raw.hot && typeof raw.hot === "object")
+    ? (raw.hot as Partial<HomeSettings["hot"]>)
+    : {};
   const rawHigh: Partial<HomeSettings["highScore"]> = (raw.highScore && typeof raw.highScore === "object")
     ? (raw.highScore as Partial<HomeSettings["highScore"]>)
     : {};
@@ -76,6 +85,9 @@ function normalizeHomeSettings(input: unknown): HomeSettings {
   const dailyPoolLimit = typeof rawDaily.poolLimit === "number"
     ? clampNumber(Math.round(rawDaily.poolLimit), 24, 240)
     : DEFAULT_HOME_SETTINGS.daily.poolLimit;
+  const hotDays = typeof rawHot.days === "number"
+    ? clampNumber(Math.round(rawHot.days), 1, 3650)
+    : DEFAULT_HOME_SETTINGS.hot.days;
 
   const minScore = typeof rawHigh.minScore === "number"
     ? clampNumber(rawHigh.minScore, 0, 10)
@@ -95,6 +107,9 @@ function normalizeHomeSettings(input: unknown): HomeSettings {
     daily: {
       refreshHour,
       poolLimit: dailyPoolLimit
+    },
+    hot: {
+      days: hotDays
     },
     highScore: {
       poolLimit: highScorePoolLimit,
@@ -495,8 +510,8 @@ export function HomePage() {
   const [series, setSeries] = useState<MediaListItem[]>([]);
   const [anime, setAnime] = useState<MediaListItem[]>([]);
 
-  const loadSection = useCallback(async (category: "movie" | "series" | "anime") => {
-    const data = await fetchMediaList({ category, sort: "popular", limit: HOME_SECTION_POOL_LIMIT, page: 1 });
+  const loadSection = useCallback(async (category: "movie" | "series" | "anime", heatDays: number) => {
+    const data = await fetchMediaList({ category, sort: "popular", heatDays, limit: HOME_SECTION_POOL_LIMIT, page: 1 });
     return data.items || [];
   }, []);
 
@@ -505,12 +520,13 @@ export function HomePage() {
     try {
       const latestHomeSettings = await fetchHomeSettings();
       const dayToken = buildRecommendationDayToken(latestHomeSettings.daily.refreshHour);
+      const hotDays = latestHomeSettings.hot.days;
       const [popularData, highScoreItems, movieItems, seriesItems, animeItems] = await Promise.all([
-        fetchMediaList({ sort: "popular", limit: latestHomeSettings.daily.poolLimit, page: 1 }),
+        fetchMediaList({ sort: "popular", heatDays: hotDays, limit: latestHomeSettings.daily.poolLimit, page: 1 }),
         fetchHighScorePool(latestHomeSettings.highScore, HOME_SECTION_POOL_LIMIT),
-        loadSection("movie"),
-        loadSection("series"),
-        loadSection("anime")
+        loadSection("movie", hotDays),
+        loadSection("series", hotDays),
+        loadSection("anime", hotDays)
       ]);
 
       setHomeSettings(latestHomeSettings);

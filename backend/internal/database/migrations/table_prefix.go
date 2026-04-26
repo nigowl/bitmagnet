@@ -22,6 +22,7 @@ var prefixedTables = []string{
 	"content_collections",
 	"content_collections_content",
 	"media_entries",
+	"media_entry_heat_daily",
 	"media_entry_torrents",
 	"torrent_contents",
 	"torrent_hints",
