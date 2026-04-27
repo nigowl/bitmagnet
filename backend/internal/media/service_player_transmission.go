@@ -454,7 +454,7 @@ func (s *service) PlayerTransmissionResolveStream(
 
 func normalizePlayerOutputResolution(raw int) int {
 	switch raw {
-	case 480, 720, 1080, 2160:
+	case 480, 720, 1080, 1440, 2160:
 		return raw
 	default:
 		return 0

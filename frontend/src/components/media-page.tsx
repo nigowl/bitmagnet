@@ -235,6 +235,10 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
   const sort = normalizeSimpleValue(searchParams.get("sort"), "popular");
   const page = Math.max(1, Number(searchParams.get("page") || "1") || 1);
   const searchValue = searchParams.get("search") || "";
+  const currentListHref = useMemo(() => {
+    const query = searchParams.toString();
+    return query ? `${pathname}?${query}` : pathname;
+  }, [pathname, searchParams]);
 
   useEffect(() => {
     setSearchInput(searchValue);
@@ -762,7 +766,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
 
               return (
                 <div key={item.id} className="media-wall-item">
-                  <Link href={buildMediaDetailHref(item)} className="unstyled-link">
+                  <Link href={buildMediaDetailHref(item, currentListHref)} className="unstyled-link">
                     <article className="media-wall-card">
                       <div className="media-wall-poster-shell">
                         {poster ? (

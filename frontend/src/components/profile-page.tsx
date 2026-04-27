@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   Badge,
@@ -72,7 +73,7 @@ function resolveFavoriteTypeLabel(item: FavoriteItem, t: (key: string) => string
   return item.contentType ? t(`contentTypes.${item.contentType}`) : "-";
 }
 
-function getFavoriteMediaHref(item: FavoriteItem): string | null {
+function getFavoriteMediaHref(item: FavoriteItem, sourceHref: string): string | null {
   const resolvedType = item.content?.type ?? item.contentType;
   const resolvedSource = item.content?.source ?? item.contentSource;
   const resolvedContentId = item.content?.id ?? item.contentId;
@@ -89,11 +90,13 @@ function getFavoriteMediaHref(item: FavoriteItem): string | null {
           collections: item.content.collections ?? null
         }
       : null
-  });
+  }, sourceHref);
 }
 
 export function ProfilePage() {
   const { t } = useI18n();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user, loading, favorites, refreshFavorites, toggleFavorite, changePassword } = useAuth();
   const { openLogin, openRegister } = useAuthDialog();
   const [favoriteItems, setFavoriteItems] = useState<FavoriteItem[]>([]);
@@ -103,6 +106,10 @@ export function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
   const tabsRef = useTabsUnderline();
+  const currentPageHref = useMemo(() => {
+    const query = searchParams.toString();
+    return query ? `${pathname}?${query}` : pathname;
+  }, [pathname, searchParams]);
 
   useEffect(() => {
     const loadFavorites = async () => {
@@ -250,7 +257,7 @@ export function ProfilePage() {
                   {favoriteItems.map((item) => (
                     <Table.Tr key={item.infoHash}>
                       <Table.Td>
-                        <Link href={getFavoriteMediaHref(item) || `/torrents/${item.infoHash}`} className="unstyled-link">
+                        <Link href={getFavoriteMediaHref(item, currentPageHref) || `/torrents/${item.infoHash}`} className="unstyled-link">
                           <Text lineClamp={1}>{item.content?.title?.trim() || item.title}</Text>
                         </Link>
                       </Table.Td>

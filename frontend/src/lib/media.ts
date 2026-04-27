@@ -344,9 +344,20 @@ export function resolveMediaCategory(item: MediaLikeItem & { contentType?: strin
   return "movie";
 }
 
-export function buildMediaDetailHref(item: MediaLikeItem & { id: string; contentType?: string | null }): string {
+export function buildMediaDetailHref(
+  item: MediaLikeItem & { id: string; contentType?: string | null },
+  sourceHref?: string | null
+): string {
   const category = resolveMediaCategory(item);
-  return `/media/${category}/${encodeURIComponent(item.id)}`;
+  const baseHref = `/media/${category}/${encodeURIComponent(item.id)}`;
+  const normalizedSource = sourceHref?.trim();
+  if (!normalizedSource || !normalizedSource.startsWith("/") || normalizedSource.startsWith("//")) {
+    return baseHref;
+  }
+
+  const params = new URLSearchParams();
+  params.set("from", normalizedSource);
+  return `${baseHref}?${params.toString()}`;
 }
 
 export function formatQualityTag(value?: string | null): string {

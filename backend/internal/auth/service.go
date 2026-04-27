@@ -947,13 +947,6 @@ func (s *service) bootstrapAdmin(ctx context.Context) error {
 		if existing.Role != RoleAdmin {
 			updates["role"] = RoleAdmin
 		}
-		if !verifyPassword(existing.PasswordHash, s.config.BootstrapAdminPassword) {
-			hash, hashErr := hashPassword(s.config.BootstrapAdminPassword)
-			if hashErr != nil {
-				return hashErr
-			}
-			updates["password_hash"] = hash
-		}
 		if len(updates) > 0 {
 			updates["updated_at"] = time.Now()
 			return db.WithContext(ctx).

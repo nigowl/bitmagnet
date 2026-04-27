@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActionIcon,
@@ -105,6 +106,14 @@ function fallbackCategoryHref(mediaType?: string): string {
   if (mediaType === "anime") return "/media/anime";
   if (mediaType === "series") return "/media/series";
   return "/media/movie";
+}
+
+function resolveReturnHref(sourceHref: string | null, fallbackHref: string): string {
+  const normalized = sourceHref?.trim();
+  if (!normalized || !normalized.startsWith("/") || normalized.startsWith("//")) {
+    return fallbackHref;
+  }
+  return normalized;
 }
 
 function applySubtitleTemplate(urlTemplate: string, title: string, releaseYear?: number): string | null {
@@ -235,6 +244,7 @@ function TorrentRow({
 export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; mediaType?: string }) {
   const { t, locale } = useI18n();
   const { user, hasFavorite, toggleFavorite } = useAuth();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [payload, setPayload] = useState<MediaDetailResponse | null>(null);
   const [playerStatusMap, setPlayerStatusMap] = useState<Record<string, PlayerTransmissionTaskStatus>>({});
@@ -298,6 +308,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
 
   const poster = useMemo(() => (payload?.item ? getPosterUrl(payload.item, "lg") : null), [payload?.item]);
   const backdrop = useMemo(() => (payload?.item ? getBackdropUrl(payload.item, "lg") : null), [payload?.item]);
+  const fallbackListHref = resolveReturnHref(searchParams.get("from"), fallbackCategoryHref(mediaType));
 
   if (loading) {
     return (
@@ -315,7 +326,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
         <Stack>
           <Text c="dimmed">{t("media.detail.notFound")}</Text>
           <Button
-            renderRoot={(props) => <Link href={fallbackCategoryHref(mediaType)} {...props} />}
+            renderRoot={(props) => <Link href={fallbackListHref} {...props} />}
             leftSection={<ArrowLeft size={14} />}
             variant="light"
             w="fit-content"
@@ -337,6 +348,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
     : item.contentType === "movie"
       ? "/media/movie"
       : "/media/series";
+  const backToListHref = resolveReturnHref(searchParams.get("from"), backToCategoryHref);
   const originalDisplayTitle = firstNonEmpty(item.nameOriginal, item.originalTitle, item.title) || item.title;
   const selectedLanguageTitle = titleLanguage === "zh"
     ? firstNonEmpty(item.nameZh, item.nameEn)
@@ -482,7 +494,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
 
       <Stack gap="md" className="media-detail-page-content">
         <Group justify="space-between" wrap="wrap">
-          <Button renderRoot={(props) => <Link href={backToCategoryHref} {...props} />} leftSection={<ArrowLeft size={14} />} variant="light">
+          <Button renderRoot={(props) => <Link href={backToListHref} {...props} />} leftSection={<ArrowLeft size={14} />} variant="light">
             {backToListLabel}
           </Button>
           <Group gap="xs">

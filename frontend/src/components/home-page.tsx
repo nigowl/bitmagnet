@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionIcon, Card, Group, Loader, Stack, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -214,10 +215,11 @@ async function fetchHomeSettings(): Promise<HomeSettings> {
   }
 }
 
-function MediaWallCard({ item, t, titleLanguage }: {
+function MediaWallCard({ item, t, titleLanguage, sourceHref }: {
   item: MediaListItem;
   t: (key: string) => string;
   titleLanguage: "zh" | "en";
+  sourceHref: string;
 }) {
   const poster = getPosterUrl(item, "md");
   const titleText = getDisplayTitle(item, titleLanguage);
@@ -240,7 +242,7 @@ function MediaWallCard({ item, t, titleLanguage }: {
 
   return (
     <div className="media-wall-item">
-      <Link href={buildMediaDetailHref(item)} className="unstyled-link">
+      <Link href={buildMediaDetailHref(item, sourceHref)} className="unstyled-link">
         <article className="media-wall-card home-media-card">
           <div className="media-wall-poster-shell">
             {poster ? (
@@ -293,7 +295,7 @@ function MediaWallCard({ item, t, titleLanguage }: {
   );
 }
 
-function HomeSection({ title, items, displayLimit, loading, emptyText, t, titleLanguage }: {
+function HomeSection({ title, items, displayLimit, loading, emptyText, t, titleLanguage, sourceHref }: {
   title: string;
   items: MediaListItem[];
   displayLimit: number;
@@ -301,6 +303,7 @@ function HomeSection({ title, items, displayLimit, loading, emptyText, t, titleL
   emptyText: string;
   t: (key: string) => string;
   titleLanguage: "zh" | "en";
+  sourceHref: string;
 }) {
   const sectionItems = items.slice(0, displayLimit);
 
@@ -323,7 +326,7 @@ function HomeSection({ title, items, displayLimit, loading, emptyText, t, titleL
       ) : (
         <div className="media-wall">
           {sectionItems.map((item) => (
-            <MediaWallCard key={item.id} item={item} t={t} titleLanguage={titleLanguage} />
+            <MediaWallCard key={item.id} item={item} t={t} titleLanguage={titleLanguage} sourceHref={sourceHref} />
           ))}
         </div>
       )}
@@ -331,7 +334,7 @@ function HomeSection({ title, items, displayLimit, loading, emptyText, t, titleL
   );
 }
 
-function DailyPicksCarousel({ title, items, displayLimit, loading, emptyText, t, titleLanguage }: {
+function DailyPicksCarousel({ title, items, displayLimit, loading, emptyText, t, titleLanguage, sourceHref }: {
   title: string;
   items: MediaListItem[];
   displayLimit: number;
@@ -339,6 +342,7 @@ function DailyPicksCarousel({ title, items, displayLimit, loading, emptyText, t,
   emptyText: string;
   t: (key: string) => string;
   titleLanguage: "zh" | "en";
+  sourceHref: string;
 }) {
   const sectionItems = items.slice(0, displayLimit);
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -463,7 +467,7 @@ function DailyPicksCarousel({ title, items, displayLimit, loading, emptyText, t,
                 data-state={getItemState(index)}
                 onClick={() => goToIndex(index)}
               >
-                <MediaWallCard item={item} t={t} titleLanguage={titleLanguage} />
+                <MediaWallCard item={item} t={t} titleLanguage={titleLanguage} sourceHref={sourceHref} />
               </div>
             ))}
           </div>
@@ -498,7 +502,13 @@ function DailyPicksCarousel({ title, items, displayLimit, loading, emptyText, t,
 
 export function HomePage() {
   const { t, locale } = useI18n();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const titleLanguage = locale === "en" ? "en" : "zh";
+  const currentPageHref = useMemo(() => {
+    const query = searchParams.toString();
+    return query ? `${pathname}?${query}` : pathname;
+  }, [pathname, searchParams]);
   const homeLayoutRef = useRef<HTMLDivElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [displayLimit, setDisplayLimit] = useState(HOME_SECTION_TARGET_COUNT);
@@ -642,11 +652,12 @@ export function HomePage() {
         emptyText={t("media.noResults")}
         t={t}
         titleLanguage={titleLanguage}
+        sourceHref={currentPageHref}
       />
-      <HomeSection title={t("home.highRated")} items={highScore} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
-      <HomeSection title={t("home.hotMovies")} items={movies} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
-      <HomeSection title={t("home.hotSeries")} items={series} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
-      <HomeSection title={t("home.hotAnime")} items={anime} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} />
+      <HomeSection title={t("home.highRated")} items={highScore} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} sourceHref={currentPageHref} />
+      <HomeSection title={t("home.hotMovies")} items={movies} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} sourceHref={currentPageHref} />
+      <HomeSection title={t("home.hotSeries")} items={series} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} sourceHref={currentPageHref} />
+      <HomeSection title={t("home.hotAnime")} items={anime} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} sourceHref={currentPageHref} />
       </Stack>
     </div>
   );

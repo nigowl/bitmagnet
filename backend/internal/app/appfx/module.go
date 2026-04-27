@@ -5,6 +5,7 @@ import (
 	"github.com/nigowl/bitmagnet/internal/app/cli"
 	"github.com/nigowl/bitmagnet/internal/app/cli/args"
 	"github.com/nigowl/bitmagnet/internal/app/cli/hooks"
+	"github.com/nigowl/bitmagnet/internal/app/cmd/authcmd"
 	"github.com/nigowl/bitmagnet/internal/app/cmd/classifiercmd"
 	"github.com/nigowl/bitmagnet/internal/app/cmd/configcmd"
 	"github.com/nigowl/bitmagnet/internal/app/cmd/processcmd"
@@ -70,6 +71,7 @@ func New() fx.Option {
 			cli.New,
 			hooks.New,
 			// cli commands:
+			authcmd.New,
 			classifiercmd.New,
 			configcmd.New,
 			reprocesscmd.New,

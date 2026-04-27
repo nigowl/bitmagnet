@@ -175,11 +175,11 @@ const BOOTSTRAP_MAX_WAIT_MS = 120000;
 const PLAYBACK_PROGRESS_KEY_PREFIX = "bitmagnet-player-progress-v1";
 const PLAYER_GLOBAL_PREFS_KEY_PREFIX = "bitmagnet-player-global-prefs-v1";
 const PLAYER_TRACK_PREFS_KEY_PREFIX = "bitmagnet-player-track-prefs-v1";
-const TRANSCODE_PREBUFFER_DEFAULT_SECONDS = 30;
+const TRANSCODE_PREBUFFER_DEFAULT_SECONDS = 60;
 const TRANSCODE_PREBUFFER_MAX_WAIT_MS = 45000;
 const PLAYBACK_RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
-const TRANSCODE_PREBUFFER_OPTIONS = [0, 10, 20, 30, 45, 60] as const;
-const TRANSCODE_OUTPUT_RESOLUTION_OPTIONS = [0, 480, 720, 1080, 2160] as const;
+const TRANSCODE_PREBUFFER_OPTIONS = [30, 45, 60, 90, 120] as const;
+const TRANSCODE_OUTPUT_RESOLUTION_OPTIONS = [0, 480, 720, 1080, 1440, 2160] as const;
 
 type PlaybackProgressRecord = {
   infoHash: string;
