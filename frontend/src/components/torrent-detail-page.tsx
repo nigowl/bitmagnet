@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActionIcon, Badge, Button, Card, Group, Loader, Stack, Table, Text, Title, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -83,13 +84,23 @@ function isPlayableVideoFile(path: string, fileType?: string | null): boolean {
   return normalizedType.includes("video");
 }
 
+function resolveReturnHref(sourceHref: string | null, fallbackHref: string): string {
+  const normalized = sourceHref?.trim();
+  if (!normalized || !normalized.startsWith("/") || normalized.startsWith("//")) {
+    return fallbackHref;
+  }
+  return normalized;
+}
+
 export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
   const { t } = useI18n();
   const { openLogin } = useAuthDialog();
   const { user, hasFavorite, toggleFavorite } = useAuth();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [item, setItem] = useState<DetailResponse["torrentContent"]["search"]["items"][number] | null>(null);
   const [files, setFiles] = useState<FilesResponse["torrent"]["files"]["items"]>([]);
+  const backToListHref = resolveReturnHref(searchParams.get("from"), "/torrents");
 
   const renderContentType = useCallback(
     (type?: string | null) => {
@@ -218,7 +229,7 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
       <Card className="glass-card" withBorder>
         <Stack>
           <Text c="dimmed">{t("torrents.notFound")}</Text>
-          <Button renderRoot={(props) => <Link href="/torrents" {...props} />} leftSection={<ArrowLeft size={14} />} variant="light" w="fit-content">
+          <Button renderRoot={(props) => <Link href={backToListHref} {...props} />} leftSection={<ArrowLeft size={14} />} variant="light" w="fit-content">
             {t("torrents.backToList")}
           </Button>
         </Stack>
@@ -233,7 +244,7 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
   return (
     <Stack gap="md">
       <Group justify="space-between">
-        <Button renderRoot={(props) => <Link href="/torrents" {...props} />} leftSection={<ArrowLeft size={14} />} variant="light">
+        <Button renderRoot={(props) => <Link href={backToListHref} {...props} />} leftSection={<ArrowLeft size={14} />} variant="light">
           {t("torrents.backToList")}
         </Button>
         <Group>

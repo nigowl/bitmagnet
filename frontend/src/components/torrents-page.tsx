@@ -147,6 +147,18 @@ function normalizeTorrentContentType(type?: string | null): string {
   return normalized;
 }
 
+function buildTorrentDetailHref(infoHash: string, sourceHref: string): string {
+  const baseHref = `/torrents/${encodeURIComponent(infoHash)}`;
+  const normalizedSource = sourceHref.trim();
+  if (!normalizedSource || !normalizedSource.startsWith("/") || normalizedSource.startsWith("//")) {
+    return baseHref;
+  }
+
+  const params = new URLSearchParams();
+  params.set("from", normalizedSource);
+  return `${baseHref}?${params.toString()}`;
+}
+
 export function TorrentsPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -202,6 +214,11 @@ export function TorrentsPage() {
     orderBy,
     descending
   } = queryState;
+
+  const currentListHref = useMemo(
+    () => (searchParamsString ? `${pathname}?${searchParamsString}` : pathname),
+    [pathname, searchParamsString]
+  );
 
   const updateQuery = useCallback(
     (updates: {
@@ -663,7 +680,7 @@ export function TorrentsPage() {
                     <Stack gap={8} className="torrent-resource-card">
                       <Group wrap="nowrap" justify="space-between" align="flex-start">
                         <Group wrap="nowrap" className="torrent-title-group">
-                          <Link href={`/torrents/${item.infoHash}`} className="unstyled-link torrent-list-link">
+                          <Link href={buildTorrentDetailHref(item.infoHash, currentListHref)} className="unstyled-link torrent-list-link">
                             <Text fw={800} lineClamp={1} title={item.title || item.torrent.name} className="torrent-resource-title">
                               {item.title || item.torrent.name}
                             </Text>

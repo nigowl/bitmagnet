@@ -3228,7 +3228,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   return (
     <Stack gap="md" className="torrent-player-page">
       {detail ? (
-        <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm" className="torrent-player-header">
+        <Group justify="space-between" align="center" wrap="wrap" gap="sm" className="torrent-player-header">
           <div className="torrent-player-header-main">
             <Group gap="xs" wrap="wrap" className="torrent-player-title-row">
               <Text size="lg" fw={700} className="torrent-player-main-title">{detail.title}</Text>
@@ -3243,13 +3243,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
             <ActionIcon
               className="app-icon-btn torrent-player-diagnostics-btn"
               variant="default"
-              size={30}
+              size={36}
               aria-label={t("media.player.diagnosticsTitle")}
               onClick={() => setDiagnosticsOpened(true)}
             >
-              <Settings2 size={14} />
+              <Settings2 size={16} />
             </ActionIcon>
-
           </Tooltip>
         </Group>
       ) : null}

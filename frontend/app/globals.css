@@ -2252,15 +2252,11 @@ body {
 
 .torrent-player-page {
   position: relative;
-  padding: 10px;
+  padding: 6px;
   border-radius: var(--radius-lg);
   max-width: 1440px;
   margin: auto;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--card-bg) 72%, transparent),
-    color-mix(in srgb, var(--muted-surface) 62%, transparent)
-  );
+  background: transparent;
 }
 
 .torrent-player-stage.is-fullscreen {
@@ -2274,8 +2270,7 @@ body {
 .torrent-player-shell {
   position: relative;
   overflow: hidden;
-  border: 1px solid
-    color-mix(in srgb, var(--card-border) 70%, rgba(78, 108, 158, 0.28));
+  border: 0 !important;
   background: linear-gradient(
     180deg,
     rgba(8, 13, 23, 0.98),
@@ -2284,14 +2279,14 @@ body {
   );
   min-height: 260px;
   box-shadow:
-    0 18px 42px rgba(5, 10, 22, 0.34),
+    0 18px 42px rgba(5, 10, 22, 0.26),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   border-radius: var(--radius-lg);
 }
 
 .torrent-player-stage.is-fullscreen .torrent-player-shell {
   border-radius: var(--radius-md);
-  border-color: rgba(255, 255, 255, 0.08);
+  border: 0;
   flex: 1;
   min-height: 0;
 }
@@ -2335,17 +2330,12 @@ body {
 }
 
 .torrent-player-header {
-  padding: 11px 13px;
+  padding: 8px 2px 10px;
   border-radius: var(--radius-md);
-  border: 1px solid
-    color-mix(in srgb, var(--card-border) 70%, rgba(78, 108, 158, 0.22));
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--card-bg) 88%, #172033),
-    color-mix(in srgb, var(--muted-surface) 76%, #101827)
-  );
-  align-items: flex-start;
-  box-shadow: 0 10px 26px rgba(7, 12, 24, 0.12);
+  border: 0;
+  background: transparent;
+  align-items: center;
+  box-shadow: none;
 }
 
 .torrent-player-header-main {
@@ -2393,10 +2383,10 @@ body {
 }
 
 .torrent-player-diagnostics-btn.mantine-ActionIcon-root {
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
-  border-radius: var(--radius-xs);
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  border-radius: 999px;
   color: color-mix(in srgb, var(--page-text) 84%, #dbe7ff);
   background: color-mix(in srgb, var(--card-bg) 62%, rgba(55, 74, 112, 0.22));
   border-color: color-mix(
@@ -2413,15 +2403,10 @@ body {
 .torrent-player-info-panel {
   display: grid;
   gap: 10px;
-  padding: 12px;
-  border: 1px solid
-    color-mix(in srgb, var(--card-border) 72%, rgba(78, 108, 158, 0.2));
+  padding: 0;
+  border: 0;
   border-radius: var(--radius-md);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--card-bg) 88%, rgba(74, 111, 170, 0.1)),
-    color-mix(in srgb, var(--muted-surface) 76%, var(--card-bg))
-  );
+  background: transparent;
 }
 
 .torrent-player-info-grid {
@@ -2436,19 +2421,24 @@ body {
   flex-direction: column;
   gap: 9px;
   padding: 12px;
-  border: 1px solid
-    color-mix(in srgb, var(--card-border) 78%, rgba(93, 116, 150, 0.16));
+  border: 0;
   border-radius: var(--radius-md);
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--card-bg) 90%, rgba(255, 255, 255, 0.04)),
     color-mix(in srgb, var(--muted-surface) 78%, var(--card-bg))
   );
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  box-shadow:
+    0 10px 24px rgba(15, 23, 42, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .torrent-player-info-card-featured {
-  border-color: color-mix(in srgb, var(--brand-orange) 24%, var(--card-border));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--card-bg) 88%, rgba(255, 122, 0, 0.06)),
+    color-mix(in srgb, var(--muted-surface) 78%, var(--card-bg))
+  );
 }
 
 .torrent-player-info-card-title {
@@ -2557,8 +2547,7 @@ body {
 .torrent-player-info-panel .mantine-Badge-root[data-variant="light"] {
   background: color-mix(in srgb, var(--card-bg) 76%, rgba(72, 104, 160, 0.16));
   color: color-mix(in srgb, var(--page-text) 88%, #d9e6ff);
-  border: 1px solid
-    color-mix(in srgb, var(--card-border) 72%, rgba(72, 104, 160, 0.22));
+  border: 0;
 }
 
 .torrent-player-info-panel .mantine-Badge-root[data-variant="outline"] {
@@ -2624,9 +2613,7 @@ body {
   border-radius: var(--radius-md);
   overflow: hidden;
   background: linear-gradient(180deg, rgba(3, 5, 10, 1), rgba(8, 12, 22, 0.98));
-  box-shadow:
-    0 20px 48px rgba(4, 8, 18, 0.38),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  box-shadow: 0 18px 42px rgba(4, 8, 18, 0.32);
 }
 
 .torrent-plyr {
@@ -3109,11 +3096,7 @@ body {
   padding: 13px;
   display: grid;
   gap: 12px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--card-bg) 90%, rgba(15, 23, 42, 0.1)),
-    color-mix(in srgb, var(--card-bg) 82%, var(--muted-surface))
-  );
+  background: color-mix(in srgb, var(--card-bg) 84%, var(--muted-surface));
 }
 
 .torrent-modern-controls {
