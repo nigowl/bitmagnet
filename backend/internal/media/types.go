@@ -13,6 +13,7 @@ type ListInput struct {
 	Network  string
 	Studio   string
 	Awards   string
+	Cache    string
 	Sort     string
 	HeatDays *int
 	ScoreMin *float64
@@ -71,6 +72,8 @@ type ListItem struct {
 	MaxSeeders          *uint            `json:"maxSeeders,omitempty"`
 	LatestPublishedAt   *time.Time       `json:"latestPublishedAt,omitempty"`
 	UpdatedAt           time.Time        `json:"updatedAt"`
+	HasCache            bool             `json:"hasCache"`
+	CacheUpdatedAt      *time.Time       `json:"cacheUpdatedAt,omitempty"`
 }
 
 type ListCollection struct {
@@ -309,6 +312,14 @@ type PlayerTransmissionBatchStatusInput struct {
 
 type PlayerTransmissionBatchStatusResult struct {
 	Items []PlayerTransmissionTaskStatus `json:"items"`
+}
+
+type PlayerTransmissionClearCacheInput struct {
+	InfoHashes []string `json:"infoHashes"`
+}
+
+type PlayerTransmissionClearCacheResult struct {
+	Removed int `json:"removed"`
 }
 
 type PlayerTransmissionTaskStatus struct {

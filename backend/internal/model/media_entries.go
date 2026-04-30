@@ -61,6 +61,8 @@ type MediaEntry struct {
 	TorrentCount        uint                           `gorm:"column:torrent_count;not null" json:"torrentCount"`
 	MaxSeeders          NullUint                       `gorm:"column:max_seeders" json:"maxSeeders"`
 	LatestPublishedAt   *time.Time                     `gorm:"column:latest_published_at" json:"latestPublishedAt"`
+	HasCache            bool                           `gorm:"column:has_cache;not null" json:"hasCache"`
+	CacheUpdatedAt      *time.Time                     `gorm:"column:cache_updated_at" json:"cacheUpdatedAt"`
 	CreatedAt           time.Time                      `gorm:"column:created_at;not null;<-:create" json:"createdAt"`
 	UpdatedAt           time.Time                      `gorm:"column:updated_at;not null" json:"updatedAt"`
 }

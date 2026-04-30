@@ -78,9 +78,21 @@ body {
   color: var(--page-text);
   font-family: var(--font-sans), sans-serif;
   background:
-    radial-gradient(circle at top left, rgba(255, 122, 0, 0.08), transparent 22%),
-    radial-gradient(circle at top right, rgba(19, 38, 87, 0.08), transparent 24%),
-    linear-gradient(180deg, var(--page-bg) 0%, color-mix(in srgb, var(--page-bg) 88%, #0b1320 12%) 100%);
+    radial-gradient(
+      circle at top left,
+      rgba(255, 122, 0, 0.08),
+      transparent 22%
+    ),
+    radial-gradient(
+      circle at top right,
+      rgba(19, 38, 87, 0.08),
+      transparent 24%
+    ),
+    linear-gradient(
+      180deg,
+      var(--page-bg) 0%,
+      color-mix(in srgb, var(--page-bg) 88%, #0b1320 12%) 100%
+    );
 }
 
 .page-shell {
@@ -250,7 +262,10 @@ body {
   gap: 9px;
   padding: 0px 14px;
   text-decoration: none;
-  transition: border-color .18s, background .18s, transform .18s;
+  transition:
+    border-color 0.18s,
+    background 0.18s,
+    transform 0.18s;
   display: inline-flex;
   position: relative;
   font-size: 14px;
@@ -396,7 +411,6 @@ body {
   border-color: var(--mantine-color-dark-5);
 }
 
-
 .mantine-Modal-header,
 .mantine-Drawer-header {
   background: transparent;
@@ -514,7 +528,11 @@ body {
 }
 
 .mantine-Button-root[data-variant="filled"] {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--brand-orange) 74%, white), var(--brand-orange));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--brand-orange) 74%, white),
+    var(--brand-orange)
+  );
   border-color: color-mix(in srgb, var(--brand-orange) 56%, var(--card-border));
   color: white;
   box-shadow: 0 12px 24px rgba(255, 122, 0, 0.2);
@@ -567,10 +585,13 @@ body {
 }
 
 .mantine-SegmentedControl-indicator {
-  background: linear-gradient(180deg,
-      color-mix(in srgb, var(--brand-muted) 70%, var(--card-bg)),
-      color-mix(in srgb, var(--brand-muted) 92%, var(--muted-surface)));
-  border: 1px solid color-mix(in srgb, var(--brand-orange) 40%, var(--card-border));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--brand-muted) 70%, var(--card-bg)),
+    color-mix(in srgb, var(--brand-muted) 92%, var(--muted-surface))
+  );
+  border: 1px solid
+    color-mix(in srgb, var(--brand-orange) 40%, var(--card-border));
 }
 
 .mantine-SegmentedControl-label {
@@ -583,7 +604,8 @@ body {
 
 .app-tabs .mantine-Tabs-list {
   position: relative;
-  border-bottom: 1px solid color-mix(in srgb, var(--card-border) 86%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--card-border) 86%, transparent);
   gap: 2px;
 }
 
@@ -594,7 +616,9 @@ body {
   background: transparent;
   color: var(--muted-text);
   font-weight: 700;
-  transition: color 0.2s ease, background-color 0.2s ease;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease;
 }
 
 .app-tabs .mantine-Tabs-tab:hover {
@@ -654,7 +678,8 @@ body {
 
 .mantine-Badge-root[data-variant="light"] {
   background: color-mix(in srgb, var(--brand-muted) 72%, var(--card-bg));
-  border: 1px solid color-mix(in srgb, var(--brand-orange) 22%, var(--card-border));
+  border: 1px solid
+    color-mix(in srgb, var(--brand-orange) 22%, var(--card-border));
   color: var(--brand-orange-deep);
 }
 
@@ -685,7 +710,7 @@ body {
   overflow: hidden;
 }
 
-.torrents-filters .mantine-Accordion-item+.mantine-Accordion-item {
+.torrents-filters .mantine-Accordion-item + .mantine-Accordion-item {
   margin-top: 8px;
 }
 
@@ -729,11 +754,16 @@ body {
 }
 
 .app-icon-btn {
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
 }
 
 .app-icon-btn svg {
-  transition: transform 0.3s ease, opacity 0.2s ease;
+  transition:
+    transform 0.3s ease,
+    opacity 0.2s ease;
 }
 
 .app-icon-btn:hover {
@@ -770,7 +800,10 @@ body {
   background: var(--card-bg);
   /* border: 1px solid var(--card-border); */
   border: 0;
-  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .torrent-list-item:hover {
@@ -877,7 +910,7 @@ body {
   align-items: stretch;
 }
 
-.media-external-links-grid>* {
+.media-external-links-grid > * {
   min-width: 0;
 }
 
@@ -927,14 +960,30 @@ body {
 
 .media-external-card {
   background:
-    radial-gradient(circle at bottom left, rgba(255, 122, 0, 0.12), transparent 36%),
-    linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 92%, var(--brand-muted)), var(--card-bg));
+    radial-gradient(
+      circle at bottom left,
+      rgba(255, 122, 0, 0.12),
+      transparent 36%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--card-bg) 92%, var(--brand-muted)),
+      var(--card-bg)
+    );
 }
 
 .media-recommend-card {
   background:
-    radial-gradient(circle at top right, rgba(255, 122, 0, 0.12), transparent 36%),
-    linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 92%, var(--brand-muted)), var(--card-bg));
+    radial-gradient(
+      circle at top right,
+      rgba(255, 122, 0, 0.12),
+      transparent 36%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--card-bg) 92%, var(--brand-muted)),
+      var(--card-bg)
+    );
 }
 
 .media-facts-grid {
@@ -976,7 +1025,11 @@ body {
   inset: 0;
   z-index: 1;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--page-bg) 46%, transparent), color-mix(in srgb, var(--page-bg) 92%, transparent)),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--page-bg) 46%, transparent),
+      color-mix(in srgb, var(--page-bg) 92%, transparent)
+    ),
     radial-gradient(circle at top, rgba(255, 122, 0, 0.12), transparent 52%);
   pointer-events: none;
 }
@@ -986,13 +1039,22 @@ body {
   overflow: hidden;
 }
 
-.mantine-Table-tbody>tr:hover>td {
+.mantine-Table-tbody > tr:hover > td {
   background: var(--row-hover);
 }
 
 .media-torrent-snapshot-table .mantine-Table-th,
 .media-torrent-snapshot-table .mantine-Table-td {
   font-size: 13px;
+}
+
+.media-torrent-quick-filters {
+  min-width: 0;
+}
+
+.media-torrent-quick-filters .media-filter-pill {
+  min-height: 28px;
+  padding: 4px 10px;
 }
 
 .media-masonry {
@@ -1008,7 +1070,11 @@ body {
 }
 
 .da-search-card {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 88%, var(--brand-muted)), var(--card-bg));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--card-bg) 88%, var(--brand-muted)),
+    var(--card-bg)
+  );
 }
 
 .da-section-title {
@@ -1117,7 +1183,10 @@ body {
 .home-daily-carousel-item {
   position: relative;
   flex: 0 0 var(--daily-card-width);
-  transition: transform 0.62s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.62s ease, filter 0.62s ease;
+  transition:
+    transform 0.62s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.62s ease,
+    filter 0.62s ease;
 }
 
 .home-daily-carousel-item[data-state="active"] {
@@ -1150,7 +1219,12 @@ body {
   inset: 0;
   pointer-events: none;
   z-index: 2;
-  background: linear-gradient(112deg, transparent 24%, rgba(255, 255, 255, 0.26) 47%, transparent 71%);
+  background: linear-gradient(
+    112deg,
+    transparent 24%,
+    rgba(255, 255, 255, 0.26) 47%,
+    transparent 71%
+  );
   transform: translateX(-125%);
   opacity: 0;
 }
@@ -1202,7 +1276,9 @@ body {
   width: 42px;
   height: 42px;
   border-radius: 999px !important;
-  transition: transform 0.22s ease, background-color 0.22s ease;
+  transition:
+    transform 0.22s ease,
+    background-color 0.22s ease;
 }
 
 .home-daily-carousel-control.mantine-ActionIcon-root:hover {
@@ -1221,7 +1297,6 @@ body {
 }
 
 @keyframes home-daily-card-float {
-
   0%,
   100% {
     transform: translateY(0);
@@ -1242,12 +1317,18 @@ body {
   overflow: hidden;
   padding: clamp(18px, 2.3vw, 30px);
   background:
-    radial-gradient(circle at top left, rgba(255, 122, 0, 0.18), transparent 24%),
+    radial-gradient(
+      circle at top left,
+      rgba(255, 122, 0, 0.18),
+      transparent 24%
+    ),
     radial-gradient(circle at 80% 30%, rgba(28, 45, 99, 0.12), transparent 30%),
-    linear-gradient(135deg,
+    linear-gradient(
+      135deg,
       color-mix(in srgb, var(--card-bg) 92%, var(--page-bg)) 0%,
       color-mix(in srgb, var(--card-bg) 84%, var(--brand-muted)) 52%,
-      var(--card-bg) 100%);
+      var(--card-bg) 100%
+    );
   /* border: 1px solid color-mix(in srgb, var(--warm-border) 70%, var(--card-border)); */
   border: 0;
 }
@@ -1266,7 +1347,7 @@ body {
 .media-toolbar {
   display: grid;
   gap: 14px;
-  padding: 16px 18px;
+  padding: 10px 0 0 0;
   background: transparent;
   border: 0;
   /* background: color-mix(in srgb, var(--card-bg) 84%, transparent); */
@@ -1301,7 +1382,10 @@ body {
   overflow: hidden;
   opacity: 0;
   transform: translateY(-8px);
-  transition: max-height 0.22s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease, transform 0.18s ease;
+  transition:
+    max-height 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.18s ease,
+    transform 0.18s ease;
   will-change: max-height, opacity, transform;
   contain: layout paint;
 }
@@ -1345,10 +1429,11 @@ body {
 }
 
 .media-filter-label {
-  padding-top: 10px;
-  color: var(--page-text);
+  color: var(--mantine-color-dimmed);
+  padding-top: 8px;
   font-size: 14px;
   font-weight: 800;
+  margin-left: 20px;
 }
 
 .media-filter-options {
@@ -1375,7 +1460,12 @@ body {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.18s ease, visibility 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  transition:
+    opacity 0.18s ease,
+    visibility 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
 }
 
 .media-filter-row[data-expandable="true"]:hover .media-filter-expand,
@@ -1403,7 +1493,10 @@ body {
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
 }
 
 .media-filter-pill:hover {
@@ -1414,9 +1507,11 @@ body {
 .media-filter-pill-active {
   color: var(--filter-active-text);
   border-color: var(--warm-border-strong);
-  background: linear-gradient(180deg,
-      color-mix(in srgb, var(--brand-muted) 70%, var(--card-bg)),
-      color-mix(in srgb, var(--brand-muted) 92%, var(--muted-surface)));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--brand-muted) 70%, var(--card-bg)),
+    color-mix(in srgb, var(--brand-muted) 92%, var(--muted-surface))
+  );
   box-shadow: 0 10px 20px rgba(255, 122, 0, 0.12);
 }
 
@@ -1491,13 +1586,58 @@ body {
   border: 1px solid var(--card-border);
   border-radius: var(--radius-lg);
   background: var(--card-bg);
-  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
 }
 
 .media-wall-card:hover {
   transform: translateY(-3px);
   border-color: var(--card-hover-border);
   box-shadow: var(--strong-shadow);
+}
+
+.media-cache-corner {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  overflow: hidden;
+  color: #fff;
+  pointer-events: none;
+}
+
+.media-cache-corner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(100% 0, 0 100%, 100% 100%);
+  background: linear-gradient(135deg, #28b778, #168a58);
+  box-shadow: 0 4px 12px rgba(15, 118, 80, 0.28);
+}
+
+.media-cache-corner span {
+  z-index: 1;
+  transform-origin: center;
+  letter-spacing: 0;
+  text-align: center;
+  text-shadow: 0 1px 2px #0536246b;
+  justify-content: center;
+  align-items: center;
+  width: 44px;
+  height: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  display: flex;
+  position: absolute;
+  bottom: 10px;
+  right: -10px;
+  transform: rotate(-45deg);
 }
 
 .media-wall-poster {
@@ -1815,7 +1955,9 @@ body {
   border: 0;
   background: color-mix(in srgb, var(--card-bg) 80%, var(--muted-surface));
   box-shadow: none;
-  transition: background-color 0.2s ease, transform 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    transform 0.2s ease;
 }
 
 .settings-preset-card:hover {
@@ -1855,13 +1997,29 @@ body {
 }
 
 .settings-runtime-worker-key {
-  font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, Liberation Mono, monospace;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    Monaco,
+    Consolas,
+    Liberation Mono,
+    monospace;
   font-size: 12px;
   color: var(--page-text);
 }
 
 .settings-runtime-worker-scope {
-  font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, Liberation Mono, monospace;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    Monaco,
+    Consolas,
+    Liberation Mono,
+    monospace;
   color: color-mix(in srgb, var(--page-text) 74%, var(--text-muted));
 }
 
@@ -1887,7 +2045,15 @@ body {
 }
 
 .settings-runtime-key {
-  font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, Liberation Mono, monospace;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    Monaco,
+    Consolas,
+    Liberation Mono,
+    monospace;
   font-size: 12px;
   color: color-mix(in srgb, var(--page-text) 78%, var(--text-muted));
   word-break: break-all;
@@ -1907,7 +2073,15 @@ body {
 }
 
 .settings-runtime-value {
-  font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, Liberation Mono, monospace;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    Monaco,
+    Consolas,
+    Liberation Mono,
+    monospace;
   font-size: 12px;
   color: var(--brand-orange);
   text-align: left;
@@ -1949,7 +2123,15 @@ body {
 .settings-log-content {
   margin: 0;
   padding: 14px 16px;
-  font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, Liberation Mono, monospace;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    Monaco,
+    Consolas,
+    Liberation Mono,
+    monospace;
   font-size: 12px;
   line-height: 1.55;
   color: var(--text-primary);
@@ -1968,7 +2150,15 @@ body {
 .settings-plugin-test-content {
   margin: 0;
   padding: 12px 14px;
-  font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, Liberation Mono, monospace;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    Monaco,
+    Consolas,
+    Liberation Mono,
+    monospace;
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-primary);
@@ -1989,7 +2179,7 @@ body {
   overflow: hidden;
 }
 
-.settings-sections-accordion .mantine-Accordion-item+.mantine-Accordion-item {
+.settings-sections-accordion .mantine-Accordion-item + .mantine-Accordion-item {
   margin-top: 10px;
 }
 
@@ -2008,17 +2198,29 @@ body {
 }
 
 .player-download-mapping-card {
-  border-color: color-mix(in srgb, var(--brand-orange) 28%, var(--card-border)) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--brand-orange) 28%,
+    var(--card-border)
+  ) !important;
   background:
-    radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--brand-muted) 60%, transparent), transparent 42%),
-    linear-gradient(180deg,
+    radial-gradient(
+      circle at 10% 0%,
+      color-mix(in srgb, var(--brand-muted) 60%, transparent),
+      transparent 42%
+    ),
+    linear-gradient(
+      180deg,
       color-mix(in srgb, var(--card-bg) 92%, var(--brand-muted)),
-      color-mix(in srgb, var(--card-bg) 84%, var(--muted-surface)));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--brand-muted) 46%, transparent);
+      color-mix(in srgb, var(--card-bg) 84%, var(--muted-surface))
+    );
+  box-shadow: inset 0 1px 0
+    color-mix(in srgb, var(--brand-muted) 46%, transparent);
 }
 
 .player-download-mapping-tabs .mantine-Tabs-list {
-  border: 1px solid color-mix(in srgb, var(--brand-orange) 20%, var(--card-border));
+  border: 1px solid
+    color-mix(in srgb, var(--brand-orange) 20%, var(--card-border));
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--card-bg) 84%, var(--muted-surface));
   padding: 4px;
@@ -2039,7 +2241,8 @@ body {
 .player-download-mapping-tabs .mantine-Tabs-tab[data-active="true"] {
   background: color-mix(in srgb, var(--brand-muted) 72%, var(--card-bg));
   color: var(--brand-orange-deep);
-  border: 1px solid color-mix(in srgb, var(--brand-orange) 30%, var(--card-border));
+  border: 1px solid
+    color-mix(in srgb, var(--brand-orange) 30%, var(--card-border));
 }
 
 .torrent-player-stage {
@@ -2050,9 +2253,14 @@ body {
 .torrent-player-page {
   position: relative;
   padding: 10px;
-  border-radius: 14px;
-  max-width: 1360px;
+  border-radius: var(--radius-lg);
+  max-width: 1440px;
   margin: auto;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--card-bg) 72%, transparent),
+    color-mix(in srgb, var(--muted-surface) 62%, transparent)
+  );
 }
 
 .torrent-player-stage.is-fullscreen {
@@ -2066,14 +2274,23 @@ body {
 .torrent-player-shell {
   position: relative;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--card-border) 86%, transparent);
-  background: #000000;
+  border: 1px solid
+    color-mix(in srgb, var(--card-border) 70%, rgba(78, 108, 158, 0.28));
+  background: linear-gradient(
+    180deg,
+    rgba(8, 13, 23, 0.98),
+    rgba(12, 19, 32, 0.96) 58%,
+    color-mix(in srgb, var(--card-bg) 94%, #111827)
+  );
   min-height: 260px;
-  box-shadow: 0 14px 34px rgba(5, 10, 22, 0.36);
+  box-shadow:
+    0 18px 42px rgba(5, 10, 22, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-lg);
 }
 
 .torrent-player-stage.is-fullscreen .torrent-player-shell {
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   border-color: rgba(255, 255, 255, 0.08);
   flex: 1;
   min-height: 0;
@@ -2084,8 +2301,16 @@ body {
   inset: 0;
   z-index: 210;
   background:
-    radial-gradient(circle at 12% 14%, rgba(255, 122, 0, 0.16), transparent 32%),
-    radial-gradient(circle at 85% 80%, rgba(58, 116, 255, 0.15), transparent 34%),
+    radial-gradient(
+      circle at 12% 14%,
+      rgba(255, 122, 0, 0.16),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 85% 80%,
+      rgba(58, 116, 255, 0.15),
+      transparent 34%
+    ),
     color-mix(in srgb, #05070d 72%, transparent);
   backdrop-filter: blur(10px) saturate(108%);
   display: grid;
@@ -2097,21 +2322,30 @@ body {
   width: min(920px, 94vw);
   max-height: min(86vh, 920px);
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--brand-orange) 34%, var(--card-border)) !important;
+  border: 1px solid
+    color-mix(in srgb, var(--brand-orange) 34%, var(--card-border)) !important;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 92%, rgba(255, 122, 0, 0.08)), var(--card-bg)),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--card-bg) 92%, rgba(255, 122, 0, 0.08)),
+      var(--card-bg)
+    ),
     var(--card-bg);
   box-shadow: 0 24px 60px rgba(7, 12, 24, 0.45);
 }
 
 .torrent-player-header {
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--card-border) 82%, transparent);
-  background:
-    radial-gradient(circle at 8% 6%, color-mix(in srgb, var(--brand-muted) 42%, transparent), transparent 40%),
-    linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 90%, var(--muted-surface)), color-mix(in srgb, var(--card-bg) 84%, #0f172a));
+  padding: 11px 13px;
+  border-radius: var(--radius-md);
+  border: 1px solid
+    color-mix(in srgb, var(--card-border) 70%, rgba(78, 108, 158, 0.22));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--card-bg) 88%, #172033),
+    color-mix(in srgb, var(--muted-surface) 76%, #101827)
+  );
   align-items: flex-start;
+  box-shadow: 0 10px 26px rgba(7, 12, 24, 0.12);
 }
 
 .torrent-player-header-main {
@@ -2122,12 +2356,14 @@ body {
 
 .torrent-player-title-row {
   row-gap: 6px;
+  align-items: center;
 }
 
 .torrent-player-main-title {
   line-height: 1.22;
-  letter-spacing: 0.2px;
-  color: color-mix(in srgb, var(--page-text) 92%, #f5f8ff);
+  letter-spacing: 0;
+  color: color-mix(in srgb, var(--page-text) 94%, #f5f8ff);
+  max-width: min(860px, 100%);
 }
 
 .torrent-player-subline {
@@ -2140,17 +2376,229 @@ body {
 }
 
 .torrent-player-header .mantine-Badge-root[data-variant="light"] {
-  background: color-mix(in srgb, var(--card-bg) 72%, var(--muted-surface));
-  color: color-mix(in srgb, var(--page-text) 86%, #d6e0f5);
+  background: color-mix(in srgb, var(--card-bg) 68%, rgba(77, 126, 198, 0.16));
+  color: color-mix(in srgb, var(--page-text) 88%, #d9e6ff);
+  border: 1px solid
+    color-mix(in srgb, var(--card-border) 72%, rgba(77, 126, 198, 0.26));
 }
 
 .torrent-player-header .mantine-Badge-root[data-variant="outline"] {
-  border-color: color-mix(in srgb, var(--card-border) 86%, transparent);
-  color: color-mix(in srgb, var(--page-text) 88%, #deebff);
+  border-color: color-mix(
+    in srgb,
+    var(--card-border) 66%,
+    rgba(91, 128, 188, 0.34)
+  );
+  color: color-mix(in srgb, var(--page-text) 90%, #deebff);
+  background: color-mix(in srgb, var(--card-bg) 60%, rgba(12, 22, 38, 0.16));
+}
+
+.torrent-player-diagnostics-btn.mantine-ActionIcon-root {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  border-radius: var(--radius-xs);
+  color: color-mix(in srgb, var(--page-text) 84%, #dbe7ff);
+  background: color-mix(in srgb, var(--card-bg) 62%, rgba(55, 74, 112, 0.22));
+  border-color: color-mix(
+    in srgb,
+    var(--card-border) 70%,
+    rgba(88, 116, 162, 0.24)
+  );
 }
 
 .torrent-player-status-row {
   row-gap: 6px;
+}
+
+.torrent-player-info-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid
+    color-mix(in srgb, var(--card-border) 72%, rgba(78, 108, 158, 0.2));
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--card-bg) 88%, rgba(74, 111, 170, 0.1)),
+    color-mix(in srgb, var(--muted-surface) 76%, var(--card-bg))
+  );
+}
+
+.torrent-player-info-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 10px;
+}
+
+.torrent-player-info-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid
+    color-mix(in srgb, var(--card-border) 78%, rgba(93, 116, 150, 0.16));
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--card-bg) 90%, rgba(255, 255, 255, 0.04)),
+    color-mix(in srgb, var(--muted-surface) 78%, var(--card-bg))
+  );
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.torrent-player-info-card-featured {
+  border-color: color-mix(in srgb, var(--brand-orange) 24%, var(--card-border));
+}
+
+.torrent-player-info-card-title {
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: color-mix(in srgb, var(--page-text) 54%, var(--muted-text));
+  letter-spacing: 0;
+}
+
+.torrent-player-info-title-link,
+.torrent-player-info-title-text {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--page-text) 92%, var(--brand-orange));
+  text-decoration: none;
+}
+
+.torrent-player-info-title-link {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.torrent-player-info-title-link:hover {
+  color: var(--brand-orange-deep);
+}
+
+.torrent-player-info-title-link svg {
+  flex: 0 0 auto;
+}
+
+.torrent-player-hash-link {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 9px;
+  border: 1px solid
+    color-mix(in srgb, var(--card-border) 76%, rgba(72, 104, 160, 0.22));
+  border-radius: var(--radius-xs);
+  color: color-mix(in srgb, var(--page-text) 84%, #cddaf2);
+  background: color-mix(in srgb, var(--card-bg) 62%, rgba(72, 104, 160, 0.12));
+  text-decoration: none;
+}
+
+.torrent-player-hash-link:hover {
+  border-color: color-mix(in srgb, var(--brand-orange) 42%, var(--card-border));
+  color: var(--brand-orange-deep);
+}
+
+.torrent-player-hash-link span {
+  font-size: 11px;
+  font-weight: 800;
+  color: color-mix(in srgb, var(--page-text) 54%, var(--muted-text));
+}
+
+.torrent-player-hash-link strong {
+  min-width: 0;
+  overflow: hidden;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.torrent-player-hash-link-static:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--card-border) 76%,
+    rgba(72, 104, 160, 0.22)
+  );
+  color: color-mix(in srgb, var(--page-text) 84%, #cddaf2);
+}
+
+.torrent-player-chip-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+.torrent-player-info-panel .mantine-Badge-root {
+  max-width: 100%;
+  min-height: 25px;
+  border-radius: var(--radius-xs);
+  text-transform: none;
+}
+
+.torrent-player-info-panel .mantine-Badge-label {
+  max-width: min(100%, 520px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+
+.torrent-player-info-panel .mantine-Badge-root[data-variant="light"] {
+  background: color-mix(in srgb, var(--card-bg) 76%, rgba(72, 104, 160, 0.16));
+  color: color-mix(in srgb, var(--page-text) 88%, #d9e6ff);
+  border: 1px solid
+    color-mix(in srgb, var(--card-border) 72%, rgba(72, 104, 160, 0.22));
+}
+
+.torrent-player-info-panel .mantine-Badge-root[data-variant="outline"] {
+  color: color-mix(in srgb, var(--page-text) 82%, #cddaf2);
+  border-color: color-mix(
+    in srgb,
+    var(--card-border) 82%,
+    rgba(72, 104, 160, 0.22)
+  );
+  background: color-mix(in srgb, var(--card-bg) 54%, transparent);
+}
+
+.torrent-player-link-chip {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.torrent-player-link-chip:hover {
+  border-color: color-mix(in srgb, var(--brand-orange) 42%, var(--card-border));
+  color: var(--brand-orange-deep);
+}
+
+.torrent-player-hash-chip .mantine-Badge-label {
+  max-width: min(100%, 260px);
+}
+
+@media (max-width: 72em) {
+  .torrent-player-info-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .torrent-player-info-card-featured {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 48em) {
+  .torrent-player-info-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .torrent-player-video {
@@ -2173,15 +2621,21 @@ body {
 }
 
 .torrent-player-wrap {
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(4, 6, 11, 0.98), rgba(8, 12, 22, 0.98));
-  box-shadow: 0 20px 48px rgba(4, 8, 18, 0.45);
+  background: linear-gradient(180deg, rgba(3, 5, 10, 1), rgba(8, 12, 22, 0.98));
+  box-shadow:
+    0 20px 48px rgba(4, 8, 18, 0.38),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 .torrent-plyr {
   --plyr-color-main: var(--brand-orange);
-  --plyr-video-controls-background: linear-gradient(180deg, rgba(8, 12, 18, 0.48), rgba(7, 10, 16, 0.88));
+  --plyr-video-controls-background: linear-gradient(
+    180deg,
+    rgba(8, 12, 18, 0.48),
+    rgba(7, 10, 16, 0.88)
+  );
   --plyr-video-control-color: #f3f6ff;
   --plyr-menu-background: rgba(10, 15, 27, 0.92);
   --plyr-menu-color: #f3f6ff;
@@ -2279,8 +2733,15 @@ body {
   opacity: 0;
   pointer-events: none;
   transform: translateY(10px);
-  transition: opacity 150ms ease, transform 170ms ease;
-  background: linear-gradient(180deg, rgba(7, 11, 18, 0), rgba(6, 10, 18, 0.9));
+  transition:
+    opacity 150ms ease,
+    transform 170ms ease;
+  background: linear-gradient(
+    180deg,
+    rgba(7, 11, 18, 0),
+    rgba(6, 10, 18, 0.82) 34%,
+    rgba(5, 9, 17, 0.95)
+  );
 }
 
 .torrent-player-buffering-overlay {
@@ -2290,8 +2751,11 @@ body {
   display: grid;
   place-items: center;
   pointer-events: none;
-  background:
-    radial-gradient(circle at 50% 42%, rgba(6, 10, 20, 0.45), rgba(4, 8, 15, 0.68));
+  background: radial-gradient(
+    circle at 50% 42%,
+    rgba(6, 10, 20, 0.45),
+    rgba(4, 8, 15, 0.68)
+  );
   color: #f5f8ff;
 }
 
@@ -2337,13 +2801,13 @@ body {
   height: 30px;
   border-radius: 999px;
   border: none;
-  background: transparent;
-  color: var(--player-control-text);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f7fbff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
 .torrent-inline-play-btn:hover,
@@ -2389,10 +2853,10 @@ body {
   position: absolute;
   left: 0;
   right: 0;
-  height: 8px;
+  height: 7px;
   border-radius: 999px;
   overflow: hidden;
-  background: rgba(40, 52, 78, 0.44);
+  background: rgba(42, 55, 82, 0.58);
   border: 1px solid rgba(160, 178, 222, 0.14);
 }
 
@@ -2406,18 +2870,30 @@ body {
 
 .torrent-inline-seek-available-segment {
   left: 0;
-  background: linear-gradient(90deg, rgba(68, 98, 162, 0.34), rgba(94, 132, 202, 0.38));
+  background: linear-gradient(
+    90deg,
+    rgba(68, 98, 162, 0.34),
+    rgba(94, 132, 202, 0.38)
+  );
   border-radius: 999px;
 }
 
 .torrent-inline-seek-contiguous {
   left: 0;
-  background: linear-gradient(90deg, rgba(74, 148, 255, 0.46), rgba(112, 187, 255, 0.52));
+  background: linear-gradient(
+    90deg,
+    rgba(74, 148, 255, 0.46),
+    rgba(112, 187, 255, 0.52)
+  );
 }
 
 .torrent-inline-seek-played {
   left: 0;
-  background: linear-gradient(90deg, rgba(255, 137, 44, 0.66), rgba(255, 182, 90, 0.7));
+  background: linear-gradient(
+    90deg,
+    rgba(255, 137, 44, 0.66),
+    rgba(255, 182, 90, 0.7)
+  );
   box-shadow: 0 0 10px rgba(255, 154, 77, 0.18);
 }
 
@@ -2455,8 +2931,8 @@ body {
   height: 28px;
   min-width: 28px;
   border-radius: 7px;
-  border: none;
-  background: transparent;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.05);
   color: var(--player-control-text);
   display: inline-flex;
   align-items: center;
@@ -2468,7 +2944,8 @@ body {
 
 .torrent-inline-icon-btn.is-active {
   color: var(--player-control-accent);
-  box-shadow: none;
+  border-color: rgba(255, 181, 95, 0.32);
+  background: rgba(255, 141, 38, 0.12);
 }
 
 .torrent-inline-settings-wrap {
@@ -2617,15 +3094,26 @@ body {
   display: none;
 }
 
+.torrent-subtitle-site-links {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+}
+
 .torrent-player-hint {
   padding-left: 2px;
   margin-top: 2px;
 }
 
 .torrent-player-control-surface {
-  padding: 12px;
+  padding: 13px;
   display: grid;
   gap: 12px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--card-bg) 90%, rgba(15, 23, 42, 0.1)),
+    color-mix(in srgb, var(--card-bg) 82%, var(--muted-surface))
+  );
 }
 
 .torrent-modern-controls {
@@ -2658,11 +3146,19 @@ body {
 }
 
 .torrent-volume-slider .mantine-Slider-track {
-  background: linear-gradient(90deg, rgba(58, 138, 255, 0.86), rgba(255, 122, 0, 0.86));
+  background: linear-gradient(
+    90deg,
+    rgba(58, 138, 255, 0.86),
+    rgba(255, 122, 0, 0.86)
+  );
 }
 
 .torrent-volume-slider .mantine-Slider-bar {
-  background: linear-gradient(90deg, rgba(58, 138, 255, 0.98), rgba(255, 122, 0, 0.98));
+  background: linear-gradient(
+    90deg,
+    rgba(58, 138, 255, 0.98),
+    rgba(255, 122, 0, 0.98)
+  );
 }
 
 .torrent-volume-slider .mantine-Slider-thumb {
@@ -2705,7 +3201,11 @@ body {
   left: 0;
   top: 0;
   bottom: 0;
-  background: linear-gradient(90deg, rgba(56, 85, 146, 0.6), rgba(78, 112, 180, 0.66));
+  background: linear-gradient(
+    90deg,
+    rgba(56, 85, 146, 0.6),
+    rgba(78, 112, 180, 0.66)
+  );
   pointer-events: none;
 }
 
@@ -2715,7 +3215,11 @@ body {
   top: 2px;
   bottom: 2px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(43, 140, 255, 0.7), rgba(96, 177, 255, 0.78));
+  background: linear-gradient(
+    90deg,
+    rgba(43, 140, 255, 0.7),
+    rgba(96, 177, 255, 0.78)
+  );
   pointer-events: none;
   box-shadow: 0 0 14px rgba(74, 158, 255, 0.28);
 }
@@ -2730,7 +3234,11 @@ body {
   top: 0;
   bottom: 0;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(82, 164, 255, 0.46), rgba(131, 210, 255, 0.5));
+  background: linear-gradient(
+    90deg,
+    rgba(82, 164, 255, 0.46),
+    rgba(131, 210, 255, 0.5)
+  );
 }
 
 .torrent-seek-playhead {

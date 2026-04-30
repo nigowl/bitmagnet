@@ -8,6 +8,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   Group,
   Loader,
   Pagination,
@@ -19,11 +20,12 @@ import {
   Tooltip
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { ArrowLeft, ExternalLink, Eye, Heart, Play, RefreshCw } from "lucide-react";
+import { ArrowLeft, ExternalLink, Eye, Heart, Play, RefreshCw, Trash2 } from "lucide-react";
 import { useAuth } from "@/auth/provider";
 import { CoverImage } from "@/components/cover-image";
 import { useI18n } from "@/languages/provider";
 import {
+  clearPlayerTransmissionCache,
   fetchMediaDetail,
   fetchPlayerTransmissionBatchStatus,
   type MediaDetailResponse,
@@ -46,6 +48,16 @@ function formatBytes(size: number): string {
 function displayResolution(value?: string): string {
   if (!value) return "-";
   return value.startsWith("V") ? value.slice(1) : value;
+}
+
+function normalizeResolutionFilter(value?: string | null): string {
+  return displayResolution(value || "").trim().toLowerCase();
+}
+
+function resolutionSortValue(value: string): number {
+  const match = value.trim().toLowerCase().match(/(\d{3,4})p?/);
+  if (!match) return -1;
+  return Number(match[1]) || -1;
 }
 
 function rowValue(value?: string | number | null): string {
@@ -162,6 +174,12 @@ function resolvePlayerActionState(
   return { color: "slate", variant: "default" };
 }
 
+function isTransmissionTaskComplete(status?: PlayerTransmissionTaskStatus): boolean {
+  if (!status?.exists) return false;
+  const state = status.state.trim().toLowerCase();
+  return status.progress >= 0.999 || state === "seeding" || state === "seed_wait";
+}
+
 function TorrentRow({
   item,
   t,
@@ -249,6 +267,9 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
   const [payload, setPayload] = useState<MediaDetailResponse | null>(null);
   const [playerStatusMap, setPlayerStatusMap] = useState<Record<string, PlayerTransmissionTaskStatus>>({});
   const [torrentPage, setTorrentPage] = useState(1);
+  const [torrentResolutionFilter, setTorrentResolutionFilter] = useState("all");
+  const [torrentCachedOnly, setTorrentCachedOnly] = useState(false);
+  const [cacheClearing, setCacheClearing] = useState(false);
   const titleLanguage = locale === "en" ? "en" : "zh";
 
   const load = useCallback(async (forceRefresh = false) => {
@@ -268,6 +289,22 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
     void load(false);
   }, [load]);
 
+  const refreshPlayerStatuses = useCallback(async (torrents: MediaDetailTorrent[]) => {
+    if (!payload?.playerEnabled || torrents.length === 0) {
+      setPlayerStatusMap({});
+      return;
+    }
+    const infoHashes = torrents.map((item) => item.infoHash).filter(Boolean);
+    const result = await fetchPlayerTransmissionBatchStatus(infoHashes);
+    const nextMap: Record<string, PlayerTransmissionTaskStatus> = {};
+    result.items.forEach((item) => {
+      const key = item.infoHash.trim().toLowerCase();
+      if (!key) return;
+      nextMap[key] = item;
+    });
+    setPlayerStatusMap(nextMap);
+  }, [payload?.playerEnabled]);
+
   useEffect(() => {
     const torrents = payload?.torrents ?? [];
     if (!payload?.playerEnabled) {
@@ -279,18 +316,10 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
       return;
     }
     let cancelled = false;
-    const infoHashes = torrents.map((item) => item.infoHash).filter(Boolean);
     const loadBatch = async () => {
       try {
-        const result = await fetchPlayerTransmissionBatchStatus(infoHashes);
         if (cancelled) return;
-        const nextMap: Record<string, PlayerTransmissionTaskStatus> = {};
-        result.items.forEach((item) => {
-          const key = item.infoHash.trim().toLowerCase();
-          if (!key) return;
-          nextMap[key] = item;
-        });
-        setPlayerStatusMap(nextMap);
+        await refreshPlayerStatuses(torrents);
       } catch {
         if (cancelled) return;
         setPlayerStatusMap({});
@@ -300,11 +329,15 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
     return () => {
       cancelled = true;
     };
-  }, [payload?.playerEnabled, payload?.torrents]);
+  }, [payload?.playerEnabled, payload?.torrents, refreshPlayerStatuses]);
 
   useEffect(() => {
     setTorrentPage(1);
   }, [payload?.item.id]);
+
+  useEffect(() => {
+    setTorrentPage(1);
+  }, [torrentCachedOnly, torrentResolutionFilter]);
 
   const poster = useMemo(() => (payload?.item ? getPosterUrl(payload.item, "lg") : null), [payload?.item]);
   const backdrop = useMemo(() => (payload?.item ? getBackdropUrl(payload.item, "lg") : null), [payload?.item]);
@@ -340,9 +373,28 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
 
   const { item, torrents } = payload;
   const torrentPageSize = 10;
-  const torrentTotalPages = Math.max(1, Math.ceil(torrents.length / torrentPageSize));
+  const torrentResolutionOptions = uniqueValues(torrents.map((torrent) => displayResolution(torrent.videoResolution)).filter((value) => value !== "-"))
+    .sort((left, right) => {
+      const leftScore = resolutionSortValue(left);
+      const rightScore = resolutionSortValue(right);
+      if (leftScore !== rightScore) return rightScore - leftScore;
+      return left.localeCompare(right);
+    });
+  const filteredTorrents = torrents.filter((torrent) => {
+    if (torrentResolutionFilter !== "all" && normalizeResolutionFilter(torrent.videoResolution) !== torrentResolutionFilter) {
+      return false;
+    }
+    if (torrentCachedOnly && !isTransmissionTaskComplete(playerStatusMap[torrent.infoHash.trim().toLowerCase()])) {
+      return false;
+    }
+    return true;
+  });
+  const cachedTaskInfoHashes = torrents
+    .filter((torrent) => playerStatusMap[torrent.infoHash.trim().toLowerCase()]?.exists)
+    .map((torrent) => torrent.infoHash);
+  const torrentTotalPages = Math.max(1, Math.ceil(filteredTorrents.length / torrentPageSize));
   const normalizedTorrentPage = Math.max(1, Math.min(torrentPage, torrentTotalPages));
-  const pagedTorrents = torrents.slice((normalizedTorrentPage - 1) * torrentPageSize, normalizedTorrentPage * torrentPageSize);
+  const pagedTorrents = filteredTorrents.slice((normalizedTorrentPage - 1) * torrentPageSize, normalizedTorrentPage * torrentPageSize);
   const backToCategoryHref = item.isAnime
     ? "/media/anime"
     : item.contentType === "movie"
@@ -484,6 +536,30 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
       });
     } catch (error) {
       notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
+  const handleClearTorrentCache = async () => {
+    if (cachedTaskInfoHashes.length === 0) {
+      notifications.show({ color: "yellow", message: t("media.detail.cacheEmpty") });
+      return;
+    }
+    const confirmed = window.confirm(t("media.detail.cacheClearConfirm"));
+    if (!confirmed) {
+      return;
+    }
+    setCacheClearing(true);
+    try {
+      const result = await clearPlayerTransmissionCache(cachedTaskInfoHashes);
+      notifications.show({
+        color: "green",
+        message: `${t("media.detail.cacheCleared")} (${result.removed || 0})`
+      });
+      await refreshPlayerStatuses(torrents);
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setCacheClearing(false);
     }
   };
 
@@ -735,12 +811,55 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
         ) : null}
 
         <Card className="glass-card" withBorder>
-          <Group justify="space-between" mb="sm">
-            <Text fw={600}>{t("media.detail.torrentInfo")}</Text>
-            <Badge variant="light">{torrents.length}</Badge>
+          <Group justify="space-between" align="flex-start" mb="sm" gap="sm" wrap="wrap">
+            <Group gap="xs">
+              <Text fw={600}>{t("media.detail.torrentInfo")}</Text>
+              <Badge variant="light">{filteredTorrents.length} / {torrents.length}</Badge>
+            </Group>
+            <Group gap="xs" className="media-torrent-quick-filters">
+              <button
+                type="button"
+                className={torrentResolutionFilter === "all" ? "media-filter-pill media-filter-pill-active" : "media-filter-pill"}
+                onClick={() => setTorrentResolutionFilter("all")}
+              >
+                {t("media.all")}
+              </button>
+              {torrentResolutionOptions.map((resolution) => {
+                const value = resolution.toLowerCase();
+                return (
+                  <button
+                    key={resolution}
+                    type="button"
+                    className={torrentResolutionFilter === value ? "media-filter-pill media-filter-pill-active" : "media-filter-pill"}
+                    onClick={() => setTorrentResolutionFilter(value)}
+                  >
+                    {resolution}
+                  </button>
+                );
+              })}
+              <Checkbox
+                size="xs"
+                checked={torrentCachedOnly}
+                onChange={(event) => setTorrentCachedOnly(event.currentTarget.checked)}
+                label={t("media.detail.cacheOnly")}
+              />
+              <Tooltip label={t("media.detail.clearCache")}>
+                <ActionIcon
+                  className="app-icon-btn"
+                  size="sm"
+                  variant="default"
+                  color="red"
+                  disabled={cachedTaskInfoHashes.length === 0 || cacheClearing}
+                  onClick={() => void handleClearTorrentCache()}
+                  aria-label={t("media.detail.clearCache")}
+                >
+                  {cacheClearing ? <Loader size={14} /> : <Trash2 size={14} />}
+                </ActionIcon>
+              </Tooltip>
+            </Group>
           </Group>
 
-          {torrents.length === 0 ? (
+          {filteredTorrents.length === 0 ? (
             <Text c="dimmed">{t("media.noResults")}</Text>
           ) : (
             <>

@@ -767,6 +767,7 @@
     "sectionAnime": "Latest anime resources",
     "size": "Torrent Size",
     "torrentCount": "Torrents",
+    "cacheBadge": "Cached",
     "all": "All",
     "contentTypes": {
       "all": "All",
@@ -789,6 +790,7 @@
       "network": "Network",
       "studio": "Studio",
       "awards": "Awards",
+      "cache": "Cache",
       "language": "Language",
       "resolution": "Resolution",
       "year": "Year",
@@ -880,7 +882,12 @@
       "moreFields": "More Metadata Fields",
       "fieldKey": "Key",
       "fieldValue": "Value",
-      "fieldSource": "Source"
+      "fieldSource": "Source",
+      "cacheOnly": "Cached",
+      "clearCache": "Clear Cache",
+      "cacheClearConfirm": "Remove playback cache, download tasks, and local files for these releases? Incomplete downloads will also be removed.",
+      "cacheCleared": "Cache cleared",
+      "cacheEmpty": "No cache tasks to clear"
     },
     "player": {
       "title": "Online Player",
@@ -928,6 +935,9 @@
       "resolution": "Resolution",
       "resolutionOutputTitle": "Transcode Resolution",
       "resolutionOutputOriginal": "Original",
+      "mediaInfoTitle": "Media Info",
+      "transferInfoTitle": "Transfer",
+      "torrentInfoTitle": "Torrent",
       "mediaTitle": "Media Title",
       "infoHashLabel": "InfoHash",
       "contentTypeLabel": "Content Type",
@@ -972,6 +982,7 @@
       "subtitleManagerTabFiles": "Files",
       "subtitleManagerTabStyle": "Style",
       "subtitleManagerHint": "Upload or remove subtitle files.",
+      "subtitleSiteLinks": "Subtitle Sites",
       "subtitleManagerEmpty": "No uploaded subtitles yet",
       "subtitleDelete": "Delete Subtitle",
       "subtitleOffset": "Offset",

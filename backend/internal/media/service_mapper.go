@@ -46,6 +46,8 @@ func listItemFromModel(row model.MediaEntry) ListItem {
 		MaxSeeders:          nullUintPtr(row.MaxSeeders),
 		LatestPublishedAt:   row.LatestPublishedAt,
 		UpdatedAt:           row.UpdatedAt,
+		HasCache:            row.HasCache,
+		CacheUpdatedAt:      row.CacheUpdatedAt,
 	}
 
 	if !row.ReleaseYear.IsNil() {

@@ -767,6 +767,7 @@
     "sectionAnime": "最新动画资源",
     "size": "资源大小",
     "torrentCount": "种子数",
+    "cacheBadge": "缓存",
     "all": "全部",
     "contentTypes": {
       "all": "全部",
@@ -789,6 +790,7 @@
       "network": "平台",
       "studio": "制作",
       "awards": "奖项",
+      "cache": "缓存",
       "language": "语言",
       "resolution": "分辨率",
       "year": "年份",
@@ -880,7 +882,12 @@
       "moreFields": "更多元数据字段",
       "fieldKey": "字段名",
       "fieldValue": "字段值",
-      "fieldSource": "来源"
+      "fieldSource": "来源",
+      "cacheOnly": "缓存",
+      "clearCache": "清除缓存",
+      "cacheClearConfirm": "确定移除这些资源的播放缓存、下载任务和本地文件吗？下载中的未完成文件也会被移除。",
+      "cacheCleared": "缓存已清除",
+      "cacheEmpty": "当前没有可清理的缓存任务"
     },
     "player": {
       "title": "在线播放器",
@@ -928,6 +935,9 @@
       "resolution": "分辨率",
       "resolutionOutputTitle": "转码分辨率",
       "resolutionOutputOriginal": "原始",
+      "mediaInfoTitle": "媒体信息",
+      "transferInfoTitle": "传输状态",
+      "torrentInfoTitle": "种子信息",
       "mediaTitle": "影视名称",
       "infoHashLabel": "种子哈希",
       "contentTypeLabel": "内容类型",
@@ -972,6 +982,7 @@
       "subtitleManagerTabFiles": "文件",
       "subtitleManagerTabStyle": "样式",
       "subtitleManagerHint": "上传或删除字幕文件。",
+      "subtitleSiteLinks": "字幕网站",
       "subtitleManagerEmpty": "暂无已上传字幕",
       "subtitleDelete": "删除字幕",
       "subtitleOffset": "偏移",

@@ -244,6 +244,11 @@ function MediaWallCard({ item, t, titleLanguage, sourceHref }: {
     <div className="media-wall-item">
       <Link href={buildMediaDetailHref(item, sourceHref)} className="unstyled-link">
         <article className="media-wall-card home-media-card">
+          {item.hasCache ? (
+            <div className="media-cache-corner" aria-label={t("media.cacheBadge")}>
+              <span>{t("media.cacheBadge")}</span>
+            </div>
+          ) : null}
           <div className="media-wall-poster-shell">
             {poster ? (
               <CoverImage className="media-wall-poster" src={poster} alt={titleText} />

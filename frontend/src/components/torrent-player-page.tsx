@@ -20,7 +20,7 @@ import {
   Tooltip
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { AlertTriangle, Maximize2, Minimize2, Minus, Pause, PictureInPicture2, Play, Plus, Settings2, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, ExternalLink, Maximize2, Minimize2, Minus, Pause, PictureInPicture2, Play, Plus, Settings2, Trash2, Upload } from "lucide-react";
 import { useAuth } from "@/auth/provider";
 import { graphqlRequest } from "@/lib/api";
 import { TORRENT_CONTENT_SEARCH_QUERY } from "@/lib/graphql";
@@ -31,6 +31,7 @@ import {
   buildPlayerTransmissionStreamURL,
   createPlayerSubtitle,
   deletePlayerSubtitle,
+  fetchMediaDetail,
   fetchPlayerSubtitles,
   fetchPlayerTransmissionAudioTracks,
   fetchPlayerTransmissionBootstrap,
@@ -108,6 +109,7 @@ type TorrentDetailLite = {
   mediaTitle?: string;
   mediaTitleZh?: string;
   mediaTitleEn?: string;
+  mediaEntryId?: string;
   mediaHref?: string;
   sizeBytes?: number;
   filesCount?: number;
@@ -117,6 +119,12 @@ type TorrentDetailLite = {
   videoSource?: string;
   publishedAt?: string;
   runtimeSeconds?: number;
+};
+
+type PlayerSubtitleSiteLink = {
+  id: string;
+  label: string;
+  href: string;
 };
 
 type PlaybackFileOption = {
@@ -180,6 +188,40 @@ const TRANSCODE_PREBUFFER_MAX_WAIT_MS = 45000;
 const PLAYBACK_RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 const TRANSCODE_PREBUFFER_OPTIONS = [30, 45, 60, 90, 120] as const;
 const TRANSCODE_OUTPUT_RESOLUTION_OPTIONS = [0, 480, 720, 1080, 1440, 2160] as const;
+
+function firstNonEmpty(...values: Array<string | undefined | null>): string | null {
+  for (const value of values) {
+    const normalized = value?.trim();
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return null;
+}
+
+function applySubtitleTemplate(urlTemplate: string, title: string, releaseYear?: number): string | null {
+  const template = urlTemplate.trim();
+  if (!template) {
+    return null;
+  }
+
+  const encodedTitle = encodeURIComponent(title);
+  const resolved = template
+    .replaceAll("{title}", encodedTitle)
+    .replaceAll("{titleEncoded}", encodedTitle)
+    .replaceAll("{titleRaw}", title)
+    .replaceAll("{year}", releaseYear ? String(releaseYear) : "");
+
+  try {
+    const parsed = new URL(resolved);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
 
 type PlaybackProgressRecord = {
   infoHash: string;
@@ -803,7 +845,7 @@ function audioTrackSelectionKey(track: NativeAudioTrack, index: number): string 
 }
 
 export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: string }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const infoHash = routeInfoHash.trim().toLowerCase();
@@ -883,6 +925,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const [transcodeOutputResolution, setTranscodeOutputResolution] = useState(0);
 
   const [subtitleItems, setSubtitleItems] = useState<PlayerSubtitleItem[]>([]);
+  const [subtitleSiteLinks, setSubtitleSiteLinks] = useState<PlayerSubtitleSiteLink[]>([]);
   const [subtitleTrackSrcMap, setSubtitleTrackSrcMap] = useState<Record<number, string>>({});
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<string>("none");
   const [audioTrackOptions, setAudioTrackOptions] = useState<Array<{ value: string; label: string }>>([]);
@@ -1733,6 +1776,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           mediaTitle: mediaTitle || undefined,
           mediaTitleZh: mediaTitles.zh || undefined,
           mediaTitleEn: mediaTitles.en || undefined,
+          mediaEntryId: mediaEntryID || undefined,
           mediaHref,
           sizeBytes: Number.isFinite(item.torrent.size) ? Math.max(0, Number(item.torrent.size)) : undefined,
           filesCount: Number.isFinite(item.torrent.filesCount) ? Math.max(0, Number(item.torrent.filesCount)) : undefined,
@@ -1762,6 +1806,50 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       setDetail(null);
     }
   }, [infoHash, logInfo, logWarn, t]);
+
+  useEffect(() => {
+    const mediaEntryId = detail?.mediaEntryId;
+    if (!mediaEntryId) {
+      setSubtitleSiteLinks([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadSubtitleLinks = async () => {
+      try {
+        const mediaDetail = await fetchMediaDetail(mediaEntryId);
+        if (cancelled) return;
+        const title =
+          locale === "zh"
+            ? firstNonEmpty(mediaDetail.item.nameZh, mediaDetail.item.nameEn, mediaDetail.item.nameOriginal, mediaDetail.item.originalTitle, mediaDetail.item.title)
+            : firstNonEmpty(mediaDetail.item.nameEn, mediaDetail.item.nameZh, mediaDetail.item.nameOriginal, mediaDetail.item.originalTitle, mediaDetail.item.title);
+        const fallbackTitle = firstNonEmpty(title, detail.mediaTitle, detail.title) || detail.title;
+        const links = (mediaDetail.subtitleTemplates ?? [])
+          .map((template) => {
+            const href = applySubtitleTemplate(template.urlTemplate, fallbackTitle, mediaDetail.item.releaseYear);
+            if (!href) return null;
+            return {
+              id: template.id,
+              label: template.name?.trim() || t("media.detail.subtitleTemplateFallback"),
+              href
+            };
+          })
+          .filter((item): item is PlayerSubtitleSiteLink => Boolean(item));
+        setSubtitleSiteLinks(links);
+      } catch (error) {
+        if (cancelled) return;
+        setSubtitleSiteLinks([]);
+        logWarn("subtitle", "failed to load subtitle site links", {
+          message: toErrorMessage(error, t("media.player.subtitleUploadFailed"))
+        });
+      }
+    };
+    void loadSubtitleLinks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detail, locale, logWarn, t]);
 
   const bootstrapPlayer = useCallback(async () => {
     if (!infoHash) {
@@ -3148,96 +3236,18 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
               <Badge variant="outline" color={isDownloadComplete ? "green" : isDownloading ? "yellow" : "slate"}>
                 {transferStatusLabel}
               </Badge>
-              {(playerStatus === "playing" || playerStatus === "ready") ? (
-                <Badge variant="light">{t("media.player.playbackPosition")}: {playbackPositionLabel}</Badge>
-              ) : null}
-            </Group>
-            {mediaTitleDisplay && detail.mediaHref ? (
-              <Text c="dimmed" size="sm" className="torrent-player-subline">
-                {t("media.player.mediaTitle")}:{" "}
-                <Link
-                  href={detail.mediaHref}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="unstyled-link"
-                  style={{ color: "var(--brand-orange)" }}
-                >
-                  {mediaTitleDisplay}
-                </Link>
-              </Text>
-            ) : mediaTitleDisplay ? (
-              <Text c="dimmed" size="sm" className="torrent-player-subline">
-                {t("media.player.mediaTitle")}: {mediaTitleDisplay}
-              </Text>
-            ) : null}
-            <Text c="dimmed" size="sm" className="detail-code-line torrent-player-subline">
-              {t("media.player.infoHashLabel")}:{" "}
-              <a href={detail.magnetUri || ""} rel="noreferrer" target="_blank">{detail.infoHash}</a>
-            </Text>
-            <Group gap="xs" mt={2} className="torrent-player-meta-row">
-              {detail.contentType ? (
-                <Badge variant="light">{t("media.player.contentTypeLabel")}: {detail.contentType}</Badge>
-              ) : null}
-              {detail.sizeBytes ? (
-                <Badge variant="light">{t("media.player.torrentSize")}: {formatBytes(detail.sizeBytes)}</Badge>
-              ) : null}
-              {Number.isFinite(detail.filesCount) ? (
-                <Badge variant="light">{t("media.player.fileCount")}: {detail.filesCount}</Badge>
-              ) : null}
-              {sourceResolutionLabel && sourceResolutionLabel !== "-" ? (
-                <Badge variant="light">{t("media.player.resolution")}: {sourceResolutionLabel}</Badge>
-              ) : null}
-              {detail.videoSource ? (
-                <Badge variant="light">{t("media.player.videoSourceLabel")}: {detail.videoSource}</Badge>
-              ) : null}
-              {detailPublishedLabel ? (
-                <Badge variant="light">{t("media.player.publishedAtLabel")}: {detailPublishedLabel}</Badge>
-              ) : null}
-              {detailSourceLabel ? (
-                <Badge variant="light">{t("media.player.torrentSourcesLabel")}: {detailSourceLabel}</Badge>
-              ) : null}
-            </Group>
-            {detailTagPreview.length > 0 ? (
-              <Group gap="xs" className="torrent-player-tag-row">
-                <Badge variant="light">{t("media.player.torrentTagsLabel")}</Badge>
-                {detailTagPreview.map((tag) => (
-                  <Badge key={`tag:${tag}`} variant="outline">{tag}</Badge>
-                ))}
-                {detail.tagNames && detail.tagNames.length > detailTagPreview.length ? (
-                  <Badge variant="outline">+{detail.tagNames.length - detailTagPreview.length}</Badge>
-                ) : null}
-              </Group>
-            ) : null}
-            <Group gap="xs" mt={6} className="torrent-player-status-row">
-              {!isDownloadComplete ? (
-                <Badge variant="outline">{t("media.player.progress")}: {downloadTaskProgress}%</Badge>
-              ) : null}
-              <Badge variant="outline">{t("media.player.downloadSpeed")}: {formatSpeed(statusSnapshot?.downloadRate || 0)}</Badge>
-              <Badge variant="outline">{t("media.player.peers")}: {statusSnapshot?.peersConnected || 0}</Badge>
-              <Badge variant="outline">{t("media.player.downloadedLabel")}: {downloadedRatio}%</Badge>
-              {!isDownloadComplete ? (
-                <Badge variant="outline">{t("media.player.fileReadyLabel")}: {playableRatio}%</Badge>
-              ) : null}
-              {!isDownloadComplete ? (
-                <Badge variant="outline">{t("media.player.contiguousLabel")}: {contiguousRatio}%</Badge>
-              ) : null}
-              <Badge variant="light">{t("media.player.seeders")}: {detail.seeders ?? 0}</Badge>
-              <Badge variant="light">{t("media.player.leechers")}: {detail.leechers ?? 0}</Badge>
-              <Badge variant="outline">
-                {t("media.player.resolutionOutputTitle")}: {outputResolutionLabel}
-              </Badge>
-              <Badge variant="outline">{t("media.player.sequentialDownloadLabel")}: {statusSnapshot?.sequentialDownload ? t("media.player.sequentialDownloadOn") : t("media.player.sequentialDownloadOff")}</Badge>
+              <Badge variant="light">{t("media.player.playbackPosition")}: {playbackPositionLabel}</Badge>
             </Group>
           </div>
           <Tooltip label={t("media.player.diagnosticsTitle")} withArrow>
             <ActionIcon
-              className="app-icon-btn"
+              className="app-icon-btn torrent-player-diagnostics-btn"
               variant="default"
-              size="lg"
+              size={30}
               aria-label={t("media.player.diagnosticsTitle")}
               onClick={() => setDiagnosticsOpened(true)}
             >
-              <Settings2 size={16} />
+              <Settings2 size={14} />
             </ActionIcon>
 
           </Tooltip>
@@ -3580,6 +3590,104 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           </div>
 
           <div className="torrent-player-control-surface">
+            {detail ? (
+              <div className="torrent-player-info-panel">
+                <div className="torrent-player-info-grid">
+                  <section className="torrent-player-info-card torrent-player-info-card-featured">
+                    <div className="torrent-player-info-card-title">{t("media.player.mediaInfoTitle")}</div>
+                    {mediaTitleDisplay && detail.mediaHref ? (
+                      <Link
+                        className="torrent-player-info-title-link"
+                        href={detail.mediaHref}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {mediaTitleDisplay}
+                        <ExternalLink size={13} />
+                      </Link>
+                    ) : mediaTitleDisplay ? (
+                      <div className="torrent-player-info-title-text">{mediaTitleDisplay}</div>
+                    ) : (
+                      <div className="torrent-player-info-title-text">{detail.title}</div>
+                    )}
+                    <div className="torrent-player-chip-cloud">
+                      {detail.contentType ? (
+                        <Badge variant="light">{t("media.player.contentTypeLabel")}: {detail.contentType}</Badge>
+                      ) : null}
+                      {sourceResolutionLabel && sourceResolutionLabel !== "-" ? (
+                        <Badge variant="light">{t("media.player.resolution")}: {sourceResolutionLabel}</Badge>
+                      ) : null}
+                      {detail.videoSource ? (
+                        <Badge variant="light">{t("media.player.videoSourceLabel")}: {detail.videoSource}</Badge>
+                      ) : null}
+                      {detailPublishedLabel ? (
+                        <Badge variant="light">{t("media.player.publishedAtLabel")}: {detailPublishedLabel}</Badge>
+                      ) : null}
+                    </div>
+                  </section>
+
+                  <section className="torrent-player-info-card">
+                    <div className="torrent-player-info-card-title">{t("media.player.transferInfoTitle")}</div>
+                    <div className="torrent-player-chip-cloud">
+                      {!isDownloadComplete ? (
+                        <Badge variant="outline">{t("media.player.progress")}: {downloadTaskProgress}%</Badge>
+                      ) : null}
+                      <Badge variant="outline">{t("media.player.downloadSpeed")}: {formatSpeed(statusSnapshot?.downloadRate || 0)}</Badge>
+                      <Badge variant="outline">{t("media.player.peers")}: {statusSnapshot?.peersConnected || 0}</Badge>
+                      <Badge variant="outline">{t("media.player.downloadedLabel")}: {downloadedRatio}%</Badge>
+                      {!isDownloadComplete ? (
+                        <Badge variant="outline">{t("media.player.fileReadyLabel")}: {playableRatio}%</Badge>
+                      ) : null}
+                      {!isDownloadComplete ? (
+                        <Badge variant="outline">{t("media.player.contiguousLabel")}: {contiguousRatio}%</Badge>
+                      ) : null}
+                      <Badge variant="outline">{t("media.player.resolutionOutputTitle")}: {outputResolutionLabel}</Badge>
+                      <Badge variant="outline">{t("media.player.sequentialDownloadLabel")}: {statusSnapshot?.sequentialDownload ? t("media.player.sequentialDownloadOn") : t("media.player.sequentialDownloadOff")}</Badge>
+                    </div>
+                  </section>
+
+                  <section className="torrent-player-info-card">
+                    <div className="torrent-player-info-card-title">{t("media.player.torrentInfoTitle")}</div>
+                    {detail.magnetUri ? (
+                      <a
+                        className="torrent-player-hash-link"
+                        href={detail.magnetUri}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <span>{t("media.player.infoHashLabel")}</span>
+                        <strong>{detail.infoHash}</strong>
+                        <ExternalLink size={13} />
+                      </a>
+                    ) : (
+                      <div className="torrent-player-hash-link torrent-player-hash-link-static">
+                        <span>{t("media.player.infoHashLabel")}</span>
+                        <strong>{detail.infoHash}</strong>
+                      </div>
+                    )}
+                    <div className="torrent-player-chip-cloud">
+                      <Badge variant="light">{t("media.player.seeders")}: {detail.seeders ?? 0}</Badge>
+                      <Badge variant="light">{t("media.player.leechers")}: {detail.leechers ?? 0}</Badge>
+                      {detail.sizeBytes ? (
+                        <Badge variant="light">{t("media.player.torrentSize")}: {formatBytes(detail.sizeBytes)}</Badge>
+                      ) : null}
+                      {Number.isFinite(detail.filesCount) ? (
+                        <Badge variant="light">{t("media.player.fileCount")}: {detail.filesCount}</Badge>
+                      ) : null}
+                      {detailSourceLabel ? (
+                        <Badge variant="light">{t("media.player.torrentSourcesLabel")}: {detailSourceLabel}</Badge>
+                      ) : null}
+                      {detailTagPreview.map((tag) => (
+                        <Badge key={`tag:${tag}`} variant="outline">{tag}</Badge>
+                      ))}
+                      {detail.tagNames && detail.tagNames.length > detailTagPreview.length ? (
+                        <Badge variant="outline">+{detail.tagNames.length - detailTagPreview.length}</Badge>
+                      ) : null}
+                    </div>
+                  </section>
+                </div>
+              </div>
+            ) : null}
             <div className="torrent-player-controls-grid">
               <Select
                 label={t("media.player.selectedFile")}
@@ -3756,6 +3864,27 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
                   ))}
                 </Stack>
               )}
+              {subtitleSiteLinks.length > 0 ? (
+                <div className="torrent-subtitle-site-links">
+                  <Text fw={700} size="sm">{t("media.player.subtitleSiteLinks")}</Text>
+                  <Group gap="xs" wrap="wrap">
+                    {subtitleSiteLinks.map((link) => (
+                      <Button
+                        key={link.id}
+                        component="a"
+                        href={link.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        variant="light"
+                        size="xs"
+                        rightSection={<ExternalLink size={13} />}
+                      >
+                        {link.label}
+                      </Button>
+                    ))}
+                  </Group>
+                </div>
+              ) : null}
             </Stack>
           </Tabs.Panel>
 

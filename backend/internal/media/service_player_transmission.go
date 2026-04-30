@@ -226,14 +226,25 @@ func (s *service) PlayerTransmissionStatus(
 	ctx context.Context,
 	input PlayerTransmissionStatusInput,
 ) (PlayerTransmissionStatusResult, error) {
-	infoHash, _, torrent, settings, err := s.loadPlayerTransmissionBase(ctx, input.InfoHash)
+	infoHash, db, torrent, settings, err := s.loadPlayerTransmissionBase(ctx, input.InfoHash)
 	if err != nil {
 		return PlayerTransmissionStatusResult{}, err
 	}
 	if _, err := s.playerTransmissionEnsureTorrent(ctx, settings, infoHash, torrent.MagnetURI()); err != nil {
 		return PlayerTransmissionStatusResult{}, err
 	}
-	return s.playerTransmissionLoadStatus(ctx, settings, infoHash, true)
+	result, err := s.playerTransmissionLoadStatus(ctx, settings, infoHash, true)
+	if err != nil {
+		return PlayerTransmissionStatusResult{}, err
+	}
+	s.syncMediaCacheFlagsForInfoHashes(ctx, db, settings, []string{infoHash}, map[string]playerTransmissionRPCTorrent{
+		infoHash: {
+			ID:          result.TorrentID,
+			HashString:  result.InfoHash,
+			PercentDone: result.Progress,
+		},
+	})
+	return result, nil
 }
 
 func (s *service) PlayerTransmissionBatchStatus(
@@ -302,7 +313,55 @@ func (s *service) PlayerTransmissionBatchStatus(
 		})
 	}
 
+	s.syncMediaCacheFlagsForInfoHashes(ctx, db, settings, infoHashes, snapshots)
+
 	return PlayerTransmissionBatchStatusResult{Items: items}, nil
+}
+
+func (s *service) PlayerTransmissionClearCache(
+	ctx context.Context,
+	input PlayerTransmissionClearCacheInput,
+) (PlayerTransmissionClearCacheResult, error) {
+	q, err := s.dao.Get()
+	if err != nil {
+		return PlayerTransmissionClearCacheResult{}, err
+	}
+	db := q.Torrent.WithContext(ctx).UnderlyingDB()
+	settings, err := s.loadPlayerBootstrapSettings(ctx, db)
+	if err != nil {
+		return PlayerTransmissionClearCacheResult{}, err
+	}
+	if !settings.PlayerEnabled {
+		return PlayerTransmissionClearCacheResult{}, ErrPlayerDisabled
+	}
+	if !settings.TransmissionEnabled {
+		return PlayerTransmissionClearCacheResult{}, ErrPlayerTransmissionDisabled
+	}
+
+	infoHashes := normalizePlayerInfoHashList(input.InfoHashes)
+	if len(infoHashes) == 0 {
+		return PlayerTransmissionClearCacheResult{Removed: 0}, nil
+	}
+
+	snapshots, err := s.playerTransmissionFetchTorrents(ctx, settings, infoHashes)
+	if err != nil {
+		return PlayerTransmissionClearCacheResult{}, err
+	}
+	ids := make([]int64, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		if snapshot.ID > 0 {
+			ids = append(ids, snapshot.ID)
+		}
+	}
+	if len(ids) == 0 {
+		s.syncMediaCacheFlagsForInfoHashes(ctx, db, settings, infoHashes, map[string]playerTransmissionRPCTorrent{})
+		return PlayerTransmissionClearCacheResult{Removed: 0}, nil
+	}
+	if err := s.playerTransmissionRemoveTorrents(ctx, settings, ids); err != nil {
+		return PlayerTransmissionClearCacheResult{}, err
+	}
+	s.syncMediaCacheFlagsForInfoHashes(ctx, db, settings, infoHashes, map[string]playerTransmissionRPCTorrent{})
+	return PlayerTransmissionClearCacheResult{Removed: len(ids)}, nil
 }
 
 func (s *service) PlayerTransmissionResolveStream(
@@ -531,6 +590,171 @@ func playerTransmissionResolveFFprobePath(ffmpegBinaryPath string) string {
 		return filepath.Join(filepath.Dir(ffmpegPath), "ffprobe")
 	}
 	return "ffprobe"
+}
+
+func normalizePlayerInfoHashList(values []string) []string {
+	result := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, raw := range values {
+		infoHash := strings.TrimSpace(strings.ToLower(raw))
+		if infoHash == "" {
+			continue
+		}
+		if _, err := protocol.ParseID(infoHash); err != nil {
+			continue
+		}
+		if _, ok := seen[infoHash]; ok {
+			continue
+		}
+		seen[infoHash] = struct{}{}
+		result = append(result, infoHash)
+	}
+	return result
+}
+
+func (s *service) syncMediaCacheFlagsForInfoHashes(
+	ctx context.Context,
+	db *gorm.DB,
+	settings playerBootstrapSettings,
+	checkedInfoHashes []string,
+	cachedSnapshots map[string]playerTransmissionRPCTorrent,
+) {
+	if db == nil || len(checkedInfoHashes) == 0 {
+		return
+	}
+
+	normalized := normalizePlayerInfoHashList(checkedInfoHashes)
+	if len(normalized) == 0 {
+		return
+	}
+
+	checked := make(map[string]struct{}, len(normalized))
+	parsedIDs := make([]protocol.ID, 0, len(normalized))
+	for _, infoHash := range normalized {
+		checked[infoHash] = struct{}{}
+		parsed, err := protocol.ParseID(infoHash)
+		if err != nil {
+			continue
+		}
+		parsedIDs = append(parsedIDs, parsed)
+	}
+	if len(parsedIDs) == 0 {
+		return
+	}
+
+	type mediaTorrentRow struct {
+		MediaID  string      `gorm:"column:media_id"`
+		InfoHash protocol.ID `gorm:"column:info_hash"`
+	}
+	var seedRows []mediaTorrentRow
+	if err := db.WithContext(ctx).
+		Table(model.TableNameMediaEntryTorrent).
+		Select("media_id, info_hash").
+		Where("info_hash IN ?", parsedIDs).
+		Find(&seedRows).Error; err != nil {
+		return
+	}
+	if len(seedRows) == 0 {
+		return
+	}
+
+	mediaIDs := make([]string, 0, len(seedRows))
+	mediaSeen := make(map[string]struct{}, len(seedRows))
+	for _, row := range seedRows {
+		if strings.TrimSpace(row.MediaID) == "" {
+			continue
+		}
+		if _, ok := mediaSeen[row.MediaID]; ok {
+			continue
+		}
+		mediaSeen[row.MediaID] = struct{}{}
+		mediaIDs = append(mediaIDs, row.MediaID)
+	}
+	if len(mediaIDs) == 0 {
+		return
+	}
+
+	var rows []mediaTorrentRow
+	if err := db.WithContext(ctx).
+		Table(model.TableNameMediaEntryTorrent).
+		Select("media_id, info_hash").
+		Where("media_id IN ?", mediaIDs).
+		Find(&rows).Error; err != nil {
+		return
+	}
+	if len(rows) == 0 {
+		return
+	}
+
+	mediaByHash := make(map[string][]string, len(rows))
+	allHashes := make([]string, 0, len(rows))
+	allSeen := make(map[string]struct{}, len(rows))
+	for _, row := range rows {
+		infoHash := strings.TrimSpace(strings.ToLower(row.InfoHash.String()))
+		if infoHash == "" {
+			continue
+		}
+		mediaByHash[infoHash] = append(mediaByHash[infoHash], row.MediaID)
+		if _, ok := allSeen[infoHash]; ok {
+			continue
+		}
+		allSeen[infoHash] = struct{}{}
+		allHashes = append(allHashes, infoHash)
+	}
+	if len(allHashes) == 0 {
+		return
+	}
+
+	cachedByHash := make(map[string]struct{}, len(cachedSnapshots))
+	for infoHash := range cachedSnapshots {
+		normalizedHash := strings.TrimSpace(strings.ToLower(infoHash))
+		if normalizedHash != "" {
+			cachedByHash[normalizedHash] = struct{}{}
+			checked[normalizedHash] = struct{}{}
+		}
+	}
+
+	missing := make([]string, 0)
+	for _, infoHash := range allHashes {
+		if _, ok := checked[infoHash]; ok {
+			continue
+		}
+		missing = append(missing, infoHash)
+	}
+	if len(missing) > 0 {
+		if snapshots, err := s.playerTransmissionFetchTorrents(ctx, settings, missing); err == nil {
+			for infoHash := range snapshots {
+				normalizedHash := strings.TrimSpace(strings.ToLower(infoHash))
+				if normalizedHash != "" {
+					cachedByHash[normalizedHash] = struct{}{}
+				}
+			}
+		}
+	}
+
+	cachedByMedia := make(map[string]bool, len(mediaIDs))
+	for _, mediaID := range mediaIDs {
+		cachedByMedia[mediaID] = false
+	}
+	for infoHash, mappedMediaIDs := range mediaByHash {
+		if _, ok := cachedByHash[infoHash]; !ok {
+			continue
+		}
+		for _, mediaID := range mappedMediaIDs {
+			cachedByMedia[mediaID] = true
+		}
+	}
+
+	now := time.Now()
+	for mediaID, hasCache := range cachedByMedia {
+		_ = db.WithContext(ctx).
+			Table(model.TableNameMediaEntry).
+			Where("id = ?", mediaID).
+			Updates(map[string]any{
+				"has_cache":        hasCache,
+				"cache_updated_at": now,
+			}).Error
+	}
 }
 
 func (s *service) loadPlayerTransmissionBase(

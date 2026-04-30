@@ -61,6 +61,7 @@ func (b *builder) Apply(e *gin.Engine) error {
 	e.GET("/api/media/player/transmission/audio-tracks", b.playerTransmissionAudioTracks)
 	e.GET("/api/media/player/transmission/status", b.playerTransmissionStatus)
 	e.GET("/api/media/player/transmission/status/batch", b.playerTransmissionBatchStatus)
+	e.DELETE("/api/media/player/transmission/cache", b.playerTransmissionClearCache)
 	e.GET("/api/media/player/transmission/stream", b.playerTransmissionStream)
 	e.HEAD("/api/media/player/transmission/stream", b.playerTransmissionStream)
 	e.GET("/api/media/player/subtitles", b.playerSubtitleList)
@@ -92,6 +93,7 @@ func (b *builder) list(c *gin.Context) {
 		Network:  c.Query("network"),
 		Studio:   c.Query("studio"),
 		Awards:   c.Query("awards"),
+		Cache:    c.Query("cache"),
 		Sort:     c.Query("sort"),
 		HeatDays: heatDays,
 		ScoreMin: scoreMin,
@@ -225,6 +227,31 @@ func (b *builder) playerTransmissionBatchStatus(c *gin.Context) {
 	result, err := b.service.PlayerTransmissionBatchStatus(c.Request.Context(), media.PlayerTransmissionBatchStatusInput{
 		InfoHashes: infoHashes,
 	})
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrPlayerDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player disabled"})
+		case errors.Is(err, media.ErrPlayerTransmissionDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player transmission disabled"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) playerTransmissionClearCache(c *gin.Context) {
+	var req media.PlayerTransmissionClearCacheInput
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	if len(req.InfoHashes) == 0 {
+		req.InfoHashes = parseStringListQuery(c, "infoHash", "infoHashes")
+	}
+
+	result, err := b.service.PlayerTransmissionClearCache(c.Request.Context(), req)
 	if err != nil {
 		switch {
 		case errors.Is(err, media.ErrPlayerDisabled):

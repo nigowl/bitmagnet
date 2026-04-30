@@ -46,6 +46,8 @@ export type MediaListItem = {
   maxSeeders?: number;
   latestPublishedAt?: string;
   updatedAt: string;
+  hasCache?: boolean;
+  cacheUpdatedAt?: string;
 };
 
 export type MediaListResponse = {
@@ -206,6 +208,10 @@ export type PlayerTransmissionBatchStatusResponse = {
   items: PlayerTransmissionTaskStatus[];
 };
 
+export type PlayerTransmissionClearCacheResponse = {
+  removed: number;
+};
+
 export type PlayerTransmissionBootstrapResponse = {
   infoHash: string;
   torrentId: number;
@@ -295,6 +301,7 @@ export async function fetchMediaList(params: {
   network?: string;
   studio?: string;
   awards?: string;
+  cache?: string;
   sort?: string;
   heatDays?: number;
   scoreMin?: number;
@@ -332,6 +339,9 @@ export async function fetchMediaList(params: {
   }
   if (params.awards?.trim() && params.awards !== "all") {
     query.set("awards", params.awards.trim());
+  }
+  if (params.cache?.trim() && params.cache !== "all") {
+    query.set("cache", params.cache.trim());
   }
   if (params.sort?.trim() && params.sort !== "latest") {
     query.set("sort", params.sort.trim());
@@ -461,6 +471,19 @@ export async function fetchPlayerTransmissionBatchStatus(
   return apiRequest<PlayerTransmissionBatchStatusResponse>(
     `/api/media/player/transmission/status/batch?${query.toString()}`
   );
+}
+
+export async function clearPlayerTransmissionCache(infoHashes: string[]): Promise<PlayerTransmissionClearCacheResponse> {
+  const normalized = Array.from(
+    new Set(infoHashes.map((item) => item.trim().toLowerCase()).filter((item) => item.length > 0))
+  );
+  if (normalized.length === 0) {
+    return { removed: 0 };
+  }
+  return apiRequest<PlayerTransmissionClearCacheResponse>("/api/media/player/transmission/cache", {
+    method: "DELETE",
+    data: { infoHashes: normalized }
+  });
 }
 
 export async function selectPlayerTransmissionFile(

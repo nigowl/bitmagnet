@@ -55,6 +55,7 @@ type Service interface {
 	PlayerTransmissionAudioTracks(ctx context.Context, input PlayerTransmissionAudioTracksInput) (PlayerTransmissionAudioTracksResult, error)
 	PlayerTransmissionStatus(ctx context.Context, input PlayerTransmissionStatusInput) (PlayerTransmissionStatusResult, error)
 	PlayerTransmissionBatchStatus(ctx context.Context, input PlayerTransmissionBatchStatusInput) (PlayerTransmissionBatchStatusResult, error)
+	PlayerTransmissionClearCache(ctx context.Context, input PlayerTransmissionClearCacheInput) (PlayerTransmissionClearCacheResult, error)
 	PlayerTransmissionResolveStream(ctx context.Context, input PlayerTransmissionResolveStreamInput) (PlayerTransmissionResolveStreamResult, error)
 	PlayerSubtitleList(ctx context.Context, input PlayerSubtitleListInput) ([]PlayerSubtitle, error)
 	PlayerSubtitleCreate(ctx context.Context, input PlayerSubtitleCreateInput) (PlayerSubtitle, error)
@@ -266,6 +267,10 @@ func (s *service) List(ctx context.Context, input ListInput) (ListResult, error)
 
 	if awards := normalizeListFilter(input.Awards); awards != "" {
 		db = applyMetadataFilter(db, awardsFilterPatterns(awards))
+	}
+
+	if cacheFilter := normalizeListFilter(input.Cache); cacheFilter == "cached" || cacheFilter == "true" || cacheFilter == "1" {
+		db = db.Where("me.has_cache = ?", true)
 	}
 
 	scoreMin, hasScoreMin := normalizeScoreBound(input.ScoreMin)

@@ -6,7 +6,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import {
   ActionIcon,
   Badge,
-  Button,
   Card,
   Group,
   Loader,
@@ -14,21 +13,27 @@ import {
   Stack,
   Text,
   TextInput,
-  Title
+  Title,
+  Tooltip
 } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
-import { ChevronDown, ChevronUp, FilterX, ListOrdered, RefreshCw, Search, Users } from "lucide-react";
+import { ChevronDown, ChevronUp, FilterX, HardDriveDownload, ListOrdered, RefreshCw, Search, Users } from "lucide-react";
 import { CoverImage } from "@/components/cover-image";
 import { useI18n } from "@/languages/provider";
 import { fetchMediaList, type MediaListItem } from "@/lib/media-api";
 import { buildMediaDetailHref, extractMediaFacts, getDisplayTitle, getPosterUrl, pickBestQualityTag } from "@/lib/media";
 
 type MediaCategory = "movie" | "series" | "anime";
-type FilterRowKey = "quality" | "year" | "genre" | "language" | "country" | "network" | "studio" | "awards" | "sort";
+type FilterRowKey = "quality" | "cache" | "year" | "genre" | "language" | "country" | "network" | "studio" | "awards" | "sort";
 const MEDIA_LIST_TARGET_COUNT = 40;
 const MEDIA_LIST_MIN_CARD_WIDTH = 188;
 const MEDIA_LIST_GRID_GAP = 16;
+const MEDIA_FILTER_KEYS_BY_CATEGORY: Record<MediaCategory, FilterRowKey[]> = {
+  movie: ["quality", "cache", "year", "genre", "language", "country", "studio", "awards", "sort"],
+  series: ["quality", "cache", "year", "genre", "language", "country", "network", "sort"],
+  anime: ["quality", "cache", "year", "genre", "language", "studio", "sort"]
+};
 
 type FilterOption = {
   value: string;
@@ -210,12 +215,14 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
     network: false,
     studio: false,
     awards: false,
+    cache: false,
     sort: false
   });
   const [debouncedSearch] = useDebouncedValue(searchInput, 250);
   const [items, setItems] = useState<MediaListItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [totalTorrentCount, setTotalTorrentCount] = useState(0);
+  const [resolvedPageBoundsKey, setResolvedPageBoundsKey] = useState<string | null>(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const advancedFiltersRef = useRef<HTMLDivElement | null>(null);
   const [advancedFiltersHeight, setAdvancedFiltersHeight] = useState(0);
@@ -232,9 +239,14 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
   const network = normalizeSimpleValue(searchParams.get("network"), "all");
   const studio = normalizeSimpleValue(searchParams.get("studio"), "all");
   const awards = normalizeSimpleValue(searchParams.get("awards"), "all");
+  const cache = normalizeSimpleValue(searchParams.get("cache"), "all");
   const sort = normalizeSimpleValue(searchParams.get("sort"), "popular");
   const page = Math.max(1, Number(searchParams.get("page") || "1") || 1);
   const searchValue = searchParams.get("search") || "";
+  const enabledFilterKeys = useMemo(
+    () => new Set<FilterRowKey>(MEDIA_FILTER_KEYS_BY_CATEGORY[fixedCategory]),
+    [fixedCategory]
+  );
   const currentListHref = useMemo(() => {
     const query = searchParams.toString();
     return query ? `${pathname}?${query}` : pathname;
@@ -312,6 +324,26 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
     };
   }, [mediaLayoutElement, pathname]);
 
+  const pageBoundsKey = useMemo(
+    () =>
+      JSON.stringify({
+        fixedCategory,
+        searchValue,
+        quality,
+        year,
+        genre,
+        language,
+        country: enabledFilterKeys.has("country") ? country : "all",
+        network: enabledFilterKeys.has("network") ? network : "all",
+        studio: enabledFilterKeys.has("studio") ? studio : "all",
+        awards: enabledFilterKeys.has("awards") ? awards : "all",
+        cache,
+        sort,
+        pageSize
+      }),
+    [awards, cache, country, enabledFilterKeys, fixedCategory, genre, language, network, pageSize, quality, searchValue, sort, studio, year]
+  );
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -322,10 +354,11 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
         year,
         genre,
         language,
-        country,
-        network,
-        studio,
-        awards,
+        country: enabledFilterKeys.has("country") ? country : "all",
+        network: enabledFilterKeys.has("network") ? network : "all",
+        studio: enabledFilterKeys.has("studio") ? studio : "all",
+        awards: enabledFilterKeys.has("awards") ? awards : "all",
+        cache,
         sort,
         limit: pageSize,
         page
@@ -333,12 +366,13 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
       setItems(data.items || []);
       setTotalCount(data.totalCount || 0);
       setTotalTorrentCount(data.totalTorrentCount || 0);
+      setResolvedPageBoundsKey(pageBoundsKey);
     } catch (error) {
       notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
     } finally {
       setLoading(false);
     }
-  }, [awards, country, fixedCategory, genre, language, network, page, pageSize, quality, searchValue, sort, studio, year]);
+  }, [awards, cache, country, enabledFilterKeys, fixedCategory, genre, language, network, page, pageBoundsKey, pageSize, quality, searchValue, sort, studio, year]);
 
   useEffect(() => {
     void load();
@@ -347,10 +381,11 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
   const totalPages = useMemo(() => Math.max(1, Math.ceil(totalCount / pageSize)), [pageSize, totalCount]);
 
   useEffect(() => {
+    if (resolvedPageBoundsKey !== pageBoundsKey) return;
     if (loading) return;
     if (page <= totalPages) return;
     updateQuery({ page: String(totalPages) });
-  }, [loading, page, totalPages, updateQuery]);
+  }, [loading, page, pageBoundsKey, resolvedPageBoundsKey, totalPages, updateQuery]);
 
   const yearOptions = useMemo<FilterOption[]>(() => {
     const currentYear = new Date().getFullYear();
@@ -386,33 +421,71 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
     [t]
   );
 
-  const genreOptions = useMemo<FilterOption[]>(
+  const cacheOptions = useMemo<FilterOption[]>(
     () => [
       { value: "all", label: t("media.all") },
-      { value: "comedy", label: t("media.genres.comedy") },
-      { value: "animation", label: t("media.genres.animation") },
-      { value: "action", label: t("media.genres.action") },
-      { value: "romance", label: t("media.genres.romance") },
-      { value: "horror", label: t("media.genres.horror") },
-      { value: "war", label: t("media.genres.war") },
-      { value: "thriller", label: t("media.genres.thriller") },
-      { value: "crime", label: t("media.genres.crime") },
-      { value: "science_fiction", label: t("media.genres.science_fiction") },
-      { value: "mystery", label: t("media.genres.mystery") },
-      { value: "fantasy", label: t("media.genres.fantasy") },
-      { value: "drama", label: t("media.genres.drama") },
-      { value: "adventure", label: t("media.genres.adventure") },
-      { value: "family", label: t("media.genres.family") },
-      { value: "kids", label: t("media.genres.kids") },
-      { value: "history", label: t("media.genres.history") },
-      { value: "biography", label: t("media.genres.biography") },
-      { value: "sport", label: t("media.genres.sport") },
-      { value: "music", label: t("media.genres.music") },
-      { value: "documentary", label: t("media.genres.documentary") },
-      { value: "western", label: t("media.genres.western") }
+      { value: "cached", label: t("media.cacheBadge") }
     ],
     [t]
   );
+
+  const genreOptions = useMemo<FilterOption[]>(() => {
+    const categoryGenres: Record<MediaCategory, string[]> = {
+      movie: [
+        "action",
+        "adventure",
+        "science_fiction",
+        "thriller",
+        "crime",
+        "comedy",
+        "drama",
+        "romance",
+        "horror",
+        "fantasy",
+        "animation",
+        "family",
+        "documentary",
+        "history",
+        "war",
+        "music",
+        "western"
+      ],
+      series: [
+        "drama",
+        "comedy",
+        "crime",
+        "mystery",
+        "thriller",
+        "science_fiction",
+        "fantasy",
+        "action",
+        "adventure",
+        "romance",
+        "documentary",
+        "kids",
+        "family"
+      ],
+      anime: [
+        "animation",
+        "action",
+        "adventure",
+        "fantasy",
+        "science_fiction",
+        "comedy",
+        "drama",
+        "romance",
+        "mystery",
+        "family"
+      ]
+    };
+    return [
+      { value: "all", label: t("media.all") },
+      ...categoryGenres[fixedCategory].map((value) => ({
+        value,
+        label: t(`media.genres.${value}`)
+      }))
+    ];
+  }, [fixedCategory, t]);
 
   const sortOptions = useMemo<FilterOption[]>(
     () => [
@@ -534,6 +607,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
   }, [
     awardsOptions,
     countryOptions,
+    cacheOptions,
     expandedRows,
     genreOptions,
     languageOptions,
@@ -612,12 +686,42 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
                 className="media-toolbar-search"
               />
               <Group gap="xs">
-                <Button variant="light" leftSection={<FilterX size={14} />} onClick={clearFilters}>
-                  {t("media.clearFilters")}
-                </Button>
-                <Button variant="default" leftSection={<RefreshCw size={14} />} onClick={() => void load()}>
-                  {t("common.refresh")}
-                </Button>
+                <Tooltip label={t("media.cacheBadge")} withArrow>
+                  <ActionIcon
+                    className="app-icon-btn"
+                    variant="default"
+                    size={36}
+                    onClick={() => updateQuery({ cache: cache === "cached" ? null : "cached", page: null })}
+                    aria-label={t("media.cacheBadge")}
+                    title={t("media.cacheBadge")}
+                  >
+                    <HardDriveDownload size={16} />
+                  </ActionIcon>
+                </Tooltip>
+                <Tooltip label={t("media.clearFilters")} withArrow>
+                  <ActionIcon
+                    className="app-icon-btn"
+                    variant="default"
+                    size={36}
+                    onClick={clearFilters}
+                    aria-label={t("media.clearFilters")}
+                    title={t("media.clearFilters")}
+                  >
+                    <FilterX size={16} />
+                  </ActionIcon>
+                </Tooltip>
+                <Tooltip label={t("common.refresh")} withArrow>
+                  <ActionIcon
+                    className="app-icon-btn"
+                    variant="default"
+                    size={36}
+                    onClick={() => void load()}
+                    aria-label={t("common.refresh")}
+                    title={t("common.refresh")}
+                  >
+                    <RefreshCw size={16} />
+                  </ActionIcon>
+                </Tooltip>
                 <ActionIcon
                   className="app-icon-btn media-advanced-toggle"
                   data-expanded={showAdvancedFilters ? "true" : "false"}
@@ -647,6 +751,15 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
                 />
 
                 <FilterRow
+                  label={t("media.filters.cache")}
+                  currentValue={cache}
+                  options={cacheOptions}
+                  expanded={expandedRows.cache}
+                  onToggleExpand={() => setExpanded("cache")}
+                  onSelect={(value) => updateQuery({ cache: value, page: null })}
+                />
+
+                <FilterRow
                   label={t("media.filters.year")}
                   currentValue={year}
                   options={yearOptions}
@@ -673,41 +786,49 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
                   onSelect={(value) => updateQuery({ language: value, page: null })}
                 />
 
-                <FilterRow
-                  label={t("media.filters.country")}
-                  currentValue={country}
-                  options={countryOptions}
-                  expanded={expandedRows.country}
-                  onToggleExpand={() => setExpanded("country")}
-                  onSelect={(value) => updateQuery({ country: value, page: null })}
-                />
+                {enabledFilterKeys.has("country") ? (
+                  <FilterRow
+                    label={t("media.filters.country")}
+                    currentValue={country}
+                    options={countryOptions}
+                    expanded={expandedRows.country}
+                    onToggleExpand={() => setExpanded("country")}
+                    onSelect={(value) => updateQuery({ country: value, page: null })}
+                  />
+                ) : null}
 
-                <FilterRow
-                  label={t("media.filters.network")}
-                  currentValue={network}
-                  options={networkOptions}
-                  expanded={expandedRows.network}
-                  onToggleExpand={() => setExpanded("network")}
-                  onSelect={(value) => updateQuery({ network: value, page: null })}
-                />
+                {enabledFilterKeys.has("network") ? (
+                  <FilterRow
+                    label={t("media.filters.network")}
+                    currentValue={network}
+                    options={networkOptions}
+                    expanded={expandedRows.network}
+                    onToggleExpand={() => setExpanded("network")}
+                    onSelect={(value) => updateQuery({ network: value, page: null })}
+                  />
+                ) : null}
 
-                <FilterRow
-                  label={t("media.filters.studio")}
-                  currentValue={studio}
-                  options={studioOptions}
-                  expanded={expandedRows.studio}
-                  onToggleExpand={() => setExpanded("studio")}
-                  onSelect={(value) => updateQuery({ studio: value, page: null })}
-                />
+                {enabledFilterKeys.has("studio") ? (
+                  <FilterRow
+                    label={t("media.filters.studio")}
+                    currentValue={studio}
+                    options={studioOptions}
+                    expanded={expandedRows.studio}
+                    onToggleExpand={() => setExpanded("studio")}
+                    onSelect={(value) => updateQuery({ studio: value, page: null })}
+                  />
+                ) : null}
 
-                <FilterRow
-                  label={t("media.filters.awards")}
-                  currentValue={awards}
-                  options={awardsOptions}
-                  expanded={expandedRows.awards}
-                  onToggleExpand={() => setExpanded("awards")}
-                  onSelect={(value) => updateQuery({ awards: value, page: null })}
-                />
+                {enabledFilterKeys.has("awards") ? (
+                  <FilterRow
+                    label={t("media.filters.awards")}
+                    currentValue={awards}
+                    options={awardsOptions}
+                    expanded={expandedRows.awards}
+                    onToggleExpand={() => setExpanded("awards")}
+                    onSelect={(value) => updateQuery({ awards: value, page: null })}
+                  />
+                ) : null}
 
                 <FilterRow
                   label={t("media.filters.sort")}
@@ -768,6 +889,11 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
                 <div key={item.id} className="media-wall-item">
                   <Link href={buildMediaDetailHref(item, currentListHref)} className="unstyled-link">
                     <article className="media-wall-card">
+                      {item.hasCache ? (
+                        <div className="media-cache-corner" aria-label={t("media.cacheBadge")}>
+                          <span>{t("media.cacheBadge")}</span>
+                        </div>
+                      ) : null}
                       <div className="media-wall-poster-shell">
                         {poster ? (
                           <CoverImage className="media-wall-poster" src={poster} alt={titleText} />
