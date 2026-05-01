@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { apiRequest, clearAuthToken, setAuthToken } from "@/lib/api";
+import { isRequestCanceledError } from "@/lib/errors";
 
 export type Role = "admin" | "user";
 
@@ -110,7 +111,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setFavorites([]);
       return;
     }
-    void refreshFavorites();
+    void refreshFavorites().catch((error: unknown) => {
+      if (!isRequestCanceledError(error)) {
+        setFavorites([]);
+      }
+    });
   }, [refreshFavorites, user]);
 
   const login = useCallback(async (username: string, password: string, rememberFor?: RememberFor) => {
@@ -124,8 +129,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     setAuthToken(result.token);
     setUser(result.user);
-    const fav = await apiRequest<{ items: string[] }>("/api/users/favorites");
-    setFavorites(fav.items || []);
+    try {
+      const fav = await apiRequest<{ items: string[] }>("/api/users/favorites");
+      setFavorites(fav.items || []);
+    } catch {
+      setFavorites([]);
+    }
   }, []);
 
   const register = useCallback(async (username: string, password: string, inviteCode?: string) => {

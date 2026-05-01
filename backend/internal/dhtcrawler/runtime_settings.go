@@ -43,6 +43,34 @@ func loadRuntimeConfig(ctx context.Context, db *gorm.DB, defaults Config) Config
 		}
 		setter(parsed)
 	}
+	applyCSVIntList := func(key string, min, max int, setter func(v []int)) {
+		raw, ok := values[key]
+		if !ok {
+			return
+		}
+		parts := strings.Split(raw, ",")
+		parsed := make([]int, 0, len(parts))
+		seen := make(map[int]struct{}, len(parts))
+		for _, part := range parts {
+			item := strings.TrimSpace(part)
+			if item == "" {
+				continue
+			}
+			value, err := strconv.Atoi(item)
+			if err != nil || value < min || value > max {
+				return
+			}
+			if _, exists := seen[value]; exists {
+				continue
+			}
+			seen[value] = struct{}{}
+			parsed = append(parsed, value)
+		}
+		if len(parsed) == 0 {
+			return
+		}
+		setter(parsed)
+	}
 
 	applyInt(runtimeconfig.KeyDHTCrawlerScalingFactor, 1, 200, func(v int) {
 		result.ScalingFactor = uint(v)
@@ -67,6 +95,18 @@ func loadRuntimeConfig(ctx context.Context, db *gorm.DB, defaults Config) Config
 	})
 	applyInt(runtimeconfig.KeyDHTCrawlerOldPeerThresholdMinutes, 1, 24*60, func(v int) {
 		result.OldPeerThreshold = time.Duration(v) * time.Minute
+	})
+	applyBool(runtimeconfig.KeyDHTCrawlerScheduleEnabled, func(v bool) {
+		result.ScheduleEnabled = v
+	})
+	applyCSVIntList(runtimeconfig.KeyDHTCrawlerScheduleWeekdays, 1, 7, func(v []int) {
+		result.ScheduleWeekdays = v
+	})
+	applyInt(runtimeconfig.KeyDHTCrawlerScheduleStartHour, 0, 23, func(v int) {
+		result.ScheduleStartHour = v
+	})
+	applyInt(runtimeconfig.KeyDHTCrawlerScheduleEndHour, 1, 24, func(v int) {
+		result.ScheduleEndHour = v
 	})
 
 	return result

@@ -123,6 +123,7 @@ func New(params Params) Result {
 						savePieces:         cfg.SavePieces,
 						rescrapeThreshold:  cfg.RescrapeThreshold,
 						statusLogInterval:  cfg.StatusLogInterval,
+						schedule:           newCrawlerSchedule(cfg),
 						dao:                query,
 						ignoreHashes: &ignoreHashes{
 							bloom: boom.NewStableBloomFilter(10_000_000, 2, 0.001),

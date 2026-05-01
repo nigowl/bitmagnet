@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useMemo, useState } from "react
 import { Button, Group, Modal, PasswordInput, Select, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { type RememberFor, useAuth } from "@/auth/provider";
+import { getLocalizedErrorMessage } from "@/lib/errors";
 import { useI18n } from "@/languages/provider";
 
 type DialogMode = "login" | "register";
@@ -49,6 +50,7 @@ export function AuthDialogProvider({ children }: { children: React.ReactNode }) 
   }, [loading]);
 
   const submit = useCallback(async () => {
+    if (loading) return;
     if (mode === "register" && password !== confirmPassword) {
       notifications.show({ color: "yellow", message: t("auth.passwordMismatch") });
       return;
@@ -73,11 +75,14 @@ export function AuthDialogProvider({ children }: { children: React.ReactNode }) 
       }
       close();
     } catch (error) {
-      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+      const message = getLocalizedErrorMessage(error, t);
+      if (message) {
+        notifications.show({ color: "red", message });
+      }
     } finally {
       setLoading(false);
     }
-  }, [accessSettings.inviteRequired, accessSettings.registrationEnabled, close, confirmPassword, inviteCode, login, mode, password, register, rememberFor, t, username]);
+  }, [accessSettings.inviteRequired, accessSettings.registrationEnabled, close, confirmPassword, inviteCode, loading, login, mode, password, register, rememberFor, t, username]);
 
   const value = useMemo<AuthDialogContextValue>(
     () => ({ openLogin, openRegister }),
@@ -87,14 +92,20 @@ export function AuthDialogProvider({ children }: { children: React.ReactNode }) 
   return (
     <AuthDialogContext.Provider value={value}>
       {children}
-      <Modal opened={opened} onClose={close} title={mode === "login" ? t("auth.login") : t("auth.register")}> 
-        <Stack>
-          <Text c="dimmed">{mode === "login" ? t("auth.loginSubtitle") : t("auth.registerSubtitle")}</Text>
+      <Modal opened={opened} onClose={close} title={mode === "login" ? t("auth.login") : t("auth.register")}>
+        <Stack
+          component="form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
+          <Text c="dimmed">{mode === "login" ? t("auth.signInHint") : t("auth.signUpHint")}</Text>
           <TextInput label={t("auth.username")} value={username} onChange={(event) => setUsername(event.currentTarget.value)} />
           <PasswordInput label={t("auth.password")} value={password} onChange={(event) => setPassword(event.currentTarget.value)} />
           {mode === "login" ? (
             <Select
-              label={t("auth.rememberMe")}
+              label={t("auth.keepSignedIn")}
               value={rememberFor}
               onChange={(value) => setRememberFor((value as RememberFor) || "1w")}
               data={[
@@ -111,18 +122,18 @@ export function AuthDialogProvider({ children }: { children: React.ReactNode }) 
           {mode === "register" && accessSettings.inviteRequired ? (
             <TextInput label={t("auth.inviteCode")} value={inviteCode} onChange={(event) => setInviteCode(event.currentTarget.value)} />
           ) : null}
-          <Button loading={loading} onClick={() => void submit()}>
+          <Button type="submit" loading={loading}>
             {mode === "login" ? t("auth.login") : t("auth.register")}
           </Button>
           <Group gap={6} justify="center">
             {mode === "login" ? (
               <>
-                <Text size="sm" c="dimmed">{t("auth.noAccount")}</Text>
+                <Text size="sm" c="dimmed">{t("auth.createAccountPrompt")}</Text>
                 <Button variant="subtle" size="compact-sm" onClick={openRegister}>{t("auth.register")}</Button>
               </>
             ) : (
               <>
-                <Text size="sm" c="dimmed">{t("auth.hasAccount")}</Text>
+                <Text size="sm" c="dimmed">{t("auth.signInPrompt")}</Text>
                 <Button variant="subtle" size="compact-sm" onClick={openLogin}>{t("auth.login")}</Button>
               </>
             )}

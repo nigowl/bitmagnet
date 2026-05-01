@@ -10,6 +10,7 @@ import {
   Group,
   Loader,
   Modal,
+  MultiSelect,
   NumberInput,
   ScrollArea,
   Select,
@@ -52,6 +53,10 @@ type SystemSettings = {
       statusLogIntervalSeconds: number;
       getOldestNodesIntervalSeconds: number;
       oldPeerThresholdMinutes: number;
+      scheduleEnabled: boolean;
+      scheduleWeekdays: number[];
+      scheduleStartHour: number;
+      scheduleEndHour: number;
     };
     queue: {
       processTorrentConcurrency: number;
@@ -264,6 +269,13 @@ type FFmpegConnectivityResponse = {
 
 type PerformancePresetKey = "resource" | "realtime" | "throughput";
 
+const DEFAULT_DHT_SCHEDULE = {
+  scheduleEnabled: false,
+  scheduleWeekdays: [1, 2, 3, 4, 5, 6, 7],
+  scheduleStartHour: 0,
+  scheduleEndHour: 24
+};
+
 const PERFORMANCE_PRESETS: Record<PerformancePresetKey, SystemSettings["performance"]> = {
   resource: {
     dht: {
@@ -274,7 +286,8 @@ const PERFORMANCE_PRESETS: Record<PerformancePresetKey, SystemSettings["performa
       rescrapeThresholdHours: 24 * 30,
       statusLogIntervalSeconds: 90,
       getOldestNodesIntervalSeconds: 20,
-      oldPeerThresholdMinutes: 20
+      oldPeerThresholdMinutes: 20,
+      ...DEFAULT_DHT_SCHEDULE
     },
     queue: {
       processTorrentConcurrency: 1,
@@ -305,7 +318,8 @@ const PERFORMANCE_PRESETS: Record<PerformancePresetKey, SystemSettings["performa
       rescrapeThresholdHours: 24 * 7,
       statusLogIntervalSeconds: 30,
       getOldestNodesIntervalSeconds: 6,
-      oldPeerThresholdMinutes: 10
+      oldPeerThresholdMinutes: 10,
+      ...DEFAULT_DHT_SCHEDULE
     },
     queue: {
       processTorrentConcurrency: 2,
@@ -336,7 +350,8 @@ const PERFORMANCE_PRESETS: Record<PerformancePresetKey, SystemSettings["performa
       rescrapeThresholdHours: 24 * 7,
       statusLogIntervalSeconds: 30,
       getOldestNodesIntervalSeconds: 5,
-      oldPeerThresholdMinutes: 10
+      oldPeerThresholdMinutes: 10,
+      ...DEFAULT_DHT_SCHEDULE
     },
     queue: {
       processTorrentConcurrency: 4,
@@ -469,7 +484,8 @@ export function SettingsPage() {
         rescrapeThresholdHours: 24 * 30,
         statusLogIntervalSeconds: 45,
         getOldestNodesIntervalSeconds: 10,
-        oldPeerThresholdMinutes: 15
+        oldPeerThresholdMinutes: 15,
+        ...DEFAULT_DHT_SCHEDULE
       },
       queue: {
         processTorrentConcurrency: 1,
@@ -1063,7 +1079,13 @@ export function SettingsPage() {
     setSettings((current) => ({
       ...current,
       performance: {
-        dht: { ...next.dht },
+        dht: {
+          ...next.dht,
+          scheduleEnabled: current.performance.dht.scheduleEnabled,
+          scheduleWeekdays: [...current.performance.dht.scheduleWeekdays],
+          scheduleStartHour: current.performance.dht.scheduleStartHour,
+          scheduleEndHour: current.performance.dht.scheduleEndHour
+        },
         queue: { ...next.queue },
         media: { ...next.media }
       }
@@ -1073,6 +1095,25 @@ export function SettingsPage() {
       message: `${t("settings.performancePresetApplied")} ${t(`settings.performancePresetOptions.${preset}`)}`
     });
   };
+
+  const dhtWeekdayOptions = [
+    { value: "1", label: t("settings.weekdays.mon") },
+    { value: "2", label: t("settings.weekdays.tue") },
+    { value: "3", label: t("settings.weekdays.wed") },
+    { value: "4", label: t("settings.weekdays.thu") },
+    { value: "5", label: t("settings.weekdays.fri") },
+    { value: "6", label: t("settings.weekdays.sat") },
+    { value: "7", label: t("settings.weekdays.sun") }
+  ];
+  const dhtHourOptions = Array.from({ length: 25 }, (_, hour) => ({
+    value: String(hour),
+    label: `${String(hour).padStart(2, "0")}:00`
+  }));
+  const dhtScheduleWeekdaysInvalid = settings.performance.dht.scheduleEnabled && settings.performance.dht.scheduleWeekdays.length === 0;
+  const dhtScheduleHoursInvalid =
+    settings.performance.dht.scheduleEnabled &&
+    settings.performance.dht.scheduleStartHour >= settings.performance.dht.scheduleEndHour;
+  const dhtScheduleInvalid = dhtScheduleWeekdaysInvalid || dhtScheduleHoursInvalid;
 
   const renderPerformanceLabel = (label: string, impact: string) => (
     <Group gap={6} wrap="nowrap">
@@ -1251,6 +1292,7 @@ export function SettingsPage() {
                 variant="light"
                 size="lg"
                 loading={saving}
+                disabled={dhtScheduleInvalid}
                 onClick={() => void saveSettings()}
                 aria-label={t("settings.save")}
               >
@@ -1390,6 +1432,64 @@ export function SettingsPage() {
                             </Card>
                           ))}
                         </SimpleGrid>
+                        <div className="settings-schedule-panel">
+                          <Stack gap="sm">
+                            <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
+                              <Stack gap={4}>
+                                <Text fw={700}>{t("settings.dhtScheduleTitle")}</Text>
+                                <Text size="sm" c="dimmed">{t("settings.dhtScheduleHint")}</Text>
+                              </Stack>
+                              <Switch
+                                checked={settings.performance.dht.scheduleEnabled}
+                                label={t("settings.dhtScheduleEnabled")}
+                                onChange={(event) => updateDHTPerformance({ scheduleEnabled: event.currentTarget.checked })}
+                              />
+                            </Group>
+                            <SimpleGrid cols={{ base: 1, md: 3 }}>
+                              <MultiSelect
+                                label={renderPerformanceLabel(t("settings.dhtScheduleWeekdays"), t("settings.performanceImpact.dhtScheduleWeekdays"))}
+                                data={dhtWeekdayOptions}
+                                value={settings.performance.dht.scheduleWeekdays.map(String)}
+                                disabled={!settings.performance.dht.scheduleEnabled}
+                                error={dhtScheduleWeekdaysInvalid ? t("settings.dhtScheduleWeekdaysError") : undefined}
+                                onChange={(value) => {
+                                  updateDHTPerformance({
+                                    scheduleWeekdays: value
+                                      .map((item) => Number(item))
+                                      .filter((item) => Number.isInteger(item) && item >= 1 && item <= 7)
+                                  });
+                                }}
+                              />
+                              <Select
+                                label={renderPerformanceLabel(t("settings.dhtScheduleStartHour"), t("settings.performanceImpact.dhtScheduleStartHour"))}
+                                data={dhtHourOptions.slice(0, 24)}
+                                value={String(settings.performance.dht.scheduleStartHour)}
+                                disabled={!settings.performance.dht.scheduleEnabled}
+                                onChange={(value) => {
+                                  const hour = Number(value);
+                                  if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
+                                    updateDHTPerformance({ scheduleStartHour: hour });
+                                  }
+                                }}
+                              />
+                              <Select
+                                label={renderPerformanceLabel(t("settings.dhtScheduleEndHour"), t("settings.performanceImpact.dhtScheduleEndHour"))}
+                                data={dhtHourOptions.slice(1)}
+                                value={String(settings.performance.dht.scheduleEndHour)}
+                                disabled={!settings.performance.dht.scheduleEnabled}
+                                error={
+                                  dhtScheduleHoursInvalid ? t("settings.dhtScheduleEndHourError") : undefined
+                                }
+                                onChange={(value) => {
+                                  const hour = Number(value);
+                                  if (Number.isInteger(hour) && hour >= 1 && hour <= 24) {
+                                    updateDHTPerformance({ scheduleEndHour: hour });
+                                  }
+                                }}
+                              />
+                            </SimpleGrid>
+                          </Stack>
+                        </div>
                         <SimpleGrid cols={{ base: 1, md: 2 }}>
                           <NumberInput
                             label={renderPerformanceLabel(t("settings.dhtScalingFactor"), t("settings.performanceImpact.dhtScalingFactor"))}

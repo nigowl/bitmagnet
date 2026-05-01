@@ -185,6 +185,15 @@ const PLAYER_GLOBAL_PREFS_KEY_PREFIX = "bitmagnet-player-global-prefs-v1";
 const PLAYER_TRACK_PREFS_KEY_PREFIX = "bitmagnet-player-track-prefs-v1";
 const TRANSCODE_PREBUFFER_DEFAULT_SECONDS = 60;
 const TRANSCODE_PREBUFFER_MAX_WAIT_MS = 45000;
+const STREAM_RETRY_MAX_ATTEMPTS = 5;
+const STREAM_RETRY_BASE_DELAY_MS = 700;
+const STREAM_RETRY_MAX_DELAY_MS = 5000;
+const STREAM_RETRY_DEDUPE_MS = 1200;
+const PLAYBACK_STALL_RETRY_MS = 12000;
+const PLAYBACK_STALL_GRACE_MS = 5000;
+const PLAYBACK_STALL_TICK_MS = 1000;
+const PLAYBACK_PROGRESS_EPSILON_SECONDS = 0.5;
+const PLAYBACK_RECOVERY_COOLDOWN_MS = 5000;
 const PLAYBACK_RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 const TRANSCODE_PREBUFFER_OPTIONS = [30, 45, 60, 90, 120] as const;
 const TRANSCODE_OUTPUT_RESOLUTION_OPTIONS = [0, 480, 720, 1080, 1440, 2160] as const;
@@ -872,13 +881,17 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const streamUrlRef = useRef("");
   const streamRetryRef = useRef<{ key: string; attempts: number }>({ key: "", attempts: 0 });
   const streamRetryTimerRef = useRef<number | null>(null);
+  const lastStreamRetryAtRef = useRef(0);
   const retryCurrentStreamRef = useRef<(reason: string) => boolean>(() => false);
   const controlsHideTimerRef = useRef<number | null>(null);
-  const streamApplyOptionsRef = useRef<{ resumeAt?: number; autoplay?: boolean }>({});
+  const streamApplyOptionsRef = useRef<{ resumeAt?: number; autoplay?: boolean; recovery?: boolean }>({});
   const activePreferTranscodeRef = useRef(false);
   const totalDurationSecondsRef = useRef(0);
   const transcodeStartOffsetRef = useRef(0);
   const absoluteCurrentSecondsRef = useRef(0);
+  const lastPlaybackProgressRef = useRef<{ at: number; seconds: number }>({ at: 0, seconds: 0 });
+  const stallStartedAtRef = useRef(0);
+  const lastAutoRecoveryAtRef = useRef(0);
   const seekingSwitchingRef = useRef(false);
   const subtitleUploadInputRef = useRef<HTMLInputElement | null>(null);
   const selectedAudioTrackQueryIndexRef = useRef(-1);
@@ -1030,6 +1043,11 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
   useEffect(() => {
     subtitleLoadTokenRef.current += 1;
+    streamRetryRef.current = { key: "", attempts: 0 };
+    lastStreamRetryAtRef.current = 0;
+    lastAutoRecoveryAtRef.current = 0;
+    stallStartedAtRef.current = 0;
+    lastPlaybackProgressRef.current = { at: 0, seconds: 0 };
     setSubtitleItems([]);
     setSubtitleTrackSrcMap({});
     setSelectedSubtitleId("none");
@@ -1625,7 +1643,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     }
   }, [selectedAudioTrackId]);
 
-  const applyStreamUrl = useCallback((url: string, options?: { resumeAt?: number; autoplay?: boolean }) => {
+  const applyStreamUrl = useCallback((url: string, options?: { resumeAt?: number; autoplay?: boolean; recovery?: boolean }) => {
     streamApplyOptionsRef.current = options || {};
     setStreamUrl(url);
   }, []);
@@ -1634,41 +1652,83 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     const index = selectedFileIndexRef.current;
     if (!infoHash || !Number.isInteger(index) || index < 0) return false;
 
+    const now = Date.now();
     const retryKey = `${index}:transcode:${activePreferTranscodeRef.current ? "tc" : "direct"}`;
     if (streamRetryRef.current.key !== retryKey) {
       streamRetryRef.current = { key: retryKey, attempts: 0 };
     }
-    if (streamRetryRef.current.attempts >= 2) {
+    if (streamRetryTimerRef.current !== null && now - lastStreamRetryAtRef.current < STREAM_RETRY_DEDUPE_MS) {
+      return true;
+    }
+    if (streamRetryRef.current.attempts >= STREAM_RETRY_MAX_ATTEMPTS) {
       return false;
     }
 
     streamRetryRef.current.attempts += 1;
     const attempt = streamRetryRef.current.attempts;
-    const nextUrl = buildCurrentPlaybackStreamURL(
-      `retry-${index}-transcode-${activePreferTranscodeRef.current ? "tc" : "direct"}-${attempt}-${Date.now()}`
-    );
+    lastStreamRetryAtRef.current = now;
+    const resumeAt = Math.max(0, resolveAbsoluteCurrent());
+    const preferTranscode = activePreferTranscodeRef.current;
+    const cacheTag = `retry-${index}-transcode-${preferTranscode ? "tc" : "direct"}-${attempt}-${now}`;
+    const selected = fileOptions.find((item) => item.index === index);
+    const startBytes =
+      preferTranscode && selected
+        ? estimateTranscodeStartBytes(resumeAt, totalDurationSecondsRef.current, selected.length)
+        : 0;
+    const nextUrl =
+      preferTranscode && selected
+        ? buildPlayerTransmissionStreamURL(
+          infoHash,
+          index,
+          cacheTag,
+          buildTranscodeStreamOptions({ startSeconds: resumeAt, startBytes })
+        )
+        : buildCurrentPlaybackStreamURL(cacheTag);
     if (!nextUrl) {
       return false;
     }
 
-    const resumeAt = Math.max(0, resolveAbsoluteCurrent());
-    const preferTranscode = activePreferTranscodeRef.current;
-    pendingResumeTargetRef.current = preferTranscode ? 0 : resumeAt;
+    pendingResumeTargetRef.current = resumeAt;
     autoResumeWhenPlayableRef.current = true;
+    pendingTranscodeSeekDisplayRef.current = preferTranscode ? { target: resumeAt, at: now } : null;
+    if (preferTranscode) {
+      setTranscodeStartOffsetSeconds(resumeAt);
+      transcodeStartOffsetRef.current = resumeAt;
+    }
+    setPlayerError(null);
     setPlaybackLoading(true);
     setPlayerStatus("buffering");
     if (streamRetryTimerRef.current !== null) {
       window.clearTimeout(streamRetryTimerRef.current);
     }
+    const delayMs = Math.min(STREAM_RETRY_MAX_DELAY_MS, STREAM_RETRY_BASE_DELAY_MS * attempt);
     streamRetryTimerRef.current = window.setTimeout(() => {
+      streamRetryTimerRef.current = null;
       applyStreamUrl(nextUrl, {
         autoplay: true,
-        resumeAt: preferTranscode ? 0 : resumeAt
+        resumeAt: preferTranscode ? 0 : resumeAt,
+        recovery: true
       });
-    }, 700 * attempt);
-    logWarn("stream", "retry stream after playback error", { reason, attempt, mode: "transcode", preferTranscode });
+    }, delayMs);
+    logWarn("stream", "retry stream after playback disruption", {
+      reason,
+      attempt,
+      maxAttempts: STREAM_RETRY_MAX_ATTEMPTS,
+      delayMs,
+      resumeAt,
+      mode: "transcode",
+      preferTranscode
+    });
     return true;
-  }, [applyStreamUrl, buildCurrentPlaybackStreamURL, infoHash, logWarn, resolveAbsoluteCurrent]);
+  }, [
+    applyStreamUrl,
+    buildCurrentPlaybackStreamURL,
+    buildTranscodeStreamOptions,
+    fileOptions,
+    infoHash,
+    logWarn,
+    resolveAbsoluteCurrent
+  ]);
 
   useEffect(() => {
     retryCurrentStreamRef.current = retryCurrentStream;
@@ -2224,7 +2284,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         seekingSwitchingRef.current = false;
       }
       pendingTranscodeSeekDisplayRef.current = null;
-      streamRetryRef.current = { key: "", attempts: 0 };
+      if (!applyOptions.recovery) {
+        streamRetryRef.current = { key: "", attempts: 0 };
+      }
       syncSelectedSubtitleTrack();
       refreshAudioTracks();
       syncSelectedAudioTrack();
@@ -2365,6 +2427,136 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     const video = videoRef.current;
     if (!video) return;
 
+    const markPlaybackProgress = (force = false) => {
+      const seconds = Math.max(0, resolveAbsoluteCurrent());
+      const previous = lastPlaybackProgressRef.current;
+      if (
+        force ||
+        previous.at <= 0 ||
+        Math.abs(seconds - previous.seconds) >= PLAYBACK_PROGRESS_EPSILON_SECONDS
+      ) {
+        lastPlaybackProgressRef.current = { at: Date.now(), seconds };
+        stallStartedAtRef.current = 0;
+      }
+    };
+
+    const markPotentialStall = () => {
+      if (video.paused && !autoResumeWhenPlayableRef.current) return;
+      if (stallStartedAtRef.current <= 0) {
+        stallStartedAtRef.current = Date.now();
+      }
+      if (lastPlaybackProgressRef.current.at <= 0) {
+        markPlaybackProgress(true);
+      }
+    };
+
+    const recoverIfStalled = (trigger: string) => {
+      if (!streamUrlRef.current) return;
+      if (prebufferWaitRef.current || seekingSwitchingRef.current || transcodeSeekInFlightRef.current) return;
+      if (video.ended) return;
+      if (video.paused && !autoResumeWhenPlayableRef.current) {
+        stallStartedAtRef.current = 0;
+        return;
+      }
+
+      const now = Date.now();
+      const seconds = Math.max(0, resolveAbsoluteCurrent());
+      const previous = lastPlaybackProgressRef.current;
+      if (previous.at <= 0) {
+        lastPlaybackProgressRef.current = { at: now, seconds };
+        return;
+      }
+      if (Math.abs(seconds - previous.seconds) >= PLAYBACK_PROGRESS_EPSILON_SECONDS) {
+        lastPlaybackProgressRef.current = { at: now, seconds };
+        stallStartedAtRef.current = 0;
+        return;
+      }
+
+      const duration = Math.max(
+        0,
+        Number.isFinite(video.duration) ? Number(video.duration) : 0,
+        totalDurationSecondsRef.current
+      );
+      if (duration > 0 && duration - seconds <= 1.5) return;
+
+      const bufferedAhead = resolveBufferedAheadSeconds();
+      const noProgressMs = now - previous.at;
+      const stallMs = stallStartedAtRef.current > 0 ? now - stallStartedAtRef.current : 0;
+      const isLikelyStalled =
+        autoResumeWhenPlayableRef.current ||
+        stallStartedAtRef.current > 0 ||
+        noProgressMs >= PLAYBACK_STALL_RETRY_MS ||
+        video.readyState < video.HAVE_FUTURE_DATA ||
+        bufferedAhead < 0.75;
+      if (!isLikelyStalled) return;
+
+      const thresholdMs = autoResumeWhenPlayableRef.current ? PLAYBACK_STALL_GRACE_MS : PLAYBACK_STALL_RETRY_MS;
+      if (noProgressMs < thresholdMs && stallMs < thresholdMs) return;
+      if (now - lastAutoRecoveryAtRef.current < PLAYBACK_RECOVERY_COOLDOWN_MS) return;
+
+      lastAutoRecoveryAtRef.current = now;
+      setPlaybackLoading(true);
+      setPlayerStatus("buffering");
+      logWarn("stream", "playback stalled, retry stream", {
+        trigger,
+        noProgressMs,
+        stallMs,
+        bufferedAhead,
+        readyState: video.readyState,
+        currentSeconds: seconds
+      });
+
+      if (!retryCurrentStreamRef.current(`stall_${trigger}`)) {
+        autoResumeWhenPlayableRef.current = false;
+        pendingResumeTargetRef.current = null;
+        setPlaybackLoading(false);
+        setPlayerStatus("error");
+        setPlayerError(tRef.current("media.player.playbackError"));
+      }
+    };
+
+    const onProgressEvent = () => markPlaybackProgress(false);
+    const onPlayingEvent = () => markPlaybackProgress(true);
+    const onStallEvent = () => {
+      markPotentialStall();
+      recoverIfStalled("media_event");
+    };
+    const onCanPlayEvent = () => {
+      stallStartedAtRef.current = 0;
+    };
+
+    markPlaybackProgress(true);
+    video.addEventListener("timeupdate", onProgressEvent);
+    video.addEventListener("playing", onPlayingEvent);
+    video.addEventListener("seeked", onPlayingEvent);
+    video.addEventListener("loadedmetadata", onPlayingEvent);
+    video.addEventListener("waiting", onStallEvent);
+    video.addEventListener("stalled", onStallEvent);
+    video.addEventListener("suspend", onStallEvent);
+    video.addEventListener("canplay", onCanPlayEvent);
+    video.addEventListener("canplaythrough", onCanPlayEvent);
+    const watchdogTimer = window.setInterval(() => {
+      recoverIfStalled("watchdog");
+    }, PLAYBACK_STALL_TICK_MS);
+
+    return () => {
+      video.removeEventListener("timeupdate", onProgressEvent);
+      video.removeEventListener("playing", onPlayingEvent);
+      video.removeEventListener("seeked", onPlayingEvent);
+      video.removeEventListener("loadedmetadata", onPlayingEvent);
+      video.removeEventListener("waiting", onStallEvent);
+      video.removeEventListener("stalled", onStallEvent);
+      video.removeEventListener("suspend", onStallEvent);
+      video.removeEventListener("canplay", onCanPlayEvent);
+      video.removeEventListener("canplaythrough", onCanPlayEvent);
+      window.clearInterval(watchdogTimer);
+    };
+  }, [logWarn, resolveAbsoluteCurrent, resolveBufferedAheadSeconds]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
     const resumeIfPending = () => {
       if (!autoResumeWhenPlayableRef.current) return;
       const player = plyrRef.current;
@@ -2428,9 +2620,17 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       prebufferWaitRef.current = false;
       setPrebufferWaiting(false);
       setPrebufferBufferedAheadSeconds(0);
+      transcodeSeekInFlightRef.current = false;
+      seekingSwitchingRef.current = false;
+      pendingTranscodeSeekDisplayRef.current = null;
+      if (retryCurrentStreamRef.current("video_error")) {
+        return;
+      }
       autoResumeWhenPlayableRef.current = false;
       pendingResumeTargetRef.current = null;
       setPlaybackLoading(false);
+      setPlayerStatus("error");
+      setPlayerError(tRef.current("media.player.playbackError"));
     };
 
     video.addEventListener("waiting", onWaiting);
@@ -2650,15 +2850,15 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         transcodeSeekInFlightRef.current = false;
         seekingSwitchingRef.current = false;
         pendingTranscodeSeekDisplayRef.current = null;
-        autoResumeWhenPlayableRef.current = false;
-        pendingResumeTargetRef.current = null;
-        setPlaybackLoading(false);
-        setPlayerStatus("error");
 
         if (retryCurrentStreamRef.current("plyr_error")) {
           return;
         }
 
+        autoResumeWhenPlayableRef.current = false;
+        pendingResumeTargetRef.current = null;
+        setPlaybackLoading(false);
+        setPlayerStatus("error");
         setPlayerError(tRef.current("media.player.playbackError"));
       });
     };

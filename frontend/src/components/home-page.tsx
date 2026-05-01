@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActionIcon, Card, Group, Loader, Stack, Text } from "@mantine/core";
+import { ActionIcon, Card, Group, Loader, Skeleton, Stack, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { ChevronLeft, ChevronRight, ListOrdered, Users } from "lucide-react";
 import { apiRequest } from "@/lib/api";
@@ -297,6 +297,26 @@ function MediaWallCard({ item, t, titleLanguage, sourceHref }: {
         </article>
       </Link>
     </div>
+  );
+}
+
+function HomeLoadingSkeleton() {
+  return (
+    <Stack gap="md" className="home-loading-shell">
+      <div className="home-loading-block">
+        <Skeleton height={22} width={180} radius="xl" />
+        <Skeleton height={14} width="34%" mt={10} radius="xl" />
+        <div className="home-loading-grid">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <div key={index} className="home-loading-tile">
+              <Skeleton height={320} radius="md" />
+              <Skeleton height={14} width="82%" mt={12} radius="xl" />
+              <Skeleton height={12} width="58%" mt={8} radius="xl" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </Stack>
   );
 }
 
@@ -620,6 +640,10 @@ export function HomePage() {
     () => pickHighScoreRecommendations(highScorePool, displayLimit, activeDayToken),
     [activeDayToken, displayLimit, highScorePool]
   );
+
+  if (loading) {
+    return <div ref={homeLayoutRef}><HomeLoadingSkeleton /></div>;
+  }
 
   return (
     <div ref={homeLayoutRef}>

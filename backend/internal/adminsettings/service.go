@@ -60,14 +60,18 @@ type PerformanceSettings struct {
 }
 
 type DHTPerformanceSettings struct {
-	ScalingFactor                 uint `json:"scalingFactor"`
-	ReseedIntervalSeconds         int  `json:"reseedIntervalSeconds"`
-	SaveFilesThreshold            uint `json:"saveFilesThreshold"`
-	SavePieces                    bool `json:"savePieces"`
-	RescrapeThresholdHours        int  `json:"rescrapeThresholdHours"`
-	StatusLogIntervalSeconds      int  `json:"statusLogIntervalSeconds"`
-	GetOldestNodesIntervalSeconds int  `json:"getOldestNodesIntervalSeconds"`
-	OldPeerThresholdMinutes       int  `json:"oldPeerThresholdMinutes"`
+	ScalingFactor                 uint  `json:"scalingFactor"`
+	ReseedIntervalSeconds         int   `json:"reseedIntervalSeconds"`
+	SaveFilesThreshold            uint  `json:"saveFilesThreshold"`
+	SavePieces                    bool  `json:"savePieces"`
+	RescrapeThresholdHours        int   `json:"rescrapeThresholdHours"`
+	StatusLogIntervalSeconds      int   `json:"statusLogIntervalSeconds"`
+	GetOldestNodesIntervalSeconds int   `json:"getOldestNodesIntervalSeconds"`
+	OldPeerThresholdMinutes       int   `json:"oldPeerThresholdMinutes"`
+	ScheduleEnabled               bool  `json:"scheduleEnabled"`
+	ScheduleWeekdays              []int `json:"scheduleWeekdays"`
+	ScheduleStartHour             int   `json:"scheduleStartHour"`
+	ScheduleEndHour               int   `json:"scheduleEndHour"`
 }
 
 type QueuePerformanceSettings struct {
@@ -183,14 +187,18 @@ type PerformanceSettingsInput struct {
 }
 
 type DHTPerformanceSettingsInput struct {
-	ScalingFactor                 *uint `json:"scalingFactor"`
-	ReseedIntervalSeconds         *int  `json:"reseedIntervalSeconds"`
-	SaveFilesThreshold            *uint `json:"saveFilesThreshold"`
-	SavePieces                    *bool `json:"savePieces"`
-	RescrapeThresholdHours        *int  `json:"rescrapeThresholdHours"`
-	StatusLogIntervalSeconds      *int  `json:"statusLogIntervalSeconds"`
-	GetOldestNodesIntervalSeconds *int  `json:"getOldestNodesIntervalSeconds"`
-	OldPeerThresholdMinutes       *int  `json:"oldPeerThresholdMinutes"`
+	ScalingFactor                 *uint  `json:"scalingFactor"`
+	ReseedIntervalSeconds         *int   `json:"reseedIntervalSeconds"`
+	SaveFilesThreshold            *uint  `json:"saveFilesThreshold"`
+	SavePieces                    *bool  `json:"savePieces"`
+	RescrapeThresholdHours        *int   `json:"rescrapeThresholdHours"`
+	StatusLogIntervalSeconds      *int   `json:"statusLogIntervalSeconds"`
+	GetOldestNodesIntervalSeconds *int   `json:"getOldestNodesIntervalSeconds"`
+	OldPeerThresholdMinutes       *int   `json:"oldPeerThresholdMinutes"`
+	ScheduleEnabled               *bool  `json:"scheduleEnabled"`
+	ScheduleWeekdays              *[]int `json:"scheduleWeekdays"`
+	ScheduleStartHour             *int   `json:"scheduleStartHour"`
+	ScheduleEndHour               *int   `json:"scheduleEndHour"`
 }
 
 type QueuePerformanceSettingsInput struct {
@@ -405,6 +413,10 @@ func NewService(p Params) Service {
 				StatusLogIntervalSeconds:      int(p.DHTCrawlerConfig.StatusLogInterval / time.Second),
 				GetOldestNodesIntervalSeconds: int(p.DHTCrawlerConfig.GetOldestNodesInterval / time.Second),
 				OldPeerThresholdMinutes:       int(p.DHTCrawlerConfig.OldPeerThreshold / time.Minute),
+				ScheduleEnabled:               p.DHTCrawlerConfig.ScheduleEnabled,
+				ScheduleWeekdays:              p.DHTCrawlerConfig.ScheduleWeekdays,
+				ScheduleStartHour:             p.DHTCrawlerConfig.ScheduleStartHour,
+				ScheduleEndHour:               p.DHTCrawlerConfig.ScheduleEndHour,
 			},
 			Queue: newQueuePerformanceSettingsDefaults(queue.NewDefaultPerformanceConfig()),
 			Media: MediaPerformanceSettings{
@@ -773,6 +785,39 @@ func (s *service) Update(ctx context.Context, input UpdateInput) (Settings, erro
 				value := strconv.Itoa(*dht.OldPeerThresholdMinutes)
 				updates[runtimeconfig.KeyDHTCrawlerOldPeerThresholdMinutes] = &value
 				effective.Performance.DHT.OldPeerThresholdMinutes = *dht.OldPeerThresholdMinutes
+			}
+			if dht.ScheduleEnabled != nil {
+				value := strconv.FormatBool(*dht.ScheduleEnabled)
+				updates[runtimeconfig.KeyDHTCrawlerScheduleEnabled] = &value
+				effective.Performance.DHT.ScheduleEnabled = *dht.ScheduleEnabled
+			}
+			if dht.ScheduleWeekdays != nil {
+				weekdays, err := normalizeDHTScheduleWeekdays(*dht.ScheduleWeekdays)
+				if err != nil {
+					return Settings{}, fmt.Errorf("%w: performance.dht.scheduleWeekdays", ErrInvalidInput)
+				}
+				value := joinInts(weekdays)
+				updates[runtimeconfig.KeyDHTCrawlerScheduleWeekdays] = &value
+				effective.Performance.DHT.ScheduleWeekdays = weekdays
+			}
+			if dht.ScheduleStartHour != nil {
+				if *dht.ScheduleStartHour < 0 || *dht.ScheduleStartHour > 23 {
+					return Settings{}, fmt.Errorf("%w: performance.dht.scheduleStartHour", ErrInvalidInput)
+				}
+				value := strconv.Itoa(*dht.ScheduleStartHour)
+				updates[runtimeconfig.KeyDHTCrawlerScheduleStartHour] = &value
+				effective.Performance.DHT.ScheduleStartHour = *dht.ScheduleStartHour
+			}
+			if dht.ScheduleEndHour != nil {
+				if *dht.ScheduleEndHour < 1 || *dht.ScheduleEndHour > 24 {
+					return Settings{}, fmt.Errorf("%w: performance.dht.scheduleEndHour", ErrInvalidInput)
+				}
+				value := strconv.Itoa(*dht.ScheduleEndHour)
+				updates[runtimeconfig.KeyDHTCrawlerScheduleEndHour] = &value
+				effective.Performance.DHT.ScheduleEndHour = *dht.ScheduleEndHour
+			}
+			if err := validateDHTSchedule(effective.Performance.DHT); err != nil {
+				return Settings{}, err
 			}
 		}
 
@@ -1230,6 +1275,85 @@ func applyDHTPerformanceMerge(result *Settings, values map[string]string) {
 	applyInt(runtimeconfig.KeyDHTCrawlerOldPeerThresholdMinutes, 1, 24*60, func(v int) {
 		result.Performance.DHT.OldPeerThresholdMinutes = v
 	})
+	applyBool(runtimeconfig.KeyDHTCrawlerScheduleEnabled, func(v bool) {
+		result.Performance.DHT.ScheduleEnabled = v
+	})
+	applyWeekdays(values, runtimeconfig.KeyDHTCrawlerScheduleWeekdays, func(v []int) {
+		result.Performance.DHT.ScheduleWeekdays = v
+	})
+	applyInt(runtimeconfig.KeyDHTCrawlerScheduleStartHour, 0, 23, func(v int) {
+		result.Performance.DHT.ScheduleStartHour = v
+	})
+	applyInt(runtimeconfig.KeyDHTCrawlerScheduleEndHour, 1, 24, func(v int) {
+		result.Performance.DHT.ScheduleEndHour = v
+	})
+}
+
+func validateDHTSchedule(settings DHTPerformanceSettings) error {
+	if !settings.ScheduleEnabled {
+		return nil
+	}
+	if len(settings.ScheduleWeekdays) == 0 {
+		return fmt.Errorf("%w: performance.dht.scheduleWeekdays", ErrInvalidInput)
+	}
+	if settings.ScheduleStartHour < 0 || settings.ScheduleStartHour > 23 {
+		return fmt.Errorf("%w: performance.dht.scheduleStartHour", ErrInvalidInput)
+	}
+	if settings.ScheduleEndHour < 1 || settings.ScheduleEndHour > 24 || settings.ScheduleStartHour >= settings.ScheduleEndHour {
+		return fmt.Errorf("%w: performance.dht.scheduleEndHour", ErrInvalidInput)
+	}
+	if _, err := normalizeDHTScheduleWeekdays(settings.ScheduleWeekdays); err != nil {
+		return fmt.Errorf("%w: performance.dht.scheduleWeekdays", ErrInvalidInput)
+	}
+	return nil
+}
+
+func normalizeDHTScheduleWeekdays(input []int) ([]int, error) {
+	seen := make(map[int]struct{}, len(input))
+	result := make([]int, 0, len(input))
+	for _, weekday := range input {
+		if weekday < 1 || weekday > 7 {
+			return nil, ErrInvalidInput
+		}
+		if _, exists := seen[weekday]; exists {
+			continue
+		}
+		seen[weekday] = struct{}{}
+		result = append(result, weekday)
+	}
+	if len(result) == 0 {
+		return nil, ErrInvalidInput
+	}
+	return result, nil
+}
+
+func applyWeekdays(values map[string]string, key string, setter func(v []int)) {
+	raw, ok := values[key]
+	if !ok {
+		return
+	}
+	parts := strings.Split(raw, ",")
+	weekdays := make([]int, 0, len(parts))
+	for _, part := range parts {
+		value, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil {
+			return
+		}
+		weekdays = append(weekdays, value)
+	}
+	normalized, err := normalizeDHTScheduleWeekdays(weekdays)
+	if err != nil {
+		return
+	}
+	setter(normalized)
+}
+
+func joinInts(values []int) string {
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		parts = append(parts, strconv.Itoa(value))
+	}
+	return strings.Join(parts, ",")
 }
 
 func applyQueuePerformanceMerge(result *Settings, values map[string]string) {
@@ -1878,6 +2002,10 @@ func settingsToRuntimeValueMap(settings Settings) map[string]string {
 		runtimeconfig.KeyDHTCrawlerStatusLogIntervalSeconds:      strconv.Itoa(settings.Performance.DHT.StatusLogIntervalSeconds),
 		runtimeconfig.KeyDHTCrawlerGetOldestNodesIntervalSeconds: strconv.Itoa(settings.Performance.DHT.GetOldestNodesIntervalSeconds),
 		runtimeconfig.KeyDHTCrawlerOldPeerThresholdMinutes:       strconv.Itoa(settings.Performance.DHT.OldPeerThresholdMinutes),
+		runtimeconfig.KeyDHTCrawlerScheduleEnabled:               strconv.FormatBool(settings.Performance.DHT.ScheduleEnabled),
+		runtimeconfig.KeyDHTCrawlerScheduleWeekdays:              joinInts(settings.Performance.DHT.ScheduleWeekdays),
+		runtimeconfig.KeyDHTCrawlerScheduleStartHour:             strconv.Itoa(settings.Performance.DHT.ScheduleStartHour),
+		runtimeconfig.KeyDHTCrawlerScheduleEndHour:               strconv.Itoa(settings.Performance.DHT.ScheduleEndHour),
 
 		runtimeconfig.KeyQueueProcessTorrentConcurrency:                strconv.Itoa(settings.Performance.Queue.ProcessTorrentConcurrency),
 		runtimeconfig.KeyQueueProcessTorrentCheckIntervalSeconds:       strconv.Itoa(settings.Performance.Queue.ProcessTorrentCheckIntervalSeconds),

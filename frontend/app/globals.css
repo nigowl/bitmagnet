@@ -1162,6 +1162,27 @@ body {
   object-fit: contain;
 }
 
+.home-loading-shell {
+  padding: 8px 0 12px;
+}
+
+.home-loading-block {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.home-loading-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(184px, 1fr));
+  gap: 16px;
+}
+
+.home-loading-tile {
+  display: flex;
+  flex-direction: column;
+}
+
 .home-daily-carousel-shell {
   position: relative;
   width: 100%;
@@ -1965,6 +1986,13 @@ body {
   transform: translateY(-1px);
 }
 
+.settings-schedule-panel {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--card-border) 72%, transparent);
+  background: color-mix(in srgb, var(--card-bg) 84%, var(--muted-surface));
+}
+
 .settings-switch-field {
   padding-top: 2px;
 }
@@ -2270,7 +2298,8 @@ body {
 .torrent-player-shell {
   position: relative;
   overflow: hidden;
-  border: 0 !important;
+  border: 0;
+  padding: 0;
   background: linear-gradient(
     180deg,
     rgba(8, 13, 23, 0.98),

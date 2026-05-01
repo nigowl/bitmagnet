@@ -43,6 +43,7 @@ type crawler struct {
 	persistSources               concurrency.BatchingChannel[infoHashWithScrape]
 	rescrapeThreshold            time.Duration
 	statusLogInterval            time.Duration
+	schedule                     crawlerSchedule
 	saveFilesThreshold           uint
 	savePieces                   bool
 	dao                          *dao.Query
@@ -63,6 +64,59 @@ type crawler struct {
 func (c *crawler) start() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	if c.schedule.enabled {
+		c.runScheduled(ctx)
+		return
+	}
+	c.runPipeline(ctx)
+	<-c.stopped
+}
+
+func (c *crawler) runScheduled(ctx context.Context) {
+	for {
+		now := time.Now()
+		if !c.schedule.activeAt(now) {
+			nextStart := c.schedule.nextStart(now)
+			c.logger.Infow(
+				"dht crawler paused by schedule",
+				"next_start", nextStart.Format(time.RFC3339),
+			)
+			if !c.waitUntil(ctx, nextStart) {
+				return
+			}
+			continue
+		}
+
+		windowEnd := c.schedule.nextEnd(now)
+		runCtx, stopRun := context.WithCancel(ctx)
+		c.logger.Infow(
+			"dht crawler schedule window started",
+			"window_end", windowEnd.Format(time.RFC3339),
+		)
+		c.runPipeline(runCtx)
+		if !c.waitUntil(ctx, windowEnd) {
+			stopRun()
+			return
+		}
+		stopRun()
+		c.logger.Infow("dht crawler schedule window ended")
+	}
+}
+
+func (c *crawler) waitUntil(ctx context.Context, until time.Time) bool {
+	timer := time.NewTimer(time.Until(until))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-c.stopped:
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func (c *crawler) runPipeline(ctx context.Context) {
 	// start the various pipeline workers
 	go c.rotateSoughtNodeID(ctx)
 	go c.runDiscoveredNodes(ctx)
@@ -80,7 +134,6 @@ func (c *crawler) start() {
 	go c.runPersistSources(ctx)
 	go c.getOldNodes(ctx)
 	go c.logStatus(ctx)
-	<-c.stopped
 }
 
 type nodeHasPeersForHash struct {

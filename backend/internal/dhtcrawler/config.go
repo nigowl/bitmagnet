@@ -29,6 +29,14 @@ type Config struct {
 	GetOldestNodesInterval time.Duration
 	// OldPeerThreshold controls minimum age for peers selected as "old nodes".
 	OldPeerThreshold time.Duration
+	// ScheduleEnabled restricts crawler runtime to configured local weekdays and hours.
+	ScheduleEnabled bool
+	// ScheduleWeekdays stores ISO weekdays where Monday is 1 and Sunday is 7.
+	ScheduleWeekdays []int
+	// ScheduleStartHour is the inclusive local hour when the crawler may start.
+	ScheduleStartHour int
+	// ScheduleEndHour is the exclusive local hour when the crawler must pause.
+	ScheduleEndHour int
 }
 
 func NewDefaultConfig() Config {
@@ -43,6 +51,10 @@ func NewDefaultConfig() Config {
 		StatusLogInterval:            45 * time.Second,
 		GetOldestNodesInterval:       10 * time.Second,
 		OldPeerThreshold:             15 * time.Minute,
+		ScheduleEnabled:              false,
+		ScheduleWeekdays:             []int{1, 2, 3, 4, 5, 6, 7},
+		ScheduleStartHour:            0,
+		ScheduleEndHour:              24,
 	}
 }
 

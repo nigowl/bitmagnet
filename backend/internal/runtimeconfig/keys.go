@@ -68,6 +68,10 @@ const (
 	KeyDHTCrawlerStatusLogIntervalSeconds            = "system.performance.dht.status_log_interval_seconds"
 	KeyDHTCrawlerGetOldestNodesIntervalSeconds       = "system.performance.dht.get_oldest_nodes_interval_seconds"
 	KeyDHTCrawlerOldPeerThresholdMinutes             = "system.performance.dht.old_peer_threshold_minutes"
+	KeyDHTCrawlerScheduleEnabled                     = "system.performance.dht.schedule.enabled"
+	KeyDHTCrawlerScheduleWeekdays                    = "system.performance.dht.schedule.weekdays"
+	KeyDHTCrawlerScheduleStartHour                   = "system.performance.dht.schedule.start_hour"
+	KeyDHTCrawlerScheduleEndHour                     = "system.performance.dht.schedule.end_hour"
 	KeyQueueProcessTorrentConcurrency                = "system.performance.queue.process_torrent.concurrency"
 	KeyQueueProcessTorrentCheckIntervalSeconds       = "system.performance.queue.process_torrent.check_interval_seconds"
 	KeyQueueProcessTorrentTimeoutSeconds             = "system.performance.queue.process_torrent.timeout_seconds"
@@ -140,6 +144,10 @@ func PerformanceKeys() []string {
 		KeyDHTCrawlerStatusLogIntervalSeconds,
 		KeyDHTCrawlerGetOldestNodesIntervalSeconds,
 		KeyDHTCrawlerOldPeerThresholdMinutes,
+		KeyDHTCrawlerScheduleEnabled,
+		KeyDHTCrawlerScheduleWeekdays,
+		KeyDHTCrawlerScheduleStartHour,
+		KeyDHTCrawlerScheduleEndHour,
 		KeyQueueProcessTorrentConcurrency,
 		KeyQueueProcessTorrentCheckIntervalSeconds,
 		KeyQueueProcessTorrentTimeoutSeconds,
