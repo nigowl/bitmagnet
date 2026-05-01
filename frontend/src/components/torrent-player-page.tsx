@@ -2070,6 +2070,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
         const selected = options.find((item) => item.index === result.selectedFileIndex) || options[0]!;
         setSelectedFileIndex(selected.index);
+        selectedFileIndexRef.current = selected.index;
+        statusSnapshotRef.current = result.status;
 
         const preferTranscode = resolvePreferTranscode(selected, result.status);
         const mode = preferTranscode ? "transcode" : "direct";
@@ -2121,11 +2123,16 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         if (options.length === 0) throw new Error(t("media.player.noVideoFiles"));
         applyFileOptions(options);
         setStatusSnapshot(result.status);
+        statusSnapshotRef.current = result.status;
 
-        const selected = options.find((item) => item.index === result.selectedFileIndex) || options[0];
+        const selected =
+          options.find((item) => item.index === nextIndex) ||
+          options.find((item) => item.index === result.selectedFileIndex) ||
+          options[0];
         if (!selected) throw new Error(t("media.player.noVideoFiles"));
 
         setSelectedFileIndex(selected.index);
+        selectedFileIndexRef.current = selected.index;
 
         const preferTranscode = resolvePreferTranscode(selected, result.status);
 
@@ -2251,12 +2258,14 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       try {
         const next = await fetchPlayerTransmissionStatus(infoHash);
         setStatusSnapshot(next);
+        statusSnapshotRef.current = next;
         const options = buildPlaybackFileOptions(next.files || []);
         if (options.length > 0) {
           applyFileOptions(options);
         }
         if (Number.isInteger(next.selectedFileIndex) && next.selectedFileIndex >= 0) {
           setSelectedFileIndex(next.selectedFileIndex);
+          selectedFileIndexRef.current = next.selectedFileIndex;
         }
       } catch (error) {
         logWarn("status", "poll status failed", { message: toErrorMessage(error, "poll failed") });

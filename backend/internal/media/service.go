@@ -125,6 +125,7 @@ type service struct {
 	coverCache        *coverCache
 	coverFailures     sync.Map
 	playerDurations   sync.Map
+	playerSelections  sync.Map
 	logger            *zap.Logger
 	sitePluginManager *siteplugins.Manager
 	runtime           mediaRuntimeSettings

@@ -137,9 +137,10 @@ func (s *service) PlayerTransmissionBootstrap(
 	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, selected, snapshot.Files); err != nil {
 		return PlayerTransmissionBootstrapResult{}, err
 	}
+	s.playerTransmissionRememberSelectedFile(infoHash, selected)
 	_ = s.playerTransmissionTryStart(ctx, settings, infoHash)
 
-	status, err := s.playerTransmissionLoadStatus(ctx, settings, infoHash, true)
+	status, err := s.playerTransmissionLoadStatusForSelectedFile(ctx, settings, infoHash, true, selected)
 	if err != nil {
 		return PlayerTransmissionBootstrapResult{}, err
 	}
@@ -174,9 +175,10 @@ func (s *service) PlayerTransmissionSelectFile(
 	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, input.FileIndex, snapshot.Files); err != nil {
 		return PlayerTransmissionSelectFileResult{}, err
 	}
+	s.playerTransmissionRememberSelectedFile(infoHash, input.FileIndex)
 	_ = s.playerTransmissionTryStart(ctx, settings, infoHash)
 
-	status, err := s.playerTransmissionLoadStatus(ctx, settings, infoHash, true)
+	status, err := s.playerTransmissionLoadStatusForSelectedFile(ctx, settings, infoHash, true, input.FileIndex)
 	if err != nil {
 		return PlayerTransmissionSelectFileResult{}, err
 	}
@@ -398,6 +400,7 @@ func (s *service) PlayerTransmissionResolveStream(
 	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, input.FileIndex, snapshot.Files); err != nil {
 		return PlayerTransmissionResolveStreamResult{}, err
 	}
+	s.playerTransmissionRememberSelectedFile(infoHash, input.FileIndex)
 	_ = s.playerTransmissionTryStart(ctx, settings, infoHash)
 
 	fileLength := snapshot.Files[input.FileIndex].Length
@@ -1469,13 +1472,62 @@ func (s *service) playerTransmissionLoadStatus(
 	infoHash string,
 	includePieces bool,
 ) (PlayerTransmissionStatusResult, error) {
+	return s.playerTransmissionLoadStatusForSelectedFile(ctx, settings, infoHash, includePieces, -1)
+}
+
+func (s *service) playerTransmissionLoadStatusForSelectedFile(
+	ctx context.Context,
+	settings playerBootstrapSettings,
+	infoHash string,
+	includePieces bool,
+	selectedFileIndex int,
+) (PlayerTransmissionStatusResult, error) {
 	snapshot, err := s.playerTransmissionFetchTorrent(ctx, settings, infoHash, includePieces)
 	if err != nil {
 		return PlayerTransmissionStatusResult{}, err
 	}
 	result := playerTransmissionBuildStatus(infoHash, snapshot, settings.TransmissionDownloadVideoFormats)
+	if selectedFileIndex < 0 {
+		if remembered, ok := s.playerTransmissionRememberedSelectedFile(infoHash); ok {
+			selectedFileIndex = remembered
+		}
+	}
+	if selectedFileIndex >= 0 {
+		playerTransmissionApplySelectedFileStatus(snapshot, &result, selectedFileIndex)
+	}
 	s.playerTransmissionEnrichStatusDuration(ctx, settings, snapshot, &result)
 	return result, nil
+}
+
+func (s *service) playerTransmissionRememberSelectedFile(infoHash string, fileIndex int) {
+	if s == nil || fileIndex < 0 {
+		return
+	}
+	key := strings.TrimSpace(strings.ToLower(infoHash))
+	if key == "" {
+		return
+	}
+	s.playerSelections.Store(key, fileIndex)
+}
+
+func (s *service) playerTransmissionRememberedSelectedFile(infoHash string) (int, bool) {
+	if s == nil {
+		return 0, false
+	}
+	key := strings.TrimSpace(strings.ToLower(infoHash))
+	if key == "" {
+		return 0, false
+	}
+	value, ok := s.playerSelections.Load(key)
+	if !ok {
+		return 0, false
+	}
+	index, ok := value.(int)
+	if !ok || index < 0 {
+		s.playerSelections.Delete(key)
+		return 0, false
+	}
+	return index, true
 }
 
 func playerTransmissionBuildStatus(
@@ -1485,6 +1537,8 @@ func playerTransmissionBuildStatus(
 ) PlayerTransmissionStatusResult {
 	files := make([]PlayerTransmissionFile, 0, len(snapshot.Files))
 	selectedIndex := -1
+	selectedPriority := 0
+	selectedPrioritySet := false
 	for idx, file := range snapshot.Files {
 		stats := playerTransmissionRPCFileStat{}
 		if idx < len(snapshot.FileStats) {
@@ -1500,8 +1554,10 @@ func playerTransmissionBuildStatus(
 			IsVideo:        playerTransmissionIsVideoFile(file.Name, allowedVideoExtensions),
 		}
 		files = append(files, item)
-		if selectedIndex < 0 && item.Wanted {
+		if item.Wanted && (!selectedPrioritySet || item.Priority > selectedPriority) {
 			selectedIndex = idx
+			selectedPriority = item.Priority
+			selectedPrioritySet = true
 		}
 	}
 	if selectedIndex < 0 && len(snapshot.Files) > 0 {
@@ -1547,6 +1603,36 @@ func playerTransmissionBuildStatus(
 		Files:                       files,
 		UpdatedAt:                   time.Now(),
 	}
+}
+
+func playerTransmissionApplySelectedFileStatus(
+	snapshot *playerTransmissionRPCTorrent,
+	status *PlayerTransmissionStatusResult,
+	fileIndex int,
+) bool {
+	if snapshot == nil || status == nil || fileIndex < 0 || fileIndex >= len(status.Files) || fileIndex >= len(snapshot.Files) {
+		return false
+	}
+
+	selected := status.Files[fileIndex]
+	status.SelectedFileIndex = fileIndex
+	status.SelectedFileBytesCompleted = selected.BytesCompleted
+	status.SelectedFileLength = selected.Length
+
+	status.SelectedFileReadyRatio = 0
+	if selected.Length > 0 {
+		status.SelectedFileReadyRatio = clampRatio(float64(selected.BytesCompleted) / float64(selected.Length))
+	}
+
+	contiguousBytes := playerTransmissionContiguousBytesFromStart(snapshot, fileIndex)
+	status.SelectedFileContiguousBytes = contiguousBytes
+	status.SelectedFileContiguousRatio = 0
+	if selected.Length > 0 {
+		status.SelectedFileContiguousRatio = clampRatio(float64(contiguousBytes) / float64(selected.Length))
+	}
+	status.SelectedFileAvailableRanges = playerTransmissionAvailableRanges(snapshot, fileIndex)
+	status.SelectedFileDurationSeconds = 0
+	return true
 }
 
 func (s *service) playerTransmissionEnrichStatusDuration(
