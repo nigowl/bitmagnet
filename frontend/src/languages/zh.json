@@ -5,7 +5,7 @@
   },
   "footer": {
     "copyright": "© 2026 bitmagnet（比特磁铁）保留所有权利",
-    "tagline": "面向现代化种子检索与影视运维工作流"
+    "tagline": "为影视资源检索、缓存播放与自动化运维打造"
   },
   "nav": {
     "home": "首页",
@@ -275,29 +275,34 @@
       "timestamp": "时间",
       "enabled": "是否启用",
       "error": "错误信息",
+      "info": "信息",
       "started": "是否启动"
     },
     "statusValues": {
       "up": "正常",
       "down": "异常",
       "degraded": "降级",
+      "inactive": "暂停",
       "unknown": "未知"
+    },
+    "healthInfo": {
+      "dhtPausedBySchedule": "DHT 爬虫当前处于限制运行时间外，已暂停运行。",
+      "dhtInactive": "DHT 爬虫当前未运行。"
     }
   },
   "logs": {
     "title": "系统日志",
-    "subtitle": "按分类与文件查看运行日志，快速定位故障与异常。",
-    "categoryLabel": "日志分类",
+    "subtitle": "按服务模块查看独立日志文件，快速定位 Web、队列与爬虫链路问题。",
+    "categoryLabel": "服务模块",
     "fileLabel": "日志文件",
     "filePlaceholder": "选择日志文件",
     "linesPerPage": "每页行数",
     "path": "日志目录",
     "empty": "暂无日志内容",
     "category": {
-      "main": "主要（Web 接口等）",
-      "dht": "DHT 爬虫相关",
-      "site_plugins": "影视外站插件相关",
-      "player_stream": "在线播放链路（Transmission/转码）"
+      "http_server": "Web 服务（HTTP/API/在线播放）",
+      "queue_server": "队列服务（任务/媒体处理）",
+      "dht_server": "爬虫服务（DHT/种子发现）"
     }
   },
   "settings": {

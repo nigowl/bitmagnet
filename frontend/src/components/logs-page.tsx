@@ -52,7 +52,7 @@ export function LogsPage() {
 
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsRefreshNonce, setLogsRefreshNonce] = useState(0);
-  const [logsCategory, setLogsCategory] = useState("main");
+  const [logsCategory, setLogsCategory] = useState("http_server");
   const [logsFile, setLogsFile] = useState("");
   const [logsPage, setLogsPage] = useState(1);
   const [logsLines, setLogsLines] = useState(1000);
@@ -107,7 +107,7 @@ export function LogsPage() {
 
   const categoryOptions = useMemo(
     () =>
-      (logs?.categories?.length ? logs.categories : [{ key: "main" }, { key: "dht" }, { key: "site_plugins" }]).map((item) => ({
+      (logs?.categories?.length ? logs.categories : [{ key: "http_server" }, { key: "queue_server" }, { key: "dht_server" }]).map((item) => ({
         value: item.key,
         label: t(`logs.category.${item.key}`)
       })),
@@ -187,7 +187,7 @@ export function LogsPage() {
               data={categoryOptions}
               allowDeselect={false}
               onChange={(value) => {
-                setLogsCategory(value || "main");
+                setLogsCategory(value || "http_server");
                 setLogsFile("");
                 setLogsPage(1);
               }}

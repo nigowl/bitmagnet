@@ -674,14 +674,18 @@ function scoreTorrent(item: MediaDetailTorrent): number {
 }
 
 export function pickRecommendedTorrent(torrents: MediaDetailTorrent[] | null | undefined): MediaDetailTorrent | null {
+  return pickRecommendedTorrents(torrents, 1)[0] ?? null;
+}
+
+export function pickRecommendedTorrents(torrents: MediaDetailTorrent[] | null | undefined, limit = 3): MediaDetailTorrent[] {
   const items = toArray(torrents);
-  if (items.length === 0) return null;
+  if (items.length === 0) return [];
 
   return [...items].sort((left, right) => {
     const scoreDiff = scoreTorrent(right) - scoreTorrent(left);
     if (scoreDiff !== 0) return scoreDiff;
     return right.size - left.size;
-  })[0] ?? null;
+  }).slice(0, Math.max(1, limit));
 }
 
 export function extractMediaFacts(input: {

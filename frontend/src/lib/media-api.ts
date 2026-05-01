@@ -184,6 +184,7 @@ export type PlayerTransmissionStatusResponse = {
   selectedFileIndex: number;
   selectedFileBytesCompleted: number;
   selectedFileLength: number;
+  selectedFileDurationSeconds: number;
   selectedFileReadyRatio: number;
   selectedFileContiguousBytes: number;
   selectedFileContiguousRatio: number;
@@ -550,6 +551,27 @@ export function buildPlayerTransmissionStreamURL(
     }
   }
   return `${apiBaseURL}/api/media/player/transmission/stream?${query.toString()}`;
+}
+
+export function buildPlayerTransmissionThumbnailURL(
+  infoHash: string,
+  fileIndex: number,
+  seconds: number,
+  cacheBust?: string,
+  options?: { startBytes?: number }
+): string {
+  const query = new URLSearchParams({
+    infoHash: infoHash.trim().toLowerCase(),
+    fileIndex: String(fileIndex),
+    seconds: String(Math.max(0, Number.isFinite(seconds) ? seconds : 0))
+  });
+  if (cacheBust) {
+    query.set("t", cacheBust);
+  }
+  if (Number.isFinite(options?.startBytes) && (options?.startBytes || 0) > 0) {
+    query.set("startBytes", String(Math.max(0, Math.floor(options?.startBytes || 0))));
+  }
+  return `${apiBaseURL}/api/media/player/transmission/thumbnail?${query.toString()}`;
 }
 
 export function buildPlayerSubtitleContentURL(

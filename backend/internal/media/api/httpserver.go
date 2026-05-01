@@ -10,6 +10,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -64,6 +65,7 @@ func (b *builder) Apply(e *gin.Engine) error {
 	e.DELETE("/api/media/player/transmission/cache", b.playerTransmissionClearCache)
 	e.GET("/api/media/player/transmission/stream", b.playerTransmissionStream)
 	e.HEAD("/api/media/player/transmission/stream", b.playerTransmissionStream)
+	e.GET("/api/media/player/transmission/thumbnail", b.playerTransmissionThumbnail)
 	e.GET("/api/media/player/subtitles", b.playerSubtitleList)
 	e.POST("/api/media/player/subtitles", b.playerSubtitleCreate)
 	e.PUT("/api/media/player/subtitles/:subtitleId", b.playerSubtitleUpdate)
@@ -296,7 +298,7 @@ func (b *builder) playerTransmissionAudioTracks(c *gin.Context) {
 func (b *builder) playerTransmissionStream(c *gin.Context) {
 	infoHash := strings.TrimSpace(c.Query("infoHash"))
 	fileIndex := parseInt(c.Query("fileIndex"), -1)
-	preferTranscode := true
+	preferTranscode := strings.TrimSpace(c.Query("transcode")) == "1"
 	audioTrackIndex := parseInt(c.Query("audioTrack"), -1)
 	outputResolution := parseInt(c.Query("resolution"), 0)
 	startSeconds := parseFloat(c.Query("start"), 0)
@@ -382,12 +384,116 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 		return
 	}
 
+	if !preferTranscode {
+		if !resolveResult.Completed {
+			responseError = media.ErrPlayerStreamUnavailable.Error()
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "stream data not ready yet"})
+			return
+		}
+		b.playerTransmissionStreamDirect(c, resolveResult)
+		return
+	}
+
 	if !resolveResult.Transcode.Enabled {
 		responseError = media.ErrPlayerTranscodeDisabled.Error()
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "player transcode disabled"})
 		return
 	}
 	b.playerTransmissionStreamTranscoded(c, resolveResult)
+}
+
+func (b *builder) playerTransmissionStreamDirect(c *gin.Context, resolveResult media.PlayerTransmissionResolveStreamResult) {
+	inputPath := strings.TrimSpace(resolveResult.FilePath)
+	file, err := os.Open(inputPath)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil || stat.IsDir() {
+		if err == nil {
+			err = fmt.Errorf("stream path is not a file")
+		}
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Cache-Control", "no-store, max-age=0")
+	c.Header("Content-Type", resolveResult.ContentType)
+	c.Header("Accept-Ranges", "bytes")
+	c.Header("X-Bitmagnet-Stream-Source", "local")
+	c.Header("X-Bitmagnet-Stream-Path", inputPath)
+	http.ServeContent(c.Writer, c.Request, stat.Name(), stat.ModTime(), file)
+}
+
+func (b *builder) playerTransmissionThumbnail(c *gin.Context) {
+	infoHash := strings.TrimSpace(c.Query("infoHash"))
+	fileIndex := parseInt(c.Query("fileIndex"), -1)
+	seconds := math.Max(0, parseFloat(c.Query("seconds"), 0))
+	startBytes := parseInt64(c.Query("startBytes"), 0)
+	if startBytes < 0 {
+		startBytes = 0
+	}
+
+	rangeHeader := ""
+	if startBytes > 0 {
+		rangeHeader = fmt.Sprintf("bytes=%d-", startBytes)
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 8*time.Second)
+	defer cancel()
+	resolveResult, err := b.service.PlayerTransmissionResolveStream(ctx, media.PlayerTransmissionResolveStreamInput{
+		InfoHash:        infoHash,
+		FileIndex:       fileIndex,
+		RangeHeader:     rangeHeader,
+		PreferTranscode: true,
+		StartSeconds:    seconds,
+		StartBytes:      startBytes,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrInvalidInfoHash), errors.Is(err, media.ErrPlayerInvalidRange):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrPlayerDisabled), errors.Is(err, media.ErrPlayerTransmissionDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrPlayerStreamUnavailable), errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+			c.JSON(http.StatusAccepted, gin.H{"error": "thumbnail source not ready"})
+		case errors.Is(err, media.ErrPlayerStorageUnavailable):
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrNotFound), errors.Is(err, media.ErrPlayerFileNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	if !resolveResult.Transcode.Enabled {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "player transcode disabled"})
+		return
+	}
+
+	binaryPath := strings.TrimSpace(resolveResult.Transcode.BinaryPath)
+	if binaryPath == "" {
+		binaryPath = "ffmpeg"
+	}
+	args := buildPlayerFFmpegThumbnailArgs(resolveResult.FilePath, seconds)
+	cmd := exec.CommandContext(ctx, binaryPath, args...)
+	output, err := cmd.Output()
+	if err != nil || len(output) == 0 {
+		message := "thumbnail unavailable"
+		if err != nil {
+			message = err.Error()
+		}
+		c.JSON(http.StatusAccepted, gin.H{"error": message})
+		return
+	}
+
+	c.Header("Cache-Control", "public, max-age=300")
+	c.Header("Content-Type", "image/jpeg")
+	c.Header("X-Bitmagnet-Thumbnail-Second", strconv.FormatFloat(seconds, 'f', 3, 64))
+	c.Data(http.StatusOK, "image/jpeg", output)
 }
 
 func (b *builder) playerSubtitleList(c *gin.Context) {
@@ -777,6 +883,10 @@ func buildPlayerFFmpegArgs(
 			args = append(args, "-ss", startValue)
 		}
 	}
+	if filePath != "pipe:0" {
+		// Keep ffmpeg from racing ahead into sparse, not-yet-downloaded file ranges.
+		args = append(args, "-re")
+	}
 	args = append(args, "-i", filePath)
 	if startSeconds > 0 && filePath == "pipe:0" {
 		// pipe input is not seekable; place -ss after -i for decode-side seek.
@@ -813,6 +923,29 @@ func buildPlayerFFmpegArgs(
 		args = append(args, strings.Fields(extra)...)
 	}
 	args = append(args, "-movflags", "+frag_keyframe+empty_moov+default_base_moof", "-f", "mp4", "pipe:1")
+	return args
+}
+
+func buildPlayerFFmpegThumbnailArgs(filePath string, seconds float64) []string {
+	args := []string{
+		"-hide_banner",
+		"-loglevel", "error",
+		"-nostdin",
+	}
+	if seconds > 0 {
+		args = append(args, "-ss", strconv.FormatFloat(seconds, 'f', 3, 64))
+	}
+	args = append(
+		args,
+		"-i", filePath,
+		"-map", "0:v:0",
+		"-frames:v", "1",
+		"-vf", "scale=w=320:h=-2:force_original_aspect_ratio=decrease",
+		"-q:v", "5",
+		"-f", "image2pipe",
+		"-vcodec", "mjpeg",
+		"pipe:1",
+	)
 	return args
 }
 

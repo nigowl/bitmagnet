@@ -44,6 +44,7 @@ type crawler struct {
 	rescrapeThreshold            time.Duration
 	statusLogInterval            time.Duration
 	schedule                     crawlerSchedule
+	active                       *concurrency.AtomicValue[bool]
 	saveFilesThreshold           uint
 	savePieces                   bool
 	dao                          *dao.Query
@@ -68,14 +69,17 @@ func (c *crawler) start() {
 		c.runScheduled(ctx)
 		return
 	}
+	c.setActive(true)
 	c.runPipeline(ctx)
 	<-c.stopped
+	c.setActive(false)
 }
 
 func (c *crawler) runScheduled(ctx context.Context) {
 	for {
 		now := time.Now()
 		if !c.schedule.activeAt(now) {
+			c.setActive(false)
 			nextStart := c.schedule.nextStart(now)
 			c.logger.Infow(
 				"dht crawler paused by schedule",
@@ -89,6 +93,7 @@ func (c *crawler) runScheduled(ctx context.Context) {
 
 		windowEnd := c.schedule.nextEnd(now)
 		runCtx, stopRun := context.WithCancel(ctx)
+		c.setActive(true)
 		c.logger.Infow(
 			"dht crawler schedule window started",
 			"window_end", windowEnd.Format(time.RFC3339),
@@ -99,7 +104,14 @@ func (c *crawler) runScheduled(ctx context.Context) {
 			return
 		}
 		stopRun()
+		c.setActive(false)
 		c.logger.Infow("dht crawler schedule window ended")
+	}
+}
+
+func (c *crawler) setActive(active bool) {
+	if c.active != nil {
+		c.active.Set(active)
 	}
 }
 

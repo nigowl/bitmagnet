@@ -61,7 +61,7 @@ func New(params Params) Result {
 			"dht_crawler",
 			fx.Hook{
 				OnStart: func(context.Context) error {
-					active.Set(true)
+					active.Set(false)
 					cl, err := params.Client.Get()
 					if err != nil {
 						return err
@@ -124,6 +124,7 @@ func New(params Params) Result {
 						rescrapeThreshold:  cfg.RescrapeThreshold,
 						statusLogInterval:  cfg.StatusLogInterval,
 						schedule:           newCrawlerSchedule(cfg),
+						active:             active,
 						dao:                query,
 						ignoreHashes: &ignoreHashes{
 							bloom: boom.NewStableBloomFilter(10_000_000, 2, 0.001),

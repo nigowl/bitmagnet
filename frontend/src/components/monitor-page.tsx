@@ -91,6 +91,37 @@ export function MonitorPage() {
     [t]
   );
 
+  const healthStatusColor = useCallback((status?: string | null) => {
+    switch (status) {
+      case "up":
+        return "green";
+      case "down":
+        return "red";
+      case "inactive":
+        return "yellow";
+      default:
+        return "slate";
+    }
+  }, []);
+
+  const healthCheckInfo = useCallback(
+    (check: { key: string; status: string; error?: string | null }) => {
+      if (check.error) return check.error;
+      if (check.key === "dht" && check.status === "inactive") {
+        const dhtWorker = workers.find((worker) => worker.key === "dht_crawler");
+        return dhtWorker?.started ? t("monitor.healthInfo.dhtPausedBySchedule") : t("monitor.healthInfo.dhtInactive");
+      }
+      return "-";
+    },
+    [t, workers]
+  );
+
+  const healthCheckInfoColor = useCallback((check: { status: string; error?: string | null }) => {
+    if (check.error) return "red";
+    if (check.status === "inactive") return "yellow";
+    return "dimmed";
+  }, []);
+
   const queueStatusColor = useCallback((status: string) => {
     switch (status) {
       case "running":
@@ -465,7 +496,7 @@ export function MonitorPage() {
                   <Table.Th>{t("monitor.table.key")}</Table.Th>
                   <Table.Th>{t("monitor.table.status")}</Table.Th>
                   <Table.Th>{t("monitor.table.timestamp")}</Table.Th>
-                  <Table.Th>{t("monitor.table.error")}</Table.Th>
+                  <Table.Th>{t("monitor.table.info")}</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -473,13 +504,13 @@ export function MonitorPage() {
                   <Table.Tr key={check.key}>
                     <Table.Td>{check.key}</Table.Td>
                     <Table.Td>
-                      <Badge color={check.status === "up" ? "green" : check.status === "down" ? "red" : "yellow"}>
+                      <Badge color={healthStatusColor(check.status)}>
                         {renderHealthStatus(check.status)}
                       </Badge>
                     </Table.Td>
                     <Table.Td>{new Date(check.timestamp).toLocaleString()}</Table.Td>
                     <Table.Td>
-                      <Text c={check.error ? "red" : "dimmed"} size="sm">{check.error || "-"}</Text>
+                      <Text c={healthCheckInfoColor(check)} size="sm">{healthCheckInfo(check)}</Text>
                     </Table.Td>
                   </Table.Tr>
                 ))}

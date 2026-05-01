@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActionIcon,
   Badge,
@@ -32,7 +32,7 @@ import {
   type MediaDetailTorrent,
   type PlayerTransmissionTaskStatus
 } from "@/lib/media-api";
-import { buildMediaExternalLinks, extractMediaFacts, formatQualityTag, getBackdropUrl, getPosterUrl, pickRecommendedTorrent } from "@/lib/media";
+import { buildMediaExternalLinks, extractMediaFacts, formatQualityTag, getBackdropUrl, getPosterUrl, pickRecommendedTorrent, pickRecommendedTorrents } from "@/lib/media";
 
 function formatBytes(size: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -270,6 +270,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
   const [torrentResolutionFilter, setTorrentResolutionFilter] = useState("all");
   const [torrentCachedOnly, setTorrentCachedOnly] = useState(false);
   const [cacheClearing, setCacheClearing] = useState(false);
+  const cacheFilterAutoAppliedRef = useRef("");
   const titleLanguage = locale === "en" ? "en" : "zh";
 
   const load = useCallback(async (forceRefresh = false) => {
@@ -333,7 +334,25 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
 
   useEffect(() => {
     setTorrentPage(1);
+    setTorrentCachedOnly(false);
+    cacheFilterAutoAppliedRef.current = "";
   }, [payload?.item.id]);
+
+  useEffect(() => {
+    const itemKey = payload?.item.id || "";
+    if (!itemKey || cacheFilterAutoAppliedRef.current === itemKey) return;
+    const torrents = payload?.torrents ?? [];
+    if (torrents.length === 0) return;
+    if (Object.keys(playerStatusMap).length === 0) return;
+    cacheFilterAutoAppliedRef.current = itemKey;
+    const hasCompletedCache = torrents.some((torrent) =>
+      isTransmissionTaskComplete(playerStatusMap[torrent.infoHash.trim().toLowerCase()])
+    );
+    if (hasCompletedCache) {
+      setTorrentCachedOnly(true);
+      setTorrentPage(1);
+    }
+  }, [payload?.item.id, payload?.torrents, playerStatusMap]);
 
   useEffect(() => {
     setTorrentPage(1);
@@ -359,6 +378,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
         <Stack>
           <Text c="dimmed">{t("media.detail.notFound")}</Text>
           <Button
+            size="sm"
             renderRoot={(props) => <Link href={fallbackListHref} {...props} />}
             leftSection={<ArrowLeft size={14} />}
             variant="light"
@@ -433,7 +453,15 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
     attributes: item.attributes ?? []
   });
   const quickExternalLinks = externalLinks;
-  const recommendedTorrent = pickRecommendedTorrent(torrents);
+  const recommendedTorrents = pickRecommendedTorrents(torrents, 6)
+    .sort((left, right) => {
+      const leftCached = isTransmissionTaskComplete(playerStatusMap[left.infoHash.trim().toLowerCase()]) ? 1 : 0;
+      const rightCached = isTransmissionTaskComplete(playerStatusMap[right.infoHash.trim().toLowerCase()]) ? 1 : 0;
+      if (leftCached !== rightCached) return rightCached - leftCached;
+      return 0;
+    })
+    .slice(0, 2);
+  const recommendedTorrent = recommendedTorrents[0] || pickRecommendedTorrent(torrents);
   const favoriteTarget = recommendedTorrent || torrents[0] || null;
   const isFavorited = favoriteTarget ? hasFavorite(favoriteTarget.infoHash) : false;
   const coverBackdrop = poster ?? backdrop;
@@ -570,13 +598,13 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
 
       <Stack gap="md" className="media-detail-page-content">
         <Group justify="space-between" wrap="wrap">
-          <Button renderRoot={(props) => <Link href={backToListHref} {...props} />} leftSection={<ArrowLeft size={14} />} variant="light">
+          <Button size="sm" renderRoot={(props) => <Link href={backToListHref} {...props} />} leftSection={<ArrowLeft size={14} />} variant="light">
             {backToListLabel}
           </Button>
           <Group gap="xs">
             <ActionIcon
               className="app-icon-btn"
-              size={36}
+              size="sm"
               variant={isFavorited ? "light" : "default"}
               color={isFavorited ? "red" : undefined}
               onClick={() => void toggleFavoriteFromDetail()}
@@ -585,7 +613,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
             >
               <Heart size={16} fill={isFavorited ? "currentColor" : "none"} />
             </ActionIcon>
-            <Button variant="default" leftSection={<RefreshCw size={14} />} onClick={() => void load(true)}>
+            <Button size="sm" variant="default" leftSection={<RefreshCw size={14} />} onClick={() => void load(true)}>
               {t("common.refresh")}
             </Button>
           </Group>
@@ -710,7 +738,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
               </Card>
             ) : null}
 
-            {recommendedTorrent ? (
+            {recommendedTorrents.length > 0 ? (
               <Card className="media-detail-sidecar-card media-recommend-card" withBorder>
                 <Group justify="space-between" align="flex-start" gap="md">
                   <div>
@@ -719,54 +747,77 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
                       size="sm"
                       c="dimmed"
                       mt={4}
-                      lineClamp={2}
+                      lineClamp={1}
                       className="entity-subtitle"
-                      title={recommendedTorrent.title || recommendedTorrent.torrent.name}
                     >
-                      {recommendedTorrent.title || recommendedTorrent.torrent.name}
+                      {t("media.detail.bestChoice")}
                     </Text>
                   </div>
                   <Badge variant="light" color="orange">
-                    {t("media.detail.bestChoice")}
+                    TOP {recommendedTorrents.length}
                   </Badge>
                 </Group>
 
-                <Group gap={6} wrap="wrap" mt="sm">
-                  {recommendedTorrent.videoResolution ? (
-                    <Badge variant="light" color="orange">{displayResolution(recommendedTorrent.videoResolution)}</Badge>
-                  ) : null}
-                  {recommendedTorrent.videoSource ? (
-                    <Badge variant="light">{formatQualityTag(recommendedTorrent.videoSource)}</Badge>
-                  ) : null}
-                  {recommendedTorrent.seeders ? (
-                    <Badge variant="outline">{t("torrents.table.seeders")}: {recommendedTorrent.seeders}</Badge>
-                  ) : null}
-                  <Badge variant="outline">{formatBytes(recommendedTorrent.size)}</Badge>
-                  {recommendedTorrent.torrent.sources.slice(0, 2).map((source) => (
-                    <Badge key={`${recommendedTorrent.infoHash}:${source.key}`} variant="dot" color="slate">
-                      {source.name}
-                    </Badge>
+                <Stack gap="xs" mt="sm">
+                  {recommendedTorrents.map((torrent, index) => (
+                    <div key={torrent.infoHash} className="media-recommend-item">
+                      <div className="media-recommend-item-main">
+                        <Group gap={6} wrap="nowrap">
+                          <Badge size="xs" variant={index === 0 ? "filled" : "light"} color="orange">
+                            #{index + 1}
+                          </Badge>
+                          {isTransmissionTaskComplete(playerStatusMap[torrent.infoHash.trim().toLowerCase()]) ? (
+                            <Badge size="xs" variant="light" color="green">{t("media.cacheBadge")}</Badge>
+                          ) : null}
+                        </Group>
+                        <Text size="sm" fw={700} lineClamp={1} title={torrent.title || torrent.torrent.name}>
+                          {torrent.title || torrent.torrent.name}
+                        </Text>
+                        <Group gap={6} wrap="wrap">
+                          {torrent.videoResolution ? (
+                            <Badge size="xs" variant="light" color="orange">{displayResolution(torrent.videoResolution)}</Badge>
+                          ) : null}
+                          {torrent.videoSource ? (
+                            <Badge size="xs" variant="light">{formatQualityTag(torrent.videoSource)}</Badge>
+                          ) : null}
+                          {torrent.seeders ? (
+                            <Badge size="xs" variant="outline">{t("torrents.table.seeders")}: {torrent.seeders}</Badge>
+                          ) : null}
+                          <Badge size="xs" variant="outline">{formatBytes(torrent.size)}</Badge>
+                        </Group>
+                      </div>
+                      <Group gap={6} wrap="nowrap">
+                        <Tooltip label={t("media.openTorrent")}>
+                          <ActionIcon
+                            className="app-icon-btn"
+                            size="sm"
+                            variant="light"
+                            color="orange"
+                            aria-label={t("media.openTorrent")}
+                            renderRoot={(props) => <Link href={`/torrents/${torrent.infoHash}`} {...props} />}
+                          >
+                            <Eye size={14} />
+                          </ActionIcon>
+                        </Tooltip>
+                        <Tooltip label={t("media.openMagnet")}>
+                          <ActionIcon
+                            className="app-icon-btn"
+                            size="sm"
+                            variant="default"
+                            color="slate"
+                            component="a"
+                            href={torrent.torrent.magnetUri}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={t("media.openMagnet")}
+                          >
+                            <ExternalLink size={14} />
+                          </ActionIcon>
+                        </Tooltip>
+                      </Group>
+                    </div>
                   ))}
-                </Group>
-
-                <Group gap="xs" mt="md" wrap="wrap">
-                  <Button
-                    variant="light"
-                    renderRoot={(props) => <Link href={`/torrents/${recommendedTorrent.infoHash}`} {...props} />}
-                  >
-                    {t("media.openTorrent")}
-                  </Button>
-                  <Button
-                    variant="default"
-                    component="a"
-                    href={recommendedTorrent.torrent.magnetUri}
-                    target="_blank"
-                    rel="noreferrer"
-                    leftSection={<ExternalLink size={13} />}
-                  >
-                    Magnet
-                  </Button>
-                </Group>
+                </Stack>
               </Card>
             ) : null}
           </div>

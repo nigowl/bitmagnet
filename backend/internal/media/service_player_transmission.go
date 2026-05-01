@@ -434,9 +434,14 @@ func (s *service) PlayerTransmissionResolveStream(
 		if time.Now().After(deadline) {
 			return PlayerTransmissionResolveStreamResult{}, ErrPlayerStreamUnavailable
 		}
-		time.Sleep(defaultPlayerStreamPollInterval)
+		select {
+		case <-ctx.Done():
+			return PlayerTransmissionResolveStreamResult{}, ctx.Err()
+		case <-time.After(defaultPlayerStreamPollInterval):
+		}
 	}
-	if playerTransmissionFileFullyCompleted(readySnapshot, input.FileIndex) {
+	completed := playerTransmissionFileFullyCompleted(readySnapshot, input.FileIndex)
+	if completed {
 		fullStart, fullEnd, fullPartial, rangeErr := parsePlayerByteRangeForCompletedFile(input.RangeHeader, fileLength)
 		if rangeErr != nil {
 			return PlayerTransmissionResolveStreamResult{}, rangeErr
@@ -446,31 +451,8 @@ func (s *service) PlayerTransmissionResolveStream(
 		partial = fullPartial
 	}
 
-	dirCandidates := []string{strings.TrimSpace(readySnapshot.DownloadDir)}
-	if sessionDirs, sessionErr := s.playerTransmissionLoadSessionDirs(ctx, settings); sessionErr == nil {
-		for _, sessionDir := range sessionDirs {
-			trimmed := strings.TrimSpace(sessionDir)
-			if trimmed == "" || strings.EqualFold(trimmed, strings.TrimSpace(readySnapshot.DownloadDir)) {
-				continue
-			}
-			dirCandidates = append(dirCandidates, trimmed)
-		}
-	}
-
 	fileName := strings.TrimSpace(readySnapshot.Files[input.FileIndex].Name)
-
-	targetPath := ""
-	var resolveErr error
-	for _, dir := range dirCandidates {
-		targetPath, resolveErr = playerTransmissionResolveFilePath(
-			dir,
-			fileName,
-			settings.TransmissionLocalDownloadDir,
-		)
-		if resolveErr == nil {
-			break
-		}
-	}
+	targetPath, resolveErr := s.playerTransmissionResolveLocalFilePath(ctx, settings, readySnapshot, input.FileIndex)
 	if resolveErr != nil {
 		localDirProbe := playerTransmissionDescribeLocalDir(settings.TransmissionLocalDownloadDir)
 		return PlayerTransmissionResolveStreamResult{}, fmt.Errorf(
@@ -495,6 +477,7 @@ func (s *service) PlayerTransmissionResolveStream(
 		RangeEnd:    rangeEnd,
 		TotalLength: fileLength,
 		Partial:     partial,
+		Completed:   completed,
 		Transcode: PlayerFFmpegTranscodeSettings{
 			Enabled:          true,
 			BinaryPath:       settings.FFmpeg.BinaryPath,
@@ -524,6 +507,7 @@ type playerFFprobeStream struct {
 	Index       int               `json:"index"`
 	CodecType   string            `json:"codec_type"`
 	CodecName   string            `json:"codec_name"`
+	Duration    string            `json:"duration"`
 	Channels    int               `json:"channels"`
 	Tags        map[string]string `json:"tags"`
 	Disposition struct {
@@ -531,8 +515,49 @@ type playerFFprobeStream struct {
 	} `json:"disposition"`
 }
 
+type playerFFprobeFormat struct {
+	Duration string `json:"duration"`
+}
+
 type playerFFprobeResult struct {
 	Streams []playerFFprobeStream `json:"streams"`
+	Format  playerFFprobeFormat   `json:"format"`
+}
+
+func playerTransmissionProbeDuration(
+	ctx context.Context,
+	ffmpegBinaryPath string,
+	filePath string,
+) (float64, error) {
+	ffprobePath := playerTransmissionResolveFFprobePath(ffmpegBinaryPath)
+	cmd := exec.CommandContext(
+		ctx,
+		ffprobePath,
+		"-v", "error",
+		"-print_format", "json",
+		"-show_entries", "format=duration:stream=duration",
+		"-select_streams", "v:0",
+		filePath,
+	)
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, err
+	}
+	var payload playerFFprobeResult
+	if err := json.Unmarshal(output, &payload); err != nil {
+		return 0, err
+	}
+	candidates := []string{payload.Format.Duration}
+	for _, stream := range payload.Streams {
+		candidates = append(candidates, stream.Duration)
+	}
+	for _, candidate := range candidates {
+		duration, parseErr := strconv.ParseFloat(strings.TrimSpace(candidate), 64)
+		if parseErr == nil && duration > 0 && !math.IsNaN(duration) && !math.IsInf(duration, 0) {
+			return duration, nil
+		}
+	}
+	return 0, fmt.Errorf("ffprobe duration unavailable")
 }
 
 func playerTransmissionProbeAudioTracks(
@@ -1448,7 +1473,9 @@ func (s *service) playerTransmissionLoadStatus(
 	if err != nil {
 		return PlayerTransmissionStatusResult{}, err
 	}
-	return playerTransmissionBuildStatus(infoHash, snapshot, settings.TransmissionDownloadVideoFormats), nil
+	result := playerTransmissionBuildStatus(infoHash, snapshot, settings.TransmissionDownloadVideoFormats)
+	s.playerTransmissionEnrichStatusDuration(ctx, settings, snapshot, &result)
+	return result, nil
 }
 
 func playerTransmissionBuildStatus(
@@ -1520,6 +1547,134 @@ func playerTransmissionBuildStatus(
 		Files:                       files,
 		UpdatedAt:                   time.Now(),
 	}
+}
+
+func (s *service) playerTransmissionEnrichStatusDuration(
+	ctx context.Context,
+	settings playerBootstrapSettings,
+	snapshot *playerTransmissionRPCTorrent,
+	status *PlayerTransmissionStatusResult,
+) {
+	if s == nil || snapshot == nil || status == nil {
+		return
+	}
+	fileIndex := status.SelectedFileIndex
+	if fileIndex < 0 || fileIndex >= len(snapshot.Files) || fileIndex >= len(status.Files) {
+		return
+	}
+	selected := status.Files[fileIndex]
+	if !selected.IsVideo || selected.Length <= 0 {
+		return
+	}
+
+	// Avoid probing very sparse files that ffprobe cannot reliably inspect yet.
+	// Fast-start MP4/WebM/MKV files often expose duration once the head is ready;
+	// tail-moov MP4 files usually need the file to finish first.
+	completed := playerTransmissionFileFullyCompleted(snapshot, fileIndex)
+	if !completed &&
+		playerTransmissionContiguousBytesFromStart(snapshot, fileIndex) < minInt64(defaultPlayerStreamProbeChunkBytes, selected.Length) {
+		return
+	}
+
+	filePath, err := s.playerTransmissionResolveLocalFilePath(ctx, settings, snapshot, fileIndex)
+	if err != nil {
+		return
+	}
+	duration := s.playerTransmissionCachedProbeDuration(ctx, settings.FFmpeg.BinaryPath, filePath, completed)
+	if duration > 0 {
+		status.SelectedFileDurationSeconds = duration
+	}
+}
+
+func (s *service) playerTransmissionResolveLocalFilePath(
+	ctx context.Context,
+	settings playerBootstrapSettings,
+	snapshot *playerTransmissionRPCTorrent,
+	fileIndex int,
+) (string, error) {
+	if snapshot == nil || fileIndex < 0 || fileIndex >= len(snapshot.Files) {
+		return "", ErrPlayerFileNotFound
+	}
+	fileName := strings.TrimSpace(snapshot.Files[fileIndex].Name)
+	dirCandidates := []string{strings.TrimSpace(snapshot.DownloadDir)}
+	if targetPath, err := playerTransmissionResolveFilePath(
+		dirCandidates[0],
+		fileName,
+		settings.TransmissionLocalDownloadDir,
+	); err == nil {
+		return targetPath, nil
+	}
+
+	if sessionDirs, sessionErr := s.playerTransmissionLoadSessionDirs(ctx, settings); sessionErr == nil {
+		for _, sessionDir := range sessionDirs {
+			trimmed := strings.TrimSpace(sessionDir)
+			if trimmed == "" || strings.EqualFold(trimmed, strings.TrimSpace(snapshot.DownloadDir)) {
+				continue
+			}
+			dirCandidates = append(dirCandidates, trimmed)
+		}
+	}
+
+	var resolveErr error
+	for _, dir := range dirCandidates {
+		targetPath, err := playerTransmissionResolveFilePath(
+			dir,
+			fileName,
+			settings.TransmissionLocalDownloadDir,
+		)
+		if err == nil {
+			return targetPath, nil
+		}
+		resolveErr = err
+	}
+	if resolveErr == nil {
+		resolveErr = ErrNotFound
+	}
+	return "", resolveErr
+}
+
+func (s *service) playerTransmissionCachedProbeDuration(
+	ctx context.Context,
+	ffmpegBinaryPath string,
+	filePath string,
+	forceRetry bool,
+) float64 {
+	trimmedPath := strings.TrimSpace(filePath)
+	if trimmedPath == "" {
+		return 0
+	}
+	stat, err := os.Stat(trimmedPath)
+	if err != nil || stat.IsDir() {
+		return 0
+	}
+
+	cacheKey := trimmedPath
+	now := time.Now()
+	if cachedValue, ok := s.playerDurations.Load(cacheKey); ok {
+		if cached, ok := cachedValue.(playerFileDurationCacheEntry); ok && cached.size == stat.Size() {
+			if cached.durationSeconds > 0 {
+				return cached.durationSeconds
+			}
+			if !forceRetry && cached.failed && now.Sub(cached.probedAt) < 60*time.Second {
+				return 0
+			}
+		}
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	duration, err := playerTransmissionProbeDuration(probeCtx, ffmpegBinaryPath, trimmedPath)
+	entry := playerFileDurationCacheEntry{
+		durationSeconds: duration,
+		size:            stat.Size(),
+		probedAt:        now,
+		failed:          err != nil || duration <= 0,
+	}
+	s.playerDurations.Store(cacheKey, entry)
+	if err != nil || duration <= 0 {
+		return 0
+	}
+	return duration
 }
 
 func boolPtr(value bool) *bool {

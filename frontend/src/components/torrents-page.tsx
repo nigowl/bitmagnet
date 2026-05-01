@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Accordion,
   ActionIcon,
@@ -157,6 +157,26 @@ function buildTorrentDetailHref(infoHash: string, sourceHref: string): string {
   const params = new URLSearchParams();
   params.set("from", normalizedSource);
   return `${baseHref}?${params.toString()}`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function highlightSearchText(value: string, query: string): ReactNode {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) return value;
+  const terms = Array.from(new Set(normalizedQuery.split(/\s+/).map((term) => term.trim()).filter(Boolean))).slice(0, 6);
+  if (terms.length === 0) return value;
+  const matcher = new RegExp(`(${terms.map(escapeRegExp).join("|")})`, "ig");
+  const parts = value.split(matcher);
+  return parts.map((part, index) =>
+    terms.some((term) => part.toLowerCase() === term.toLowerCase()) ? (
+      <mark key={`${part}:${index}`} className="torrent-search-highlight">{part}</mark>
+    ) : (
+      part
+    )
+  );
 }
 
 export function TorrentsPage() {
@@ -682,7 +702,7 @@ export function TorrentsPage() {
                         <Group wrap="nowrap" className="torrent-title-group">
                           <Link href={buildTorrentDetailHref(item.infoHash, currentListHref)} className="unstyled-link torrent-list-link">
                             <Text fw={800} lineClamp={1} title={item.title || item.torrent.name} className="torrent-resource-title">
-                              {item.title || item.torrent.name}
+                              {highlightSearchText(item.title || item.torrent.name, queryString)}
                             </Text>
                           </Link>
                           {renderContentType(item.contentType) ? (
@@ -695,7 +715,7 @@ export function TorrentsPage() {
 
                       <Group gap={6} wrap="wrap" className="torrent-resource-meta">
                         <Text size="xs" c="dimmed" ff="monospace" className="detail-code-line">
-                          {item.infoHash}
+                          {highlightSearchText(item.infoHash, queryString)}
                         </Text>
                         <Badge size="xs" variant="dot" color="cyan">
                           {item.torrent.sources[0]?.name || "-"}

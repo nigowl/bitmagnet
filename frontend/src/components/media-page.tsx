@@ -101,7 +101,6 @@ function FilterRow({
   const optionsRef = useRef<HTMLDivElement | null>(null);
   const [canExpand, setCanExpand] = useState(false);
   const [collapsedHeight, setCollapsedHeight] = useState(52);
-  const [expandedHeight, setExpandedHeight] = useState(240);
   const isExpanded = expanded && canExpand;
 
   useLayoutEffect(() => {
@@ -114,7 +113,6 @@ function FilterRow({
       if (children.length === 0) {
         setCanExpand(false);
         setCollapsedHeight(52);
-        setExpandedHeight(52);
         return;
       }
 
@@ -125,7 +123,6 @@ function FilterRow({
 
       setCanExpand(hasOverflow);
       setCollapsedHeight(firstRowBottom);
-      setExpandedHeight(element.scrollHeight);
     };
 
     const scheduleUpdate = () => {
@@ -157,7 +154,7 @@ function FilterRow({
         window.removeEventListener("resize", scheduleUpdate);
       }
     };
-  }, [options, expanded]);
+  }, [options]);
 
   return (
     <div
@@ -169,7 +166,7 @@ function FilterRow({
       <div
         ref={optionsRef}
         className={isExpanded ? "media-filter-options media-filter-options-expanded" : "media-filter-options media-filter-options-collapsed"}
-        style={{ maxHeight: `${isExpanded ? expandedHeight : collapsedHeight}px` }}
+        style={isExpanded ? undefined : { maxHeight: `${collapsedHeight}px` }}
       >
         {options.map((option) => (
           <button
@@ -224,8 +221,6 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
   const [totalTorrentCount, setTotalTorrentCount] = useState(0);
   const [resolvedPageBoundsKey, setResolvedPageBoundsKey] = useState<string | null>(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  const advancedFiltersRef = useRef<HTMLDivElement | null>(null);
-  const [advancedFiltersHeight, setAdvancedFiltersHeight] = useState(0);
 
   const setMediaLayoutRef = useCallback((node: HTMLDivElement | null) => {
     setMediaLayoutElement(node);
@@ -586,61 +581,6 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
     [t]
   );
 
-  const syncAdvancedFiltersHeight = useCallback(() => {
-    const element = advancedFiltersRef.current;
-    if (!element) return;
-    const nextHeight = element.scrollHeight;
-    setAdvancedFiltersHeight((current) => (current === nextHeight ? current : nextHeight));
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!showAdvancedFilters) return;
-    let frameId: number | null = window.requestAnimationFrame(() => {
-      frameId = null;
-      syncAdvancedFiltersHeight();
-    });
-    return () => {
-      if (frameId !== null) {
-        window.cancelAnimationFrame(frameId);
-      }
-    };
-  }, [
-    awardsOptions,
-    countryOptions,
-    cacheOptions,
-    expandedRows,
-    genreOptions,
-    languageOptions,
-    networkOptions,
-    qualityOptions,
-    showAdvancedFilters,
-    sortOptions,
-    studioOptions,
-    syncAdvancedFiltersHeight,
-    yearOptions
-  ]);
-
-  useEffect(() => {
-    if (!showAdvancedFilters) return;
-    let frameId: number | null = null;
-    const scheduleSync = () => {
-      if (frameId !== null) {
-        window.cancelAnimationFrame(frameId);
-      }
-      frameId = window.requestAnimationFrame(() => {
-        frameId = null;
-        syncAdvancedFiltersHeight();
-      });
-    };
-    window.addEventListener("resize", scheduleSync, { passive: true });
-    return () => {
-      if (frameId !== null) {
-        window.cancelAnimationFrame(frameId);
-      }
-      window.removeEventListener("resize", scheduleSync);
-    };
-  }, [showAdvancedFilters, syncAdvancedFiltersHeight]);
-
   const clearFilters = () => {
     setSearchInput("");
     router.replace(pathname, { scroll: false });
@@ -735,12 +675,9 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
               </Group>
             </div>
 
-            <div
-              className={showAdvancedFilters ? "media-advanced-filters media-advanced-filters-open" : "media-advanced-filters"}
-              style={{ maxHeight: showAdvancedFilters ? advancedFiltersHeight : 0 }}
-              aria-hidden={!showAdvancedFilters}
-            >
-              <div ref={advancedFiltersRef} className="media-advanced-filters-inner">
+            {showAdvancedFilters ? (
+              <div className="media-advanced-filters media-advanced-filters-open">
+                <div className="media-advanced-filters-inner">
                 <FilterRow
                   label={t("media.filters.quality")}
                   currentValue={quality}
@@ -839,7 +776,8 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
                   onSelect={(value) => updateQuery({ sort: value, page: null })}
                 />
               </div>
-            </div>
+              </div>
+            ) : null}
           </Card>
         </Stack>
       </Card>

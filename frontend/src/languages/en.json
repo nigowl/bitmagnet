@@ -5,7 +5,7 @@
   },
   "footer": {
     "copyright": "© 2026 bitmagnet. All rights reserved.",
-    "tagline": "Built for modern torrent and media operations workflows."
+    "tagline": "Built for media discovery, cached playback, and automated operations."
   },
   "nav": {
     "home": "Home",
@@ -275,29 +275,34 @@
       "timestamp": "Timestamp",
       "enabled": "Enabled",
       "error": "Error",
+      "info": "Info",
       "started": "Started"
     },
     "statusValues": {
       "up": "Up",
       "down": "Down",
       "degraded": "Degraded",
+      "inactive": "Paused",
       "unknown": "Unknown"
+    },
+    "healthInfo": {
+      "dhtPausedBySchedule": "The DHT crawler is outside its allowed run window and is paused.",
+      "dhtInactive": "The DHT crawler is not running."
     }
   },
   "logs": {
     "title": "System Logs",
-    "subtitle": "Browse runtime logs by category and file for faster troubleshooting.",
-    "categoryLabel": "Log Category",
+    "subtitle": "Browse separate service-module log files for Web, queue, and crawler troubleshooting.",
+    "categoryLabel": "Service Module",
     "fileLabel": "Log File",
     "filePlaceholder": "Choose a log file",
     "linesPerPage": "Lines Per Page",
     "path": "Log Path",
     "empty": "No log content yet",
     "category": {
-      "main": "Main (Web/API)",
-      "dht": "DHT Crawler",
-      "site_plugins": "Media Site Plugins",
-      "player_stream": "Online Playback (Transmission/Transcode)"
+      "http_server": "Web Service (HTTP/API/Playback)",
+      "queue_server": "Queue Service (Jobs/Media Processing)",
+      "dht_server": "Crawler Service (DHT/Torrent Discovery)"
     }
   },
   "settings": {

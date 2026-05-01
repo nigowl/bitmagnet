@@ -495,7 +495,11 @@ func executeCheck(
 			newState,
 		)
 	} else {
+		now := time.Now()
 		newState.Status = StatusInactive
+		newState.Result = nil
+		newState.LastCheckedAt = now
+		newState.ContiguousFails = 0
 	}
 
 	if check.StatusListener != nil && oldState.Status != newState.Status {

@@ -344,6 +344,7 @@ type PlayerTransmissionStatusResult struct {
 	SelectedFileIndex           int                      `json:"selectedFileIndex"`
 	SelectedFileBytesCompleted  int64                    `json:"selectedFileBytesCompleted"`
 	SelectedFileLength          int64                    `json:"selectedFileLength"`
+	SelectedFileDurationSeconds float64                  `json:"selectedFileDurationSeconds"`
 	SelectedFileReadyRatio      float64                  `json:"selectedFileReadyRatio"`
 	SelectedFileContiguousBytes int64                    `json:"selectedFileContiguousBytes"`
 	SelectedFileContiguousRatio float64                  `json:"selectedFileContiguousRatio"`
@@ -386,6 +387,7 @@ type PlayerTransmissionResolveStreamResult struct {
 	RangeEnd         int64                         `json:"rangeEnd"`
 	TotalLength      int64                         `json:"totalLength"`
 	Partial          bool                          `json:"partial"`
+	Completed        bool                          `json:"completed"`
 	Transcode        PlayerFFmpegTranscodeSettings `json:"transcode"`
 	AudioTrackIndex  int                           `json:"audioTrackIndex"`
 	OutputResolution int                           `json:"outputResolution"`

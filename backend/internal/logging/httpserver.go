@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/nigowl/bitmagnet/internal/auth"
 	"github.com/nigowl/bitmagnet/internal/httpserver"
-	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 )
 
@@ -47,7 +47,7 @@ func (b logsBuilder) Apply(e *gin.Engine) error {
 	e.GET("/api/logs", b.authMiddleware(), b.requireAdmin(), func(c *gin.Context) {
 		lines := clampLines(c.DefaultQuery("lines", "100"))
 		page := clampPage(c.DefaultQuery("page", "1"))
-		category := c.DefaultQuery("category", LogCategoryMain)
+		category := c.DefaultQuery("category", LogCategoryHTTPServer)
 		file := c.Query("file")
 		c.JSON(http.StatusOK, b.readLogs(category, file, lines, page))
 	})

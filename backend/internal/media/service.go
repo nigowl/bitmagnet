@@ -124,9 +124,17 @@ type service struct {
 	dao               lazy.Lazy[*dao.Query]
 	coverCache        *coverCache
 	coverFailures     sync.Map
+	playerDurations   sync.Map
 	logger            *zap.Logger
 	sitePluginManager *siteplugins.Manager
 	runtime           mediaRuntimeSettings
+}
+
+type playerFileDurationCacheEntry struct {
+	durationSeconds float64
+	size            int64
+	probedAt        time.Time
+	failed          bool
 }
 
 func (s *service) InvalidateRuntimeSettingsCache() {

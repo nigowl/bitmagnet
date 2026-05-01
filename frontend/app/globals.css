@@ -380,6 +380,14 @@ body {
   word-break: break-all;
 }
 
+.torrent-search-highlight {
+  padding: 0 2px;
+  border-radius: 4px;
+  color: #241303;
+  background: linear-gradient(180deg, #ffe5a8, #ffbd67);
+  box-shadow: 0 0 0 1px rgba(255, 189, 103, 0.18);
+}
+
 .media-flex-grow {
   flex: 1;
 }
@@ -986,6 +994,23 @@ body {
     );
 }
 
+.media-recommend-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--card-border) 84%, transparent);
+  background: color-mix(in srgb, var(--card-bg) 76%, var(--muted-surface));
+}
+
+.media-recommend-item-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
 .media-facts-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1400,15 +1425,7 @@ body {
 }
 
 .media-advanced-filters {
-  overflow: hidden;
-  opacity: 0;
-  transform: translateY(-8px);
-  transition:
-    max-height 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.18s ease,
-    transform 0.18s ease;
-  will-change: max-height, opacity, transform;
-  contain: layout paint;
+  contain: layout style;
 }
 
 .media-advanced-filters-open {
@@ -1463,8 +1480,6 @@ body {
   flex-wrap: wrap;
   overflow: hidden;
   padding: 2px 0;
-  transition: max-height 0.16s ease;
-  will-change: max-height;
 }
 
 .media-filter-expand {
@@ -1522,7 +1537,7 @@ body {
 
 .media-filter-pill:hover {
   border-color: var(--card-hover-border);
-  box-shadow: var(--soft-shadow);
+  background: color-mix(in srgb, var(--card-bg) 74%, var(--muted-surface));
 }
 
 .media-filter-pill-active {
@@ -1533,7 +1548,7 @@ body {
     color-mix(in srgb, var(--brand-muted) 70%, var(--card-bg)),
     color-mix(in srgb, var(--brand-muted) 92%, var(--muted-surface))
   );
-  box-shadow: 0 10px 20px rgba(255, 122, 0, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 122, 0, 0.16);
 }
 
 .media-wall {
@@ -2853,16 +2868,35 @@ body {
 
 .torrent-inline-seek-hover {
   position: absolute;
-  top: -24px;
+  top: -118px;
   transform: translateX(-50%);
   z-index: 2;
-  border-radius: 6px;
-  padding: 2px 6px;
-  background: rgba(8, 12, 21, 0.9);
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+  min-width: 70px;
+  border-radius: 8px;
+  padding: 6px;
+  background: rgba(8, 12, 21, 0.92);
   color: #f4f7ff;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
+  border: 1px solid rgba(180, 197, 232, 0.14);
+}
+
+.torrent-inline-seek-preview-img {
+  display: block;
+  width: 160px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 6px;
+  background: rgba(20, 27, 39, 0.92);
+}
+
+.torrent-inline-seek-preview-time {
+  line-height: 1;
 }
 
 .torrent-inline-seek-track {

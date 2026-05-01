@@ -38,7 +38,7 @@ func New(p Params) Result {
 				OnStart: func(context.Context) error {
 					gin.SetMode(p.Config.GinMode)
 					g := gin.New()
-					g.Use(ginzap.Ginzap(p.Logger.Named("gin"), time.RFC3339, true), gin.Recovery())
+					g.Use(ginzap.Ginzap(p.Logger.Named("http_server").Named("gin"), time.RFC3339, true), gin.Recovery())
 					options, optionsErr := resolveOptions(p.Config.Options, p.Options)
 					if optionsErr != nil {
 						return optionsErr

@@ -5,10 +5,9 @@ import (
 )
 
 const (
-	LogCategoryMain        = "main"
-	LogCategoryDHT         = "dht"
-	LogCategorySitePlugins = "site_plugins"
-	LogCategoryPlayer      = "player_stream"
+	LogCategoryHTTPServer  = "http_server"
+	LogCategoryQueueServer = "queue_server"
+	LogCategoryDHTServer   = "dht_server"
 )
 
 type logCategory struct {
@@ -18,34 +17,30 @@ type logCategory struct {
 
 func logCategories(config FileRotatorConfig) []logCategory {
 	return []logCategory{
-		{Key: LogCategoryMain, BaseName: categoryBaseName(config.BaseName, "main")},
-		{Key: LogCategoryDHT, BaseName: categoryBaseName(config.BaseName, "dht")},
-		{Key: LogCategorySitePlugins, BaseName: categoryBaseName(config.BaseName, "site_plugins")},
-		{Key: LogCategoryPlayer, BaseName: categoryBaseName(config.BaseName, "player_stream")},
+		{Key: LogCategoryHTTPServer, BaseName: categoryBaseName(config.BaseName, LogCategoryHTTPServer)},
+		{Key: LogCategoryQueueServer, BaseName: categoryBaseName(config.BaseName, LogCategoryQueueServer)},
+		{Key: LogCategoryDHTServer, BaseName: categoryBaseName(config.BaseName, LogCategoryDHTServer)},
 	}
 }
 
 func availableLogCategoryKeys() []string {
 	return []string{
-		LogCategoryMain,
-		LogCategoryDHT,
-		LogCategorySitePlugins,
-		LogCategoryPlayer,
+		LogCategoryHTTPServer,
+		LogCategoryQueueServer,
+		LogCategoryDHTServer,
 	}
 }
 
 func normalizeLogCategory(category string) string {
 	switch strings.ToLower(strings.TrimSpace(category)) {
-	case LogCategoryMain:
-		return LogCategoryMain
-	case LogCategoryDHT:
-		return LogCategoryDHT
-	case LogCategorySitePlugins:
-		return LogCategorySitePlugins
-	case LogCategoryPlayer:
-		return LogCategoryPlayer
+	case LogCategoryHTTPServer:
+		return LogCategoryHTTPServer
+	case LogCategoryQueueServer:
+		return LogCategoryQueueServer
+	case LogCategoryDHTServer:
+		return LogCategoryDHTServer
 	default:
-		return LogCategoryMain
+		return LogCategoryHTTPServer
 	}
 }
 
@@ -54,13 +49,14 @@ func loggerCategory(loggerName string) string {
 
 	switch {
 	case strings.Contains(name, "dht"):
-		return LogCategoryDHT
-	case strings.HasPrefix(name, "media_site_plugins"), strings.Contains(name, "site_plugins"):
-		return LogCategorySitePlugins
-	case strings.HasPrefix(name, "media_player_stream"), strings.Contains(name, "player_stream"):
-		return LogCategoryPlayer
+		return LogCategoryDHTServer
+	case strings.Contains(name, "queue"),
+		strings.HasPrefix(name, "media_service"),
+		strings.HasPrefix(name, "media_site_plugins"),
+		strings.Contains(name, "site_plugins"):
+		return LogCategoryQueueServer
 	default:
-		return LogCategoryMain
+		return LogCategoryHTTPServer
 	}
 }
 
