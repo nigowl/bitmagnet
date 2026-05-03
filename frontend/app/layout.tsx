@@ -15,7 +15,7 @@ const defaultSiteURL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:333
 export const metadata: Metadata = {
   metadataBase: new URL(defaultSiteURL),
   title: "bitmagnet（比特磁铁）",
-  description: "Modern torrent discovery, media browsing, and operations experience powered by bitmagnet."
+  description: "Media playback and search workspace powered by bitmagnet."
 };
 
 type Locale = "en" | "zh";

@@ -66,6 +66,9 @@ const playerHLSDefaultPrebufferSeconds = 60
 const playerHLSMaxPrebufferSeconds = 180
 const playerHLSWaitPollInterval = 250 * time.Millisecond
 const playerHLSCacheTTL = 6 * time.Hour
+const playerHLSIdleTranscodeTTL = 20 * time.Second
+const playerHLSIdleCheckInterval = 5 * time.Second
+const playerHLSHeartbeatTimeout = 10 * time.Second
 
 type playerHLSSession struct {
 	Key              string
@@ -74,6 +77,9 @@ type playerHLSSession struct {
 	PlaylistPath     string
 	StartedAt        time.Time
 	LastAccessedAt   time.Time
+	ReadyAt          time.Time
+	LastHeartbeatAt  time.Time
+	PlaybackActive   bool
 	StartSeconds     float64
 	PrebufferSeconds int
 	Cmd              *exec.Cmd
@@ -97,6 +103,8 @@ func (b *builder) Apply(e *gin.Engine) error {
 	e.HEAD("/api/media/player/transmission/stream", b.playerTransmissionStream)
 	e.GET("/api/media/player/transmission/hls/playlist", b.playerTransmissionHLSPlaylist)
 	e.GET("/api/media/player/transmission/hls/segment/:session/:segment", b.playerTransmissionHLSSegment)
+	e.POST("/api/media/player/transmission/hls/heartbeat", b.playerTransmissionHLSHeartbeat)
+	e.POST("/api/media/player/transmission/hls/stop", b.playerTransmissionHLSStop)
 	e.GET("/api/media/player/transmission/thumbnail", b.playerTransmissionThumbnail)
 	e.GET("/api/media/player/subtitles", b.playerSubtitleList)
 	e.POST("/api/media/player/subtitles", b.playerSubtitleCreate)
@@ -532,9 +540,19 @@ func (b *builder) playerTransmissionHLSPlaylist(c *gin.Context) {
 
 	cachedSeconds, ready, waitErr := waitForPlayerHLSPrebuffer(c.Request.Context(), session, prebufferSeconds)
 	if waitErr != nil {
+		if errors.Is(waitErr, context.Canceled) || errors.Is(waitErr, context.DeadlineExceeded) {
+			b.stopPlayerHLSSession(session.Key, true)
+		}
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": waitErr.Error()})
 		return
 	}
+	b.hlsMu.Lock()
+	if current := b.hlsSessions[session.Key]; current != nil {
+		now := time.Now()
+		current.ReadyAt = now
+		current.LastAccessedAt = now
+	}
+	b.hlsMu.Unlock()
 	playlistBytes, err := os.ReadFile(session.PlaylistPath)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
@@ -583,6 +601,76 @@ func (b *builder) playerTransmissionHLSSegment(c *gin.Context) {
 	c.Header("Cache-Control", "public, max-age=3600, immutable")
 	c.Header("Content-Type", "video/MP2T")
 	c.File(segmentPath)
+}
+
+func (b *builder) playerTransmissionHLSStop(c *gin.Context) {
+	infoHash := strings.TrimSpace(c.Query("infoHash"))
+	fileIndex := parseInt(c.Query("fileIndex"), -1)
+	audioTrackIndex := parseInt(c.Query("audioTrack"), -1)
+	outputResolution := parseInt(c.Query("resolution"), 0)
+	if infoHash == "" || fileIndex < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid hls session"})
+		return
+	}
+	groupKey := buildPlayerHLSGroupKey(media.PlayerTransmissionResolveStreamInput{
+		InfoHash:         infoHash,
+		FileIndex:        fileIndex,
+		AudioTrackIndex:  audioTrackIndex,
+		OutputResolution: outputResolution,
+	})
+	stopped := b.stopPlayerHLSGroup(groupKey, true)
+	c.JSON(http.StatusOK, gin.H{"stopped": stopped})
+}
+
+type playerHLSHeartbeatRequest struct {
+	State          string  `json:"state"`
+	CurrentSeconds float64 `json:"currentSeconds"`
+	Visible        bool    `json:"visible"`
+}
+
+func (b *builder) playerTransmissionHLSHeartbeat(c *gin.Context) {
+	infoHash := strings.TrimSpace(c.Query("infoHash"))
+	fileIndex := parseInt(c.Query("fileIndex"), -1)
+	audioTrackIndex := parseInt(c.Query("audioTrack"), -1)
+	outputResolution := parseInt(c.Query("resolution"), 0)
+	if infoHash == "" || fileIndex < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid hls session"})
+		return
+	}
+
+	var input playerHLSHeartbeatRequest
+	if err := c.ShouldBindJSON(&input); err != nil && !errors.Is(err, io.EOF) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid heartbeat"})
+		return
+	}
+
+	groupKey := buildPlayerHLSGroupKey(media.PlayerTransmissionResolveStreamInput{
+		InfoHash:         infoHash,
+		FileIndex:        fileIndex,
+		AudioTrackIndex:  audioTrackIndex,
+		OutputResolution: outputResolution,
+	})
+	state := strings.ToLower(strings.TrimSpace(input.State))
+	if state != "playing" {
+		stopped := b.stopPlayerHLSGroup(groupKey, true)
+		c.JSON(http.StatusOK, gin.H{"active": false, "stopped": stopped})
+		return
+	}
+
+	now := time.Now()
+	active := 0
+	b.hlsMu.Lock()
+	for _, session := range b.hlsSessions {
+		if session == nil || session.GroupKey != groupKey {
+			continue
+		}
+		session.PlaybackActive = true
+		session.LastHeartbeatAt = now
+		session.LastAccessedAt = now
+		active++
+	}
+	b.hlsMu.Unlock()
+	c.JSON(http.StatusOK, gin.H{"active": active > 0, "sessions": active})
 }
 
 func (b *builder) playerTransmissionThumbnail(c *gin.Context) {
@@ -1044,11 +1132,7 @@ func (b *builder) playerHLSStartOrReuseSession(
 		if existing == nil || existing.GroupKey != groupKey {
 			continue
 		}
-		if existing.Cmd != nil && existing.Cmd.Process != nil {
-			_ = existing.Cmd.Process.Kill()
-		}
-		delete(b.hlsSessions, key)
-		go os.RemoveAll(existing.Dir)
+		b.stopPlayerHLSSessionLocked(key, existing, true)
 	}
 	b.hlsMu.Unlock()
 
@@ -1107,6 +1191,7 @@ func (b *builder) playerHLSStartOrReuseSession(
 	b.hlsMu.Lock()
 	b.hlsSessions[sessionKey] = session
 	b.hlsMu.Unlock()
+	go b.watchPlayerHLSSession(sessionKey)
 	return session, nil
 }
 
@@ -1119,10 +1204,78 @@ func (b *builder) cleanupPlayerHLSSessionsLocked(now time.Time) {
 		if now.Sub(session.LastAccessedAt) < playerHLSCacheTTL {
 			continue
 		}
-		if session.Cmd != nil && session.Cmd.Process != nil {
-			_ = session.Cmd.Process.Kill()
+		b.stopPlayerHLSSessionLocked(key, session, true)
+	}
+}
+
+func (b *builder) watchPlayerHLSSession(sessionKey string) {
+	ticker := time.NewTicker(playerHLSIdleCheckInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		now := time.Now()
+		b.hlsMu.Lock()
+		session := b.hlsSessions[sessionKey]
+		if session == nil {
+			b.hlsMu.Unlock()
+			return
 		}
-		delete(b.hlsSessions, key)
+		if !session.ReadyAt.IsZero() {
+			if session.PlaybackActive {
+				lastHeartbeat := session.LastHeartbeatAt
+				if lastHeartbeat.IsZero() {
+					lastHeartbeat = session.ReadyAt
+				}
+				if now.Sub(lastHeartbeat) >= playerHLSHeartbeatTimeout {
+					b.stopPlayerHLSSessionLocked(sessionKey, session, true)
+					b.hlsMu.Unlock()
+					return
+				}
+			} else if now.Sub(session.LastAccessedAt) >= playerHLSIdleTranscodeTTL {
+				b.stopPlayerHLSSessionLocked(sessionKey, session, true)
+				b.hlsMu.Unlock()
+				return
+			}
+		}
+		select {
+		case <-session.Done:
+			b.stopPlayerHLSSessionLocked(sessionKey, session, true)
+			b.hlsMu.Unlock()
+			return
+		default:
+		}
+		b.hlsMu.Unlock()
+	}
+}
+
+func (b *builder) stopPlayerHLSGroup(groupKey string, removeFiles bool) int {
+	stopped := 0
+	b.hlsMu.Lock()
+	for key, session := range b.hlsSessions {
+		if session == nil || session.GroupKey != groupKey {
+			continue
+		}
+		b.stopPlayerHLSSessionLocked(key, session, removeFiles)
+		stopped++
+	}
+	b.hlsMu.Unlock()
+	return stopped
+}
+
+func (b *builder) stopPlayerHLSSession(sessionKey string, removeFiles bool) {
+	b.hlsMu.Lock()
+	if session := b.hlsSessions[sessionKey]; session != nil {
+		b.stopPlayerHLSSessionLocked(sessionKey, session, removeFiles)
+	}
+	b.hlsMu.Unlock()
+}
+
+func (b *builder) stopPlayerHLSSessionLocked(sessionKey string, session *playerHLSSession, removeFiles bool) {
+	if session.Cmd != nil && session.Cmd.Process != nil {
+		_ = session.Cmd.Process.Kill()
+	}
+	delete(b.hlsSessions, sessionKey)
+	if removeFiles {
 		go os.RemoveAll(session.Dir)
 	}
 }

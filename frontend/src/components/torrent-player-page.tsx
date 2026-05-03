@@ -29,7 +29,9 @@ import { buildMediaEntryIdFromContentRef, resolveMediaCategory } from "@/lib/med
 import { useI18n } from "@/languages/provider";
 import {
   buildPlayerSubtitleContentURL,
+  buildPlayerTransmissionHLSHeartbeatURL,
   buildPlayerTransmissionHLSPlaylistURL,
+  buildPlayerTransmissionHLSStopURL,
   buildPlayerTransmissionThumbnailURL,
   buildPlayerTransmissionStreamURL,
   createPlayerSubtitle,
@@ -167,6 +169,7 @@ type HlsLike = {
   loadSource: (url: string) => void;
   on: (event: string, handler: (event: string, data?: unknown) => void) => void;
   startLoad?: (startPosition?: number) => void;
+  stopLoad?: () => void;
 };
 
 function buildPlaybackStreamConfigKey(input: {
@@ -227,6 +230,7 @@ const PLAYBACK_STALL_GRACE_MS = 5000;
 const PLAYBACK_STALL_TICK_MS = 1000;
 const PLAYBACK_PROGRESS_EPSILON_SECONDS = 0.5;
 const PLAYBACK_RECOVERY_COOLDOWN_MS = 5000;
+const HLS_HEARTBEAT_INTERVAL_MS = 3000;
 const INLINE_CONTROLS_HIDE_MS = 2200;
 const INLINE_CONTROLS_KEYBOARD_HIDE_MS = 2600;
 const INLINE_CONTROLS_FULLSCREEN_HIDE_MS = 3000;
@@ -1006,6 +1010,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const audioTrackLoadTokenRef = useRef(0);
   const hlsRef = useRef<HlsLike | null>(null);
   const hlsLoadedDurationSecondsRef = useRef(0);
+  const hlsSuspendedRef = useRef(false);
+  const hlsReleasedForPauseRef = useRef(false);
+  const userPausedRef = useRef(false);
   const activeStreamConfigKeyRef = useRef("");
   const selectedFileIndexRef = useRef(-1);
   const fileSwitchingRef = useRef(false);
@@ -1014,6 +1021,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const streamRetryTimerRef = useRef<number | null>(null);
   const lastStreamRetryAtRef = useRef(0);
   const retryCurrentStreamRef = useRef<(reason: string) => boolean>(() => false);
+  const releaseCurrentHLSRef = useRef<(reason: string, keepalive?: boolean) => void>(() => {});
   const controlsHideTimerRef = useRef<number | null>(null);
   const streamApplyOptionsRef = useRef<{ resumeAt?: number; autoplay?: boolean; recovery?: boolean }>({});
   const activePreferTranscodeRef = useRef(false);
@@ -1530,9 +1538,21 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     return Math.max(0, browserAhead, cachedAhead);
   }, [resolveAbsoluteCurrent, resolveBufferedAheadSeconds, resolveHLSNetworkCacheAheadSeconds]);
 
+  const settlePausedPlayback = useCallback((status: PlayerStatus = "ready") => {
+    autoResumeWhenPlayableRef.current = false;
+    pendingResumeTargetRef.current = null;
+    setPlaybackLoading(false);
+    setPlayerStatus(status);
+    setIsVideoPaused(true);
+  }, []);
+
   const attemptResumePlayback = useCallback((reason: string, targetSeconds?: number) => {
     const video = videoRef.current;
     if (!video) return;
+    if (userPausedRef.current) {
+      settlePausedPlayback();
+      return;
+    }
 
     const pendingTarget = Number.isFinite(targetSeconds) ? Math.max(0, Number(targetSeconds)) : resolveAbsoluteCurrent();
     pendingResumeTargetRef.current = pendingTarget;
@@ -1547,21 +1567,15 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       logInfo("playback", "waiting for playable data", { reason, targetSeconds: pendingTarget, errorName });
       if (errorName === "AbortError") {
         if (video.paused) {
-          autoResumeWhenPlayableRef.current = false;
-          pendingResumeTargetRef.current = null;
-          setPlaybackLoading(false);
-          setPlayerStatus("ready");
+          settlePausedPlayback();
         }
         return;
       }
       if (video.paused && errorName === "NotAllowedError") {
-        autoResumeWhenPlayableRef.current = false;
-        pendingResumeTargetRef.current = null;
-        setPlaybackLoading(false);
-        setPlayerStatus("ready");
+        settlePausedPlayback();
       }
     });
-  }, [logInfo, resolveAbsoluteCurrent]);
+  }, [logInfo, resolveAbsoluteCurrent, settlePausedPlayback]);
 
   useEffect(() => {
     activePreferTranscodeRef.current = activePreferTranscode;
@@ -1602,16 +1616,22 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       video.src = streamUrl;
       return;
     }
+    if (hlsSuspendedRef.current) {
+      video.removeAttribute("src");
+      video.load();
+      return;
+    }
 
     let cancelled = false;
     const applyNativeHLS = () => {
+      if (userPausedRef.current || hlsSuspendedRef.current) return;
       video.src = streamUrl;
       video.load();
     };
 
     void import("hls.js")
       .then((module) => {
-        if (cancelled || !videoRef.current) return;
+        if (cancelled || !videoRef.current || userPausedRef.current || hlsSuspendedRef.current) return;
         const HlsCtor = module.default;
         if (!HlsCtor.isSupported()) {
           if (video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -1650,6 +1670,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         hls.loadSource(streamUrl);
         hls.on(HlsCtor.Events.MANIFEST_PARSED, () => {
           if (cancelled) return;
+          if (userPausedRef.current || hlsSuspendedRef.current) return;
           hls.startLoad?.(0);
           if (Number.isFinite(video.currentTime) && video.currentTime > 0.25) {
             try {
@@ -1673,6 +1694,10 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           const payload = data as { fatal?: boolean; type?: string; details?: string };
           logWarnRef.current("hls", "hls playback error", payload);
           if (!payload?.fatal) return;
+          if (userPausedRef.current || hlsSuspendedRef.current || hlsReleasedForPauseRef.current) {
+            settlePausedPlayback();
+            return;
+          }
           if (retryCurrentStreamRef.current("hls_error")) return;
           setPlaybackLoading(false);
           setPlayerStatus("error");
@@ -1690,7 +1715,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
-  }, [activePreferTranscode, resolveHLSNetworkCacheAheadSeconds, streamUrl, transcodeOutputResolution, transcodePrebufferSeconds]);
+  }, [activePreferTranscode, resolveHLSNetworkCacheAheadSeconds, settlePausedPlayback, streamUrl, transcodeOutputResolution, transcodePrebufferSeconds]);
 
   useEffect(() => {
     tRef.current = t;
@@ -1833,7 +1858,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         if (selectedIndex >= 0 && selectedIndex < video.textTracks.length) {
           player.currentTrack = selectedIndex;
         }
-        if (!wasPaused && video.paused) {
+        if (!wasPaused && video.paused && !userPausedRef.current) {
           void video.play().catch(() => {
             // ignore autoplay rejection
           });
@@ -1844,7 +1869,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       }
     }
 
-    if (!wasPaused && video.paused) {
+    if (!wasPaused && video.paused && !userPausedRef.current) {
       void video.play().catch(() => {
         // ignore autoplay rejection
       });
@@ -2001,6 +2026,13 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       streamRetryTimerRef.current = null;
       streamRetryRef.current = { key: "", attempts: 0 };
     }
+    const isHLS = url.includes("/api/media/player/transmission/hls/playlist");
+    if (isHLS) {
+      hlsSuspendedRef.current = !options?.autoplay;
+      if (options?.autoplay) {
+        hlsReleasedForPauseRef.current = false;
+      }
+    }
     streamUrlRef.current = url;
     streamApplyOptionsRef.current = options || {};
     if (!options?.autoplay) {
@@ -2018,9 +2050,112 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     setStreamUrl(url);
   }, []);
 
+  const releaseCurrentHLS = useCallback((reason: string, keepalive = false) => {
+    const index = selectedFileIndexRef.current;
+    if (!infoHash || index < 0 || !activePreferTranscodeRef.current) return;
+    const preserveFrame = !keepalive && (reason === "pause" || reason === "manual_pause");
+
+    hlsSuspendedRef.current = true;
+    hlsReleasedForPauseRef.current = true;
+    hlsLoadedDurationSecondsRef.current = 0;
+    const hls = hlsRef.current;
+    if (hls) {
+      if (preserveFrame) {
+        hls.stopLoad?.();
+      } else {
+        hls.destroy();
+        hlsRef.current = null;
+      }
+    }
+    if (!keepalive) {
+      setNetworkCacheSeconds(0);
+      setPlayableCacheAheadSeconds(0);
+    }
+
+    const url = buildPlayerTransmissionHLSStopURL(infoHash, index, {
+      audioTrackIndex: selectedAudioTrackQueryIndexRef.current,
+      outputResolution: transcodeOutputResolution
+    });
+    const token = getAuthToken();
+    void fetch(url, {
+      method: "POST",
+      credentials: "include",
+      keepalive,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined
+    }).catch((error) => {
+      if (!keepalive) {
+        logWarn("hls", "failed to release hls transcode session", {
+          reason,
+          message: toErrorMessage(error, "release failed")
+        });
+      }
+    });
+  }, [infoHash, logWarn, transcodeOutputResolution]);
+
+  useEffect(() => {
+    releaseCurrentHLSRef.current = releaseCurrentHLS;
+  }, [releaseCurrentHLS]);
+
+  const sendHLSHeartbeat = useCallback((stateOverride?: "playing" | "paused" | "idle", keepalive = false) => {
+    const index = selectedFileIndexRef.current;
+    if (!infoHash || index < 0 || !activePreferTranscodeRef.current) return;
+
+    const video = videoRef.current;
+    const visible = typeof document === "undefined" ? true : document.visibilityState !== "hidden";
+    const state = stateOverride || (
+      userPausedRef.current || !video || video.paused || hlsSuspendedRef.current || !visible ? "paused" : "playing"
+    );
+    const url = buildPlayerTransmissionHLSHeartbeatURL(infoHash, index, {
+      audioTrackIndex: selectedAudioTrackQueryIndexRef.current,
+      outputResolution: transcodeOutputResolution
+    });
+    const token = getAuthToken();
+    void fetch(url, {
+      method: "POST",
+      credentials: "include",
+      keepalive,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({
+        state,
+        visible,
+        currentSeconds: Math.max(0, resolveAbsoluteCurrent())
+      })
+    }).catch((error) => {
+      if (!keepalive) {
+        logWarn("hls", "failed to send hls heartbeat", {
+          state,
+          message: toErrorMessage(error, "heartbeat failed")
+        });
+      }
+    });
+  }, [infoHash, logWarn, resolveAbsoluteCurrent, transcodeOutputResolution]);
+
+  useEffect(() => {
+    if (!infoHash || selectedFileIndex < 0 || !activePreferTranscode) return;
+
+    const tick = () => sendHLSHeartbeat();
+    tick();
+    const timer = window.setInterval(tick, HLS_HEARTBEAT_INTERVAL_MS);
+    return () => {
+      window.clearInterval(timer);
+      sendHLSHeartbeat("idle", true);
+    };
+  }, [activePreferTranscode, infoHash, selectedFileIndex, sendHLSHeartbeat]);
+
   const retryCurrentStream = useCallback((reason: string) => {
     const index = selectedFileIndexRef.current;
     if (!infoHash || !Number.isInteger(index) || index < 0) return false;
+    if (userPausedRef.current) {
+      settlePausedPlayback();
+      return true;
+    }
+    if (activePreferTranscodeRef.current && (hlsSuspendedRef.current || hlsReleasedForPauseRef.current)) {
+      settlePausedPlayback();
+      return true;
+    }
 
     const now = Date.now();
     const retryKey = `${index}:transcode:${activePreferTranscodeRef.current ? "tc" : "direct"}`;
@@ -2106,6 +2241,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     infoHash,
     logWarn,
     resolveAbsoluteCurrent,
+    settlePausedPlayback,
     transcodeOutputResolution,
     transcodePrebufferSeconds
   ]);
@@ -2113,6 +2249,20 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   useEffect(() => {
     retryCurrentStreamRef.current = retryCurrentStream;
   }, [retryCurrentStream]);
+
+  useEffect(() => {
+    const releaseForPageExit = () => {
+      releaseCurrentHLSRef.current("page_exit", true);
+    };
+
+    window.addEventListener("pagehide", releaseForPageExit);
+    window.addEventListener("beforeunload", releaseForPageExit);
+    return () => {
+      releaseForPageExit();
+      window.removeEventListener("pagehide", releaseForPageExit);
+      window.removeEventListener("beforeunload", releaseForPageExit);
+    };
+  }, []);
 
   const emitTimelineRefreshEvents = useCallback(() => {
     const video = videoRef.current;
@@ -2491,6 +2641,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           nextOptions[0];
         if (!selected) throw new Error(t("media.player.noVideoFiles"));
 
+        userPausedRef.current = false;
         setSelectedFileIndex(selected.index);
         selectedFileIndexRef.current = selected.index;
         trackPreferencesHydratedKeyRef.current = "";
@@ -2531,6 +2682,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         pendingTranscodeSeekDisplayRef.current =
           preferTranscode && resumeAt > 0 ? { target: resumeAt, at: Date.now() } : null;
         pendingResumeTargetRef.current = resumeAt;
+        userPausedRef.current = false;
         autoResumeWhenPlayableRef.current = autoplay;
         setAbsoluteCurrentSeconds(resumeAt);
         setPlaybackLoading(true);
@@ -2724,12 +2876,13 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     transcodeStartOffsetRef.current = preferTranscode ? resumeAt : 0;
     pendingTranscodeSeekDisplayRef.current = preferTranscode ? { target: resumeAt, at: Date.now() } : null;
     pendingResumeTargetRef.current = resumeAt;
-    autoResumeWhenPlayableRef.current = !videoRef.current?.paused;
+    const shouldAutoplay = Boolean(!userPausedRef.current && !videoRef.current?.paused);
+    autoResumeWhenPlayableRef.current = shouldAutoplay;
     setPlaybackLoading(true);
     setPlayerStatus("buffering");
     activeStreamConfigKeyRef.current = nextConfigKey;
     applyStreamUrl(nextUrl, {
-      autoplay: Boolean(!videoRef.current?.paused),
+      autoplay: shouldAutoplay,
       resumeAt: preferTranscode ? 0 : resumeAt
     });
 
@@ -2780,23 +2933,19 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       syncSelectedSubtitleTrack();
       refreshAudioTracks();
       syncSelectedAudioTrack();
-      if (autoplay) {
+      if (autoplay && !userPausedRef.current) {
         if (activePreferTranscodeRef.current && transcodePrebufferSeconds > 0) {
           setPrebufferProgressSeconds(0);
           logInfo("prebuffer", "start playback without paused prebuffer wait", { targetSeconds: transcodePrebufferSeconds });
         }
         attemptResumePlayback("stream_loadedmetadata", resumeAt > 0 ? resumeAt : undefined);
       } else {
-        autoResumeWhenPlayableRef.current = false;
-        pendingResumeTargetRef.current = null;
         try {
           video.pause();
         } catch {
           // ignore pause failures from detached media elements
         }
-        setIsVideoPaused(true);
-        setPlaybackLoading(false);
-        setPlayerStatus("ready");
+        settlePausedPlayback();
       }
       emitTimelineRefreshEvents();
     };
@@ -2806,7 +2955,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     return () => {
       video.removeEventListener("loadedmetadata", onLoaded);
     };
-  }, [attemptResumePlayback, emitTimelineRefreshEvents, logInfo, refreshAudioTracks, streamUrl, syncSelectedAudioTrack, syncSelectedSubtitleTrack, transcodePrebufferSeconds]);
+  }, [attemptResumePlayback, emitTimelineRefreshEvents, logInfo, refreshAudioTracks, settlePausedPlayback, streamUrl, syncSelectedAudioTrack, syncSelectedSubtitleTrack, transcodePrebufferSeconds]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -2948,6 +3097,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     };
 
     const markPotentialStall = () => {
+      if (userPausedRef.current) return;
       if (video.paused && !autoResumeWhenPlayableRef.current) return;
       if (stallStartedAtRef.current <= 0) {
         stallStartedAtRef.current = Date.now();
@@ -2959,6 +3109,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
     const recoverIfStalled = (trigger: string) => {
       if (!streamUrlRef.current) return;
+      if (userPausedRef.current) return;
+      if (activePreferTranscodeRef.current && (hlsSuspendedRef.current || hlsReleasedForPauseRef.current)) return;
       if (seekingSwitchingRef.current || transcodeSeekInFlightRef.current) return;
       if (video.ended) return;
       if (video.paused && !autoResumeWhenPlayableRef.current) {
@@ -3065,20 +3217,26 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     if (!video) return;
 
     const resumeIfPending = () => {
+      if (userPausedRef.current) return;
       if (!autoResumeWhenPlayableRef.current) return;
       const player = plyrRef.current;
       const playResult = player?.play ? player.play() : video.play();
       void Promise.resolve(playResult).catch(() => {
         if (video.paused && video.readyState >= 2) {
-          autoResumeWhenPlayableRef.current = false;
-          pendingResumeTargetRef.current = null;
-          setPlaybackLoading(false);
-          setPlayerStatus("ready");
+          settlePausedPlayback();
         }
       });
     };
 
     const onWaiting = () => {
+      if (userPausedRef.current) {
+        settlePausedPlayback();
+        return;
+      }
+      if (activePreferTranscodeRef.current && (hlsSuspendedRef.current || hlsReleasedForPauseRef.current)) {
+        settlePausedPlayback();
+        return;
+      }
       if (video.paused && !autoResumeWhenPlayableRef.current && !seekingSwitchingRef.current) {
         return;
       }
@@ -3093,6 +3251,14 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     };
 
     const onCanPlay = () => {
+      if (userPausedRef.current) {
+        settlePausedPlayback();
+        return;
+      }
+      if (activePreferTranscodeRef.current && (hlsSuspendedRef.current || hlsReleasedForPauseRef.current)) {
+        settlePausedPlayback();
+        return;
+      }
       if (autoResumeWhenPlayableRef.current) {
         resumeIfPending();
         return;
@@ -3102,6 +3268,16 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     };
 
     const onPlaying = () => {
+      if (userPausedRef.current) {
+        video.pause();
+        settlePausedPlayback();
+        return;
+      }
+      if (activePreferTranscodeRef.current && (hlsSuspendedRef.current || hlsReleasedForPauseRef.current)) {
+        video.pause();
+        settlePausedPlayback();
+        return;
+      }
       autoResumeWhenPlayableRef.current = false;
       pendingResumeTargetRef.current = null;
       streamRetryRef.current = { key: "", attempts: 0 };
@@ -3111,10 +3287,18 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     };
 
     const onPause = () => {
+      if (userPausedRef.current) {
+        if (activePreferTranscodeRef.current && !hlsReleasedForPauseRef.current && !seekingSwitchingRef.current && !fileSwitchingRef.current) {
+          releaseCurrentHLSRef.current("pause");
+        }
+        settlePausedPlayback();
+        return;
+      }
       if (!autoResumeWhenPlayableRef.current) {
-        setPlaybackLoading(false);
-        setPlayerStatus("ready");
-        setIsVideoPaused(true);
+        if (activePreferTranscodeRef.current && !hlsReleasedForPauseRef.current && !seekingSwitchingRef.current && !fileSwitchingRef.current) {
+          releaseCurrentHLSRef.current("pause");
+        }
+        settlePausedPlayback();
       }
     };
 
@@ -3122,6 +3306,14 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       transcodeSeekInFlightRef.current = false;
       seekingSwitchingRef.current = false;
       pendingTranscodeSeekDisplayRef.current = null;
+      if (userPausedRef.current) {
+        settlePausedPlayback();
+        return;
+      }
+      if (activePreferTranscodeRef.current && (hlsSuspendedRef.current || hlsReleasedForPauseRef.current)) {
+        settlePausedPlayback();
+        return;
+      }
       if (retryCurrentStreamRef.current("video_error")) {
         return;
       }
@@ -3149,10 +3341,10 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       video.removeEventListener("pause", onPause);
       video.removeEventListener("error", onError);
     };
-  }, [resolveCachedAheadSeconds, resolveHLSNetworkCacheAheadSeconds]);
+  }, [resolveCachedAheadSeconds, resolveHLSNetworkCacheAheadSeconds, settlePausedPlayback]);
 
   useEffect(() => {
-    if (!statusSnapshot || !autoResumeWhenPlayableRef.current) return;
+    if (!statusSnapshot || !autoResumeWhenPlayableRef.current || userPausedRef.current) return;
     const target = pendingResumeTargetRef.current;
     if (!Number.isFinite(target) || (target || 0) <= 0) return;
 
@@ -3326,6 +3518,16 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
       localPlayer.on("playing", () => {
         if (cancelled) return;
+        if (userPausedRef.current) {
+          localPlayer?.pause?.();
+          settlePausedPlayback();
+          return;
+        }
+        if (activePreferTranscodeRef.current && (hlsSuspendedRef.current || hlsReleasedForPauseRef.current)) {
+          plyrRef.current?.pause?.();
+          settlePausedPlayback();
+          return;
+        }
         autoResumeWhenPlayableRef.current = false;
         pendingResumeTargetRef.current = null;
         streamRetryRef.current = { key: "", attempts: 0 };
@@ -3336,6 +3538,14 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
       localPlayer.on("waiting", () => {
         if (cancelled) return;
+        if (userPausedRef.current) {
+          settlePausedPlayback();
+          return;
+        }
+        if (activePreferTranscodeRef.current && (hlsSuspendedRef.current || hlsReleasedForPauseRef.current)) {
+          settlePausedPlayback();
+          return;
+        }
         const media = localPlayer?.media;
         if (media?.paused && !autoResumeWhenPlayableRef.current && !seekingSwitchingRef.current) {
           return;
@@ -3349,6 +3559,15 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         transcodeSeekInFlightRef.current = false;
         seekingSwitchingRef.current = false;
         pendingTranscodeSeekDisplayRef.current = null;
+
+        if (userPausedRef.current) {
+          settlePausedPlayback();
+          return;
+        }
+        if (activePreferTranscodeRef.current && (hlsSuspendedRef.current || hlsReleasedForPauseRef.current)) {
+          settlePausedPlayback();
+          return;
+        }
 
         if (retryCurrentStreamRef.current("plyr_error")) {
           return;
@@ -3373,7 +3592,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         plyrRef.current = null;
       }
     };
-  }, [canInitializePlyr, emitTimelineRefreshEvents]);
+  }, [canInitializePlyr, emitTimelineRefreshEvents, settlePausedPlayback]);
 
   const handleUploadSubtitle = useCallback(
     async (file: File | null) => {
@@ -3472,6 +3691,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       let releaseOnLoadedMetadata = false;
       try {
         seekingSwitchingRef.current = true;
+        userPausedRef.current = false;
         if (activePreferTranscode) {
           const nativeTarget = clamped - transcodeStartOffsetRef.current;
           const loadedDuration = hlsLoadedDurationSecondsRef.current;
@@ -3590,21 +3810,69 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     if (!video) return;
     const isPaused = video.paused;
     if (isPaused) {
+      userPausedRef.current = false;
+      if (activePreferTranscode && (hlsSuspendedRef.current || hlsReleasedForPauseRef.current) && infoHash && selectedFileOption) {
+        const resumeAt = Math.max(0, resolveAbsoluteCurrent());
+        const startBytes = estimateTranscodeStartBytes(resumeAt, totalDurationSecondsRef.current, selectedFileOption.length);
+        const nextUrl = buildPlayerTransmissionHLSPlaylistURL(
+          infoHash,
+          selectedFileOption.index,
+          `resume-${selectedFileOption.index}-${Math.floor(resumeAt * 10)}-${Date.now()}`,
+          buildHLSPlaylistOptions({ startSeconds: resumeAt, startBytes })
+        );
+        setTranscodeStartOffsetSeconds(resumeAt);
+        transcodeStartOffsetRef.current = resumeAt;
+        pendingTranscodeSeekDisplayRef.current = resumeAt > 0 ? { target: resumeAt, at: Date.now() } : null;
+        pendingResumeTargetRef.current = resumeAt;
+        autoResumeWhenPlayableRef.current = true;
+        hlsSuspendedRef.current = false;
+        hlsReleasedForPauseRef.current = false;
+        activeStreamConfigKeyRef.current = buildPlaybackStreamConfigKey({
+          fileIndex: selectedFileOption.index,
+          preferTranscode: true,
+          audioTrackIndex: selectedAudioTrackQueryIndexRef.current,
+          outputResolution: transcodeOutputResolution,
+          prebufferSeconds: transcodePrebufferSeconds
+        });
+        setPlaybackLoading(true);
+        setPlayerStatus("buffering");
+        setIsVideoPaused(false);
+        applyStreamUrl(nextUrl, { autoplay: true, resumeAt: 0 });
+        return;
+      }
+      userPausedRef.current = false;
       setIsVideoPaused(false);
       attemptResumePlayback("toggle_play");
       return;
     }
+    userPausedRef.current = true;
     autoResumeWhenPlayableRef.current = false;
     pendingResumeTargetRef.current = null;
     setPlaybackLoading(false);
     if (player?.pause) {
       setIsVideoPaused(true);
       player.pause();
+      if (activePreferTranscode && !hlsReleasedForPauseRef.current) {
+        releaseCurrentHLSRef.current("manual_pause");
+      }
       return;
     }
     setIsVideoPaused(true);
     video.pause();
-  }, [attemptResumePlayback]);
+    if (activePreferTranscode && !hlsReleasedForPauseRef.current) {
+      releaseCurrentHLSRef.current("manual_pause");
+    }
+  }, [
+    activePreferTranscode,
+    applyStreamUrl,
+    attemptResumePlayback,
+    buildHLSPlaylistOptions,
+    infoHash,
+    resolveAbsoluteCurrent,
+    selectedFileOption,
+    transcodeOutputResolution,
+    transcodePrebufferSeconds
+  ]);
 
   const handleStageClickTogglePlayback = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null;
@@ -3836,6 +4104,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
   const handleResumePromptContinue = useCallback(async () => {
     setResumePromptOpened(false);
+    userPausedRef.current = false;
     attemptResumePlayback("resume_prompt_click", resumePromptSeconds);
     if (resumePromptFileIndex >= 0 && resumePromptFileIndex !== selectedFileIndexRef.current) {
       await handleSelectFile(resumePromptFileIndex, "panel", {

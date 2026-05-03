@@ -1,11 +1,11 @@
 {
   "app": {
     "title": "bitmagnet",
-    "subtitle": "A modern hub for torrent discovery, media browsing, and ops"
+    "subtitle": "Media playback and search workspace"
   },
   "footer": {
-    "copyright": "© 2026 bitmagnet. All rights reserved.",
-    "tagline": "Built for media discovery, cached playback, and automated operations."
+    "copyright": "© 2026 bitmagnet Private Deployment Edition. All rights reserved.",
+    "tagline": "Built for media search, cached playback, and library management."
   },
   "nav": {
     "home": "Home",

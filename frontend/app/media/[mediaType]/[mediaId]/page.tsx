@@ -27,8 +27,8 @@ export async function generateMetadata({ params }: MediaDetailRouteProps): Promi
 
   return buildMetadata({
     title: `${mediaTypeLabel(mediaType)}详情 ${resolved.mediaId.slice(0, 10)}`,
-    description: "查看影视详情、外部站点映射与种子快照信息。",
-    keywords: ["bitmagnet", "比特磁铁", "影视详情", "种子快照", "TMDB", "IMDb", "豆瓣"],
+    description: "查看影视库的详情、外部站点映射与种子快照信息。",
+    keywords: ["bitmagnet", "比特磁铁", "影视库", "影视详情", "种子快照", "TMDB", "IMDb", "豆瓣"],
     path: `/media/${mediaType}/${resolved.mediaId}`
   });
 }

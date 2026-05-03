@@ -4,8 +4,8 @@ import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
   title: "影视",
-  description: "影视分类入口，已按目录路由拆分为电影、剧集与动画。",
-  keywords: ["bitmagnet", "比特磁铁", "影视", "电影", "剧集", "动画"],
+  description: "影视库分类入口，按电影、剧集与动画组织播放和检索体验。",
+  keywords: ["bitmagnet", "比特磁铁", "影视库", "电影", "剧集", "动画"],
   path: "/media"
 });
 

@@ -13,8 +13,8 @@ export async function generateMetadata({ params }: TorrentDetailRouteProps): Pro
 
   return buildMetadata({
     title: `种子详情 ${resolved.infoHash.slice(0, 10)}`,
-    description: "查看种子详情、文件信息与标签元数据。",
-    keywords: ["bitmagnet", "比特磁铁", "种子详情", "InfoHash", "文件列表"],
+    description: "查看影视库中的种子详情、文件信息、标签元数据与播放入口。",
+    keywords: ["bitmagnet", "比特磁铁", "种子详情", "影视库", "InfoHash", "在线播放"],
     path: `/torrents/${resolved.infoHash}`
   });
 }

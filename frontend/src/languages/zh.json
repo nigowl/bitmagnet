@@ -1,11 +1,11 @@
 {
   "app": {
     "title": "bitmagnet（比特磁铁）",
-    "subtitle": "更现代的种子发现、影视浏览与下载运维平台"
+    "subtitle": "影视播放与检索工作台"
   },
   "footer": {
-    "copyright": "© 2026 bitmagnet（比特磁铁）保留所有权利",
-    "tagline": "为影视资源检索、缓存播放与自动化运维打造"
+    "copyright": "© 2026 bitmagnet（比特磁铁）私有部署版，保留所有权利",
+    "tagline": "为影视检索、缓存播放与媒体管理打造"
   },
   "nav": {
     "home": "首页",

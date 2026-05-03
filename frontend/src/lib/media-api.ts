@@ -584,6 +584,42 @@ export function buildPlayerTransmissionHLSPlaylistURL(
   return `${apiBaseURL}/api/media/player/transmission/hls/playlist?${query.toString()}`;
 }
 
+export function buildPlayerTransmissionHLSStopURL(
+  infoHash: string,
+  fileIndex: number,
+  options?: { audioTrackIndex?: number; outputResolution?: number }
+): string {
+  const query = new URLSearchParams({
+    infoHash: infoHash.trim().toLowerCase(),
+    fileIndex: String(fileIndex)
+  });
+  if (Number.isInteger(options?.audioTrackIndex) && (options?.audioTrackIndex || -1) >= 0) {
+    query.set("audioTrack", String(Math.max(0, Math.floor(options?.audioTrackIndex || 0))));
+  }
+  if (Number.isInteger(options?.outputResolution) && (options?.outputResolution || 0) > 0) {
+    query.set("resolution", String(Math.max(1, Math.floor(options?.outputResolution || 0))));
+  }
+  return `${apiBaseURL}/api/media/player/transmission/hls/stop?${query.toString()}`;
+}
+
+export function buildPlayerTransmissionHLSHeartbeatURL(
+  infoHash: string,
+  fileIndex: number,
+  options?: { audioTrackIndex?: number; outputResolution?: number }
+): string {
+  const query = new URLSearchParams({
+    infoHash: infoHash.trim().toLowerCase(),
+    fileIndex: String(fileIndex)
+  });
+  if (Number.isInteger(options?.audioTrackIndex) && (options?.audioTrackIndex || -1) >= 0) {
+    query.set("audioTrack", String(Math.max(0, Math.floor(options?.audioTrackIndex || 0))));
+  }
+  if (Number.isInteger(options?.outputResolution) && (options?.outputResolution || 0) > 0) {
+    query.set("resolution", String(Math.max(1, Math.floor(options?.outputResolution || 0))));
+  }
+  return `${apiBaseURL}/api/media/player/transmission/hls/heartbeat?${query.toString()}`;
+}
+
 export function buildPlayerTransmissionThumbnailURL(
   infoHash: string,
   fileIndex: number,
