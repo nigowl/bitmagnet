@@ -298,7 +298,7 @@ func (s *service) List(ctx context.Context, input ListInput) (ListResult, error)
 	}
 
 	baseQuery := db.Session(&gorm.Session{})
-	runtimeOptions := s.loadRuntimeOptions(ctx, baseQuery)
+	runtimeOptions := s.loadRuntimeOptions(ctx, q.Torrent.WithContext(ctx).UnderlyingDB().Session(&gorm.Session{NewDB: true}))
 
 	var totalCount int64
 	if err := baseQuery.Count(&totalCount).Error; err != nil {

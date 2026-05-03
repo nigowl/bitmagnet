@@ -1028,6 +1028,7 @@
       "resumePromptRestart": "从头播放",
       "streamingModeHint": "边下边播",
       "downloadedLabel": "已下载",
+      "bufferAheadLabel": "缓冲时间",
       "contiguousLabel": "连续可播",
       "fitModeContain": "画面模式：等比完整显示（点击切换）",
       "fitModeCover": "画面模式：铺满裁切（点击切换）",

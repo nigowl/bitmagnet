@@ -357,12 +357,14 @@ func (s *service) PlayerTransmissionClearCache(
 	}
 	if len(ids) == 0 {
 		s.syncMediaCacheFlagsForInfoHashes(ctx, db, settings, infoHashes, map[string]playerTransmissionRPCTorrent{})
+		s.playerTransmissionForgetSelectedFiles(infoHashes)
 		return PlayerTransmissionClearCacheResult{Removed: 0}, nil
 	}
 	if err := s.playerTransmissionRemoveTorrents(ctx, settings, ids); err != nil {
 		return PlayerTransmissionClearCacheResult{}, err
 	}
 	s.syncMediaCacheFlagsForInfoHashes(ctx, db, settings, infoHashes, map[string]playerTransmissionRPCTorrent{})
+	s.playerTransmissionForgetSelectedFiles(infoHashes)
 	return PlayerTransmissionClearCacheResult{Removed: len(ids)}, nil
 }
 
@@ -778,6 +780,7 @@ func (s *service) syncMediaCacheFlagsForInfoHashes(
 		_ = db.WithContext(ctx).
 			Table(model.TableNameMediaEntry).
 			Where("id = ?", mediaID).
+			Where("has_cache IS DISTINCT FROM ? OR cache_updated_at IS NULL", hasCache).
 			Updates(map[string]any{
 				"has_cache":        hasCache,
 				"cache_updated_at": now,
@@ -1528,6 +1531,15 @@ func (s *service) playerTransmissionRememberedSelectedFile(infoHash string) (int
 		return 0, false
 	}
 	return index, true
+}
+
+func (s *service) playerTransmissionForgetSelectedFiles(infoHashes []string) {
+	if s == nil {
+		return
+	}
+	for _, infoHash := range normalizePlayerInfoHashList(infoHashes) {
+		s.playerSelections.Delete(infoHash)
+	}
 }
 
 func playerTransmissionBuildStatus(

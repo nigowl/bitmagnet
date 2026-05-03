@@ -1028,6 +1028,7 @@
       "resumePromptRestart": "Start Over",
       "streamingModeHint": "Stream while downloading",
       "downloadedLabel": "Downloaded",
+      "bufferAheadLabel": "Buffered",
       "contiguousLabel": "Contiguous",
       "fitModeContain": "Fit mode: contain (click to switch)",
       "fitModeCover": "Fit mode: cover (click to switch)",

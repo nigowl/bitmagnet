@@ -185,6 +185,7 @@ const BOOTSTRAP_MAX_WAIT_MS = 120000;
 const PLAYBACK_PROGRESS_KEY_PREFIX = "bitmagnet-player-progress-v1";
 const PLAYER_GLOBAL_PREFS_KEY_PREFIX = "bitmagnet-player-global-prefs-v1";
 const PLAYER_TRACK_PREFS_KEY_PREFIX = "bitmagnet-player-track-prefs-v1";
+const PLAYER_FILE_SELECTION_KEY_PREFIX = "bitmagnet-player-file-selection-v1";
 const TRANSCODE_PREBUFFER_DEFAULT_SECONDS = 60;
 const TRANSCODE_PREBUFFER_MAX_WAIT_MS = 45000;
 const STREAM_RETRY_MAX_ATTEMPTS = 5;
@@ -242,6 +243,12 @@ type PlaybackProgressRecord = {
   updatedAt: number;
 };
 
+type PlaybackFileSelectionRecord = {
+  infoHash: string;
+  fileIndex: number;
+  updatedAt: number;
+};
+
 type SubtitleStylePreset = {
   scale: number;
   textColor: string;
@@ -275,9 +282,59 @@ function buildPlayerGlobalPreferencesStorageKey(userId?: number): string {
   return `${PLAYER_GLOBAL_PREFS_KEY_PREFIX}:${viewer}`;
 }
 
-function buildPlayerTrackPreferencesStorageKey(infoHash: string, userId?: number): string {
+function buildPlayerTrackPreferencesStorageKey(infoHash: string, fileIndex: number, userId?: number): string {
   const viewer = Number.isInteger(userId) && (userId || 0) > 0 ? String(userId) : "guest";
-  return `${PLAYER_TRACK_PREFS_KEY_PREFIX}:${viewer}:${infoHash}`;
+  return `${PLAYER_TRACK_PREFS_KEY_PREFIX}:${viewer}:${infoHash}:${fileIndex}`;
+}
+
+function buildPlayerFileSelectionStorageKey(infoHash: string, userId?: number): string {
+  const viewer = Number.isInteger(userId) && (userId || 0) > 0 ? String(userId) : "guest";
+  return `${PLAYER_FILE_SELECTION_KEY_PREFIX}:${viewer}:${infoHash}`;
+}
+
+function readPlaybackProgressRecord(infoHash: string, userId?: number): PlaybackProgressRecord | null {
+  if (typeof window === "undefined" || !infoHash) return null;
+  try {
+    const raw = window.localStorage.getItem(buildPlaybackProgressStorageKey(infoHash, userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PlaybackProgressRecord;
+    if (!parsed || parsed.infoHash !== infoHash) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function readRememberedPlaybackFileIndex(infoHash: string, userId?: number): number {
+  if (typeof window === "undefined" || !infoHash) return -1;
+  try {
+    const raw = window.localStorage.getItem(buildPlayerFileSelectionStorageKey(infoHash, userId));
+    if (raw) {
+      const parsed = JSON.parse(raw) as PlaybackFileSelectionRecord;
+      const fileIndex = Number.isInteger(parsed?.fileIndex) ? Number(parsed.fileIndex) : -1;
+      if (parsed?.infoHash === infoHash && fileIndex >= 0) {
+        return fileIndex;
+      }
+    }
+  } catch {
+    // fall through to playback progress
+  }
+  const progress = readPlaybackProgressRecord(infoHash, userId);
+  return Number.isInteger(progress?.fileIndex) && (progress?.fileIndex ?? -1) >= 0 ? Number(progress?.fileIndex) : -1;
+}
+
+function writeRememberedPlaybackFileIndex(infoHash: string, userId: number | undefined, fileIndex: number): void {
+  if (typeof window === "undefined" || !infoHash || !Number.isInteger(fileIndex) || fileIndex < 0) return;
+  try {
+    const payload: PlaybackFileSelectionRecord = {
+      infoHash,
+      fileIndex,
+      updatedAt: Date.now()
+    };
+    window.localStorage.setItem(buildPlayerFileSelectionStorageKey(infoHash, userId), JSON.stringify(payload));
+  } catch {
+    // ignore storage quota/privacy failures
+  }
 }
 
 function normalizePlaybackRatePreference(raw: number): number {
@@ -913,13 +970,16 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const inlineSettingsRef = useRef<HTMLDivElement | null>(null);
   const plyrRef = useRef<PlyrLike | null>(null);
   const pollTimerRef = useRef<number | null>(null);
+  const statusPollInFlightRef = useRef(false);
   const transcodeSeekInFlightRef = useRef(false);
   const pendingTranscodeSeekDisplayRef = useRef<{ target: number; at: number } | null>(null);
   const isSeekingDragRef = useRef(false);
   const subtitleBlobUrlsRef = useRef<string[]>([]);
   const initializedInfoHashRef = useRef("");
   const subtitleLoadTokenRef = useRef(0);
+  const audioTrackLoadTokenRef = useRef(0);
   const selectedFileIndexRef = useRef(-1);
+  const fileSwitchingRef = useRef(false);
   const streamUrlRef = useRef("");
   const streamRetryRef = useRef<{ key: string; attempts: number }>({ key: "", attempts: 0 });
   const streamRetryTimerRef = useRef<number | null>(null);
@@ -1000,6 +1060,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const [diagnosticsOpened, setDiagnosticsOpened] = useState(false);
   const [playbackLoading, setPlaybackLoading] = useState(false);
   const [transcodePrebufferSeconds, setTranscodePrebufferSeconds] = useState(TRANSCODE_PREBUFFER_DEFAULT_SECONDS);
+  const [bufferedAheadSeconds, setBufferedAheadSeconds] = useState(0);
   const [prebufferBufferedAheadSeconds, setPrebufferBufferedAheadSeconds] = useState(0);
   const [prebufferWaiting, setPrebufferWaiting] = useState(false);
 
@@ -1087,6 +1148,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
   useEffect(() => {
     subtitleLoadTokenRef.current += 1;
+    audioTrackLoadTokenRef.current += 1;
     streamRetryRef.current = { key: "", attempts: 0 };
     lastStreamRetryAtRef.current = 0;
     lastAutoRecoveryAtRef.current = 0;
@@ -1096,6 +1158,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     setSubtitleTrackSrcMap({});
     setSelectedSubtitleId("none");
     setServerAudioTracks([]);
+    setAudioTrackOptions([]);
+    setAudioTrackSelectionAvailable(false);
     setSelectedAudioTrackId("");
   }, [infoHash]);
 
@@ -1174,12 +1238,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
   useEffect(() => {
     trackPreferencesHydratedKeyRef.current = "";
-    if (!infoHash) {
+    if (!infoHash || selectedFileIndex < 0) {
       setSelectedSubtitleId("none");
       setSelectedAudioTrackId("");
       return;
     }
-    const key = buildPlayerTrackPreferencesStorageKey(infoHash, user?.id);
+    const key = buildPlayerTrackPreferencesStorageKey(infoHash, selectedFileIndex, user?.id);
     try {
       const raw = window.localStorage.getItem(key);
       if (raw) {
@@ -1196,11 +1260,11 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     } finally {
       trackPreferencesHydratedKeyRef.current = key;
     }
-  }, [infoHash, user?.id]);
+  }, [infoHash, selectedFileIndex, user?.id]);
 
   useEffect(() => {
-    if (!infoHash) return;
-    const key = buildPlayerTrackPreferencesStorageKey(infoHash, user?.id);
+    if (!infoHash || selectedFileIndex < 0) return;
+    const key = buildPlayerTrackPreferencesStorageKey(infoHash, selectedFileIndex, user?.id);
     if (trackPreferencesHydratedKeyRef.current !== key) return;
     const payload: PlayerTrackPreferences = {
       selectedSubtitleId,
@@ -1211,7 +1275,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     } catch {
       // ignore storage failures
     }
-  }, [infoHash, selectedAudioTrackId, selectedSubtitleId, user?.id]);
+  }, [infoHash, selectedAudioTrackId, selectedFileIndex, selectedSubtitleId, user?.id]);
 
   const subtitleTrackOptions = useMemo(
     () => [
@@ -1272,8 +1336,15 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     [selectedAudioTrackId, selectedFileOption, serverAudioTracks, transcodeOutputResolution]
   );
 
+  const selectedAudioTrackQueryIndex = useMemo(() => {
+    if (!selectedAudioTrackId.startsWith("srv:")) return -1;
+    const parsed = Number(selectedAudioTrackId.slice(4));
+    if (!Number.isInteger(parsed) || parsed < 0) return -1;
+    return serverAudioTracks.some((track) => track.index === parsed) ? parsed : -1;
+  }, [selectedAudioTrackId, serverAudioTracks]);
+
   const buildTranscodeStreamOptions = useCallback(
-    (overrides?: { startSeconds?: number; startBytes?: number }) => {
+    (overrides?: { audioTrackIndex?: number; startSeconds?: number; startBytes?: number }) => {
       const options: {
         transcode: true;
         audioTrackIndex: number;
@@ -1282,7 +1353,10 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         startBytes?: number;
       } = {
         transcode: true,
-        audioTrackIndex: selectedAudioTrackQueryIndexRef.current
+        audioTrackIndex:
+          Number.isInteger(overrides?.audioTrackIndex) && (overrides?.audioTrackIndex ?? -1) >= -1
+            ? Math.max(-1, Number(overrides?.audioTrackIndex))
+            : selectedAudioTrackQueryIndex
       };
       if (transcodeOutputResolution > 0) {
         options.outputResolution = transcodeOutputResolution;
@@ -1295,7 +1369,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       }
       return options;
     },
-    [transcodeOutputResolution]
+    [selectedAudioTrackQueryIndex, transcodeOutputResolution]
   );
 
   const activePreferTranscode = useMemo(
@@ -1324,10 +1398,15 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
   const totalDurationSeconds = useMemo(() => {
     const meta = detail?.runtimeSeconds || 0;
-    const probed = statusSnapshot?.selectedFileDurationSeconds || 0;
+    const probed =
+      statusSnapshot?.selectedFileIndex === selectedFileIndex
+        ? statusSnapshot?.selectedFileDurationSeconds || 0
+        : 0;
     const media = Number.isFinite(videoDuration) ? Math.max(0, videoDuration) : 0;
-    return Math.max(meta, probed, media);
-  }, [detail?.runtimeSeconds, statusSnapshot?.selectedFileDurationSeconds, videoDuration]);
+    if (probed > 0) return probed;
+    if (media > 0) return media;
+    return meta;
+  }, [detail?.runtimeSeconds, selectedFileIndex, statusSnapshot?.selectedFileDurationSeconds, statusSnapshot?.selectedFileIndex, videoDuration]);
 
   const canInitializePlyr =
     !bootstrapLoading &&
@@ -1362,6 +1441,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     return 0;
   }, []);
 
+  const refreshBufferedAheadSeconds = useCallback(() => {
+    const next = resolveBufferedAheadSeconds();
+    setBufferedAheadSeconds((current) => (Math.abs(current - next) < 0.25 ? current : next));
+    return next;
+  }, [resolveBufferedAheadSeconds]);
+
   const attemptResumePlayback = useCallback((reason: string, targetSeconds?: number) => {
     const video = videoRef.current;
     if (!video) return;
@@ -1374,9 +1459,13 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
     const player = plyrRef.current;
     const playResult = player?.play ? player.play() : video.play();
-    void Promise.resolve(playResult).catch(() => {
-      logInfo("playback", "waiting for playable data", { reason, targetSeconds: pendingTarget });
-      if (video.paused && video.readyState >= 2) {
+    void Promise.resolve(playResult).catch((error) => {
+      const errorName = error instanceof DOMException ? error.name : "";
+      logInfo("playback", "waiting for playable data", { reason, targetSeconds: pendingTarget, errorName });
+      if (errorName === "AbortError") {
+        return;
+      }
+      if (video.paused && video.readyState >= 2 && errorName === "NotAllowedError") {
         autoResumeWhenPlayableRef.current = false;
         pendingResumeTargetRef.current = null;
         setPlaybackLoading(false);
@@ -1398,23 +1487,14 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   }, [infoHash, selectedFileIndex]);
 
   useEffect(() => {
-    if (!selectedAudioTrackId.startsWith("srv:")) {
-      selectedAudioTrackQueryIndexRef.current = -1;
-      return;
-    }
-    const parsed = Number(selectedAudioTrackId.slice(4));
-    if (!Number.isInteger(parsed) || parsed < 0) {
-      selectedAudioTrackQueryIndexRef.current = -1;
-      return;
-    }
-    const existsOnServer = serverAudioTracks.some((track) => track.index === parsed);
-    selectedAudioTrackQueryIndexRef.current = existsOnServer ? parsed : -1;
-  }, [selectedAudioTrackId, serverAudioTracks]);
+    selectedAudioTrackQueryIndexRef.current = selectedAudioTrackQueryIndex;
+  }, [selectedAudioTrackQueryIndex]);
 
   useEffect(() => {
     streamUrlRef.current = streamUrl;
     prebufferWaitRef.current = false;
     setPrebufferWaiting(false);
+    setBufferedAheadSeconds(0);
     setPrebufferBufferedAheadSeconds(0);
   }, [streamUrl]);
 
@@ -1579,14 +1659,26 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
   const loadServerAudioTracks = useCallback(
     async (fileIndex: number) => {
+      const runToken = audioTrackLoadTokenRef.current + 1;
+      audioTrackLoadTokenRef.current = runToken;
+      selectedAudioTrackQueryIndexRef.current = -1;
+      setServerAudioTracks([]);
+      setAudioTrackOptions([]);
+      setAudioTrackSelectionAvailable(false);
+
       if (!infoHash || !Number.isInteger(fileIndex) || fileIndex < 0) {
-        setServerAudioTracks([]);
         return;
       }
       try {
         const tracks = await fetchPlayerTransmissionAudioTracks(infoHash, fileIndex);
+        if (audioTrackLoadTokenRef.current !== runToken || selectedFileIndexRef.current !== fileIndex) {
+          return;
+        }
         setServerAudioTracks(tracks);
       } catch {
+        if (audioTrackLoadTokenRef.current !== runToken || selectedFileIndexRef.current !== fileIndex) {
+          return;
+        }
         setServerAudioTracks([]);
       }
     },
@@ -1710,6 +1802,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   }, [selectedAudioTrackId]);
 
   const applyStreamUrl = useCallback((url: string, options?: { resumeAt?: number; autoplay?: boolean; recovery?: boolean }) => {
+    if (!options?.recovery && streamRetryTimerRef.current !== null) {
+      window.clearTimeout(streamRetryTimerRef.current);
+      streamRetryTimerRef.current = null;
+      streamRetryRef.current = { key: "", attempts: 0 };
+    }
+    streamUrlRef.current = url;
     streamApplyOptionsRef.current = options || {};
     setStreamUrl(url);
   }, []);
@@ -1735,7 +1833,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     lastStreamRetryAtRef.current = now;
     const resumeAt = Math.max(0, resolveAbsoluteCurrent());
     const preferTranscode = activePreferTranscodeRef.current;
-    const cacheTag = `retry-${index}-transcode-${preferTranscode ? "tc" : "direct"}-${attempt}-${now}`;
+    const mode = preferTranscode ? "transcode" : "direct";
+    const cacheTag = `retry-${index}-${mode}-${attempt}-${now}`;
     const selected = fileOptions.find((item) => item.index === index);
     const startBytes =
       preferTranscode && selected
@@ -1782,7 +1881,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       maxAttempts: STREAM_RETRY_MAX_ATTEMPTS,
       delayMs,
       resumeAt,
-      mode: "transcode",
+      mode,
       preferTranscode
     });
     return true;
@@ -2065,15 +2164,39 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           continue;
         }
 
-        setStatusSnapshot(result.status);
-        applyFileOptions(options);
+        let activeResult: { selectedFileIndex: number; status: PlayerTransmissionStatusResponse } = result;
+        let activeOptions = options;
+        const requestedIndex =
+          Number.isInteger(pendingRequestedFileIndexRef.current) && (pendingRequestedFileIndexRef.current ?? -1) >= 0
+            ? Number(pendingRequestedFileIndexRef.current)
+            : -1;
+        const rememberedIndex = readRememberedPlaybackFileIndex(infoHash, user?.id);
+        const preferredIndex = [requestedIndex, rememberedIndex, activeResult.selectedFileIndex]
+          .find((index) => Number.isInteger(index) && activeOptions.some((item) => item.index === index)) ?? -1;
 
-        const selected = options.find((item) => item.index === result.selectedFileIndex) || options[0]!;
+        if (preferredIndex >= 0 && preferredIndex !== activeResult.selectedFileIndex) {
+          activeResult = await selectPlayerTransmissionFile(infoHash, preferredIndex);
+          if (bootstrapRunTokenRef.current !== runToken) return;
+          activeOptions = buildPlaybackFileOptions(activeResult.status.files || []);
+          if (activeOptions.length === 0) throw new Error(t("media.player.noVideoFiles"));
+        }
+
+        setStatusSnapshot(activeResult.status);
+        applyFileOptions(activeOptions);
+
+        const selected =
+          activeOptions.find((item) => item.index === preferredIndex) ||
+          activeOptions.find((item) => item.index === activeResult.selectedFileIndex) ||
+          activeOptions[0]!;
         setSelectedFileIndex(selected.index);
         selectedFileIndexRef.current = selected.index;
-        statusSnapshotRef.current = result.status;
+        statusSnapshotRef.current = activeResult.status;
+        writeRememberedPlaybackFileIndex(infoHash, user?.id, selected.index);
+        if (requestedIndex === selected.index) {
+          pendingRequestedFileIndexRef.current = null;
+        }
 
-        const preferTranscode = resolvePreferTranscode(selected, result.status);
+        const preferTranscode = resolvePreferTranscode(selected, activeResult.status);
         const mode = preferTranscode ? "transcode" : "direct";
         const nextUrl = buildPlayerTransmissionStreamURL(
           infoHash,
@@ -2090,7 +2213,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         setPlayerStatus("ready");
         logInfo("bootstrap", "player bootstrap complete", {
           selectedFileIndex: selected.index,
-          files: options.length,
+          files: activeOptions.length,
           mode,
           preferTranscode
         });
@@ -2108,56 +2231,87 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         setBootstrapLoading(false);
       }
     }
-  }, [applyFileOptions, applyStreamUrl, buildTranscodeStreamOptions, infoHash, logError, logInfo, resolvePreferTranscode, t]);
+  }, [applyFileOptions, applyStreamUrl, buildTranscodeStreamOptions, infoHash, logError, logInfo, resolvePreferTranscode, t, user?.id]);
 
   const handleSelectFile = useCallback(
-    async (nextIndex: number, source: "panel" | "plyr") => {
+    async (
+      nextIndex: number,
+      source: "panel" | "plyr",
+      options?: { resumeAt?: number; autoplay?: boolean }
+    ) => {
       if (!infoHash || !Number.isInteger(nextIndex) || nextIndex < 0) return;
       if (selectedFileIndexRef.current === nextIndex) return;
 
+      fileSwitchingRef.current = true;
       setFileSwitching(true);
       try {
-        const resumeAt = Math.max(0, Number(videoRef.current?.currentTime || 0));
+        const resumeAt = Math.max(0, Number(options?.resumeAt || 0));
+        const autoplay = options?.autoplay ?? true;
         const result = await selectPlayerTransmissionFile(infoHash, nextIndex);
-        const options = buildPlaybackFileOptions(result.status.files || []);
-        if (options.length === 0) throw new Error(t("media.player.noVideoFiles"));
-        applyFileOptions(options);
+        const nextOptions = buildPlaybackFileOptions(result.status.files || []);
+        if (nextOptions.length === 0) throw new Error(t("media.player.noVideoFiles"));
+        applyFileOptions(nextOptions);
         setStatusSnapshot(result.status);
         statusSnapshotRef.current = result.status;
 
         const selected =
-          options.find((item) => item.index === nextIndex) ||
-          options.find((item) => item.index === result.selectedFileIndex) ||
-          options[0];
+          nextOptions.find((item) => item.index === nextIndex) ||
+          nextOptions.find((item) => item.index === result.selectedFileIndex) ||
+          nextOptions[0];
         if (!selected) throw new Error(t("media.player.noVideoFiles"));
 
         setSelectedFileIndex(selected.index);
         selectedFileIndexRef.current = selected.index;
+        trackPreferencesHydratedKeyRef.current = "";
+        setSelectedSubtitleId("none");
+        setSelectedAudioTrackId("");
+        setVideoDuration(0);
+        totalDurationSecondsRef.current = 0;
+        selectedAudioTrackQueryIndexRef.current = -1;
+        audioTrackLoadTokenRef.current += 1;
+        setServerAudioTracks([]);
+        setAudioTrackOptions([]);
+        setAudioTrackSelectionAvailable(false);
+        writeRememberedPlaybackFileIndex(infoHash, user?.id, selected.index);
 
-        const preferTranscode = resolvePreferTranscode(selected, result.status);
+        const preferTranscode = shouldPreferTranscodeForPlayback(
+          selected,
+          result.status,
+          transcodeOutputResolution,
+          "",
+          []
+        );
+        const durationForStartBytes = Math.max(0, result.status.selectedFileDurationSeconds || 0);
+        const startBytes =
+          preferTranscode && resumeAt > 0
+            ? estimateTranscodeStartBytes(resumeAt, durationForStartBytes, selected.length)
+            : 0;
 
         const nextUrl = buildPlayerTransmissionStreamURL(
           infoHash,
           selected.index,
-          String(Date.now()),
-          preferTranscode ? buildTranscodeStreamOptions() : undefined
+          `${selected.index}-${preferTranscode ? "transcode" : "direct"}-${preferTranscode ? "tc" : "direct"}`,
+          preferTranscode ? buildTranscodeStreamOptions({ audioTrackIndex: -1, startSeconds: resumeAt, startBytes }) : undefined
         );
-        setTranscodeStartOffsetSeconds(0);
-        transcodeStartOffsetRef.current = 0;
-        pendingTranscodeSeekDisplayRef.current = null;
-        pendingResumeTargetRef.current = preferTranscode ? 0 : resumeAt;
-        autoResumeWhenPlayableRef.current = true;
+        setTranscodeStartOffsetSeconds(preferTranscode ? resumeAt : 0);
+        transcodeStartOffsetRef.current = preferTranscode ? resumeAt : 0;
+        pendingTranscodeSeekDisplayRef.current =
+          preferTranscode && resumeAt > 0 ? { target: resumeAt, at: Date.now() } : null;
+        pendingResumeTargetRef.current = resumeAt;
+        autoResumeWhenPlayableRef.current = autoplay;
+        setAbsoluteCurrentSeconds(resumeAt);
         setPlaybackLoading(true);
         setPlayerStatus("buffering");
         applyStreamUrl(nextUrl, {
-          autoplay: true,
+          autoplay,
           resumeAt: preferTranscode ? 0 : resumeAt
         });
 
         logInfo("stream", "playback file switched", {
           source,
           selectedFileIndex: selected.index,
-          preferTranscode
+          preferTranscode,
+          resumeAt
         });
       } catch (error) {
         const message = toErrorMessage(error, t("media.player.playbackError"));
@@ -2166,10 +2320,11 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         setPlayerStatus("error");
         logError("stream", "failed to switch playback file", { message, source, nextIndex });
       } finally {
+        fileSwitchingRef.current = false;
         setFileSwitching(false);
       }
     },
-    [applyFileOptions, applyStreamUrl, buildTranscodeStreamOptions, infoHash, logError, logInfo, resolvePreferTranscode, t]
+    [applyFileOptions, applyStreamUrl, buildTranscodeStreamOptions, infoHash, logError, logInfo, t, transcodeOutputResolution, user?.id]
   );
 
   useEffect(() => {
@@ -2200,32 +2355,18 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
   useEffect(() => {
     if (!infoHash) return;
-    const storageKey = buildPlaybackProgressStorageKey(infoHash, user?.id);
-    try {
-      const raw = window.localStorage.getItem(storageKey);
-      if (!raw) {
-        setResumePromptSeconds(0);
-        setResumePromptFileIndex(-1);
-        setResumePromptOpened(false);
-        return;
-      }
-      const record = JSON.parse(raw) as PlaybackProgressRecord;
-      const seconds = Number.isFinite(record?.seconds) ? Math.max(0, Number(record.seconds)) : 0;
-      const fileIndex = Number.isInteger(record?.fileIndex) ? Number(record.fileIndex) : -1;
-      if (seconds < 15) {
-        setResumePromptSeconds(0);
-        setResumePromptFileIndex(-1);
-        setResumePromptOpened(false);
-        return;
-      }
-      setResumePromptSeconds(seconds);
-      setResumePromptFileIndex(fileIndex);
-      setResumePromptOpened(true);
-    } catch {
+    const record = readPlaybackProgressRecord(infoHash, user?.id);
+    const seconds = Number.isFinite(record?.seconds) ? Math.max(0, Number(record?.seconds)) : 0;
+    const fileIndex = Number.isInteger(record?.fileIndex) ? Number(record?.fileIndex) : -1;
+    if (seconds < 15) {
       setResumePromptSeconds(0);
       setResumePromptFileIndex(-1);
       setResumePromptOpened(false);
+      return;
     }
+    setResumePromptSeconds(seconds);
+    setResumePromptFileIndex(fileIndex);
+    setResumePromptOpened(true);
   }, [infoHash, user?.id]);
 
   useEffect(() => {
@@ -2253,10 +2394,16 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
   useEffect(() => {
     if (!bootstrapped || !infoHash) return;
+    let cancelled = false;
 
     const runPoll = async () => {
+      if (cancelled || document.hidden || fileSwitchingRef.current || statusPollInFlightRef.current) {
+        return;
+      }
+      statusPollInFlightRef.current = true;
       try {
         const next = await fetchPlayerTransmissionStatus(infoHash);
+        if (cancelled || fileSwitchingRef.current) return;
         setStatusSnapshot(next);
         statusSnapshotRef.current = next;
         const options = buildPlaybackFileOptions(next.files || []);
@@ -2268,7 +2415,10 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           selectedFileIndexRef.current = next.selectedFileIndex;
         }
       } catch (error) {
+        if (cancelled) return;
         logWarn("status", "poll status failed", { message: toErrorMessage(error, "poll failed") });
+      } finally {
+        statusPollInFlightRef.current = false;
       }
     };
 
@@ -2278,6 +2428,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     }, STATUS_POLL_MS);
 
     return () => {
+      cancelled = true;
       if (pollTimerRef.current !== null) {
         window.clearInterval(pollTimerRef.current);
         pollTimerRef.current = null;
@@ -2402,7 +2553,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
     const maybeStartPlaybackAfterPrebuffer = () => {
       if (!prebufferWaitRef.current) return;
-      const bufferedAhead = resolveBufferedAheadSeconds();
+      const bufferedAhead = refreshBufferedAheadSeconds();
       setPrebufferBufferedAheadSeconds(bufferedAhead);
       const elapsed = Date.now() - prebufferStartedAtRef.current;
       if (bufferedAhead >= transcodePrebufferSeconds || elapsed >= TRANSCODE_PREBUFFER_MAX_WAIT_MS) {
@@ -2424,7 +2575,42 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       }
       window.clearInterval(timer);
     };
-  }, [attemptResumePlayback, resolveBufferedAheadSeconds, transcodePrebufferSeconds]);
+  }, [attemptResumePlayback, refreshBufferedAheadSeconds, transcodePrebufferSeconds]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !streamUrl) {
+      setBufferedAheadSeconds(0);
+      return;
+    }
+
+    const update = () => {
+      refreshBufferedAheadSeconds();
+    };
+    const events: Array<keyof HTMLMediaElementEventMap> = [
+      "progress",
+      "canplay",
+      "canplaythrough",
+      "loadeddata",
+      "loadedmetadata",
+      "timeupdate",
+      "seeking",
+      "seeked",
+      "waiting",
+      "playing"
+    ];
+    update();
+    for (const eventName of events) {
+      video.addEventListener(eventName, update);
+    }
+    const timer = window.setInterval(update, 500);
+    return () => {
+      for (const eventName of events) {
+        video.removeEventListener(eventName, update);
+      }
+      window.clearInterval(timer);
+    };
+  }, [refreshBufferedAheadSeconds, streamUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -2456,7 +2642,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         const looksLikeGrowingTranscodeWindow =
           activePreferTranscodeRef.current && durationSeconds <= nativeCurrent + 2 && durationSeconds <= absoluteCurrent + 2;
         if (!looksLikeGrowingTranscodeWindow) {
-          setVideoDuration((current) => (durationSeconds > current ? durationSeconds : current));
+          setVideoDuration((current) => (Math.abs(current - durationSeconds) < 0.25 ? current : durationSeconds));
         }
       }
       if (!isSeekingDragRef.current) {
@@ -3308,7 +3494,10 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     });
   }, []);
 
-  const authoritativeDurationSeconds = Math.max(detail?.runtimeSeconds || 0, statusSnapshot?.selectedFileDurationSeconds || 0);
+  const authoritativeDurationSeconds =
+    statusSnapshot?.selectedFileIndex === selectedFileIndex
+      ? statusSnapshot?.selectedFileDurationSeconds || 0
+      : 0;
   const knownTimelineSeconds = totalDurationSeconds;
   const totalTimelineSeconds = Math.max(knownTimelineSeconds, absoluteCurrentSeconds);
   const seekMax = totalTimelineSeconds > 0 ? totalTimelineSeconds : 1;
@@ -3353,15 +3542,16 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
   const handleResumePromptContinue = useCallback(async () => {
     setResumePromptOpened(false);
+    attemptResumePlayback("resume_prompt_click", resumePromptSeconds);
     if (resumePromptFileIndex >= 0 && resumePromptFileIndex !== selectedFileIndexRef.current) {
-      await handleSelectFile(resumePromptFileIndex, "panel");
-      window.setTimeout(() => {
-        void handleSeekCommit(resumePromptSeconds, "panel");
-      }, 900);
+      await handleSelectFile(resumePromptFileIndex, "panel", {
+        resumeAt: resumePromptSeconds,
+        autoplay: true
+      });
       return;
     }
     await handleSeekCommit(resumePromptSeconds, "panel");
-  }, [handleSeekCommit, handleSelectFile, resumePromptFileIndex, resumePromptSeconds]);
+  }, [attemptResumePlayback, handleSeekCommit, handleSelectFile, resumePromptFileIndex, resumePromptSeconds]);
 
   const handleResumePromptRestart = useCallback(() => {
     setResumePromptOpened(false);
@@ -3947,6 +4137,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
                       <Badge variant="outline">{t("media.player.downloadSpeed")}: {formatSpeed(statusSnapshot?.downloadRate || 0)}</Badge>
                       <Badge variant="outline">{t("media.player.peers")}: {statusSnapshot?.peersConnected || 0}</Badge>
                       <Badge variant="outline">{t("media.player.downloadedLabel")}: {downloadedRatio}%</Badge>
+                      <Badge variant="outline">{t("media.player.bufferAheadLabel")}: {formatClock(bufferedAheadSeconds)}</Badge>
+                      {prebufferWaiting ? (
+                        <Badge variant="outline">
+                          {t("media.player.prebufferTitle")}: {formatClock(prebufferBufferedAheadSeconds)} / {formatClock(transcodePrebufferSeconds)}
+                        </Badge>
+                      ) : null}
                       {!isDownloadComplete ? (
                         <Badge variant="outline">{t("media.player.fileReadyLabel")}: {playableRatio}%</Badge>
                       ) : null}
