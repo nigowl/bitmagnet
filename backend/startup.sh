@@ -35,6 +35,8 @@ BITMAGNET_WORKER_KEYS="${BITMAGNET_WORKER_KEYS:-all}"
 BITMAGNET_RUNTIME_MODE="${BITMAGNET_RUNTIME_MODE:-development}"
 BITMAGNET_MODE="${BITMAGNET_MODE:-service}"
 BITMAGNET_BINARY_PATH="${BITMAGNET_BINARY_PATH:-$TMP_DIR/bitmagnet-dev}"
+HTTP_SERVER_LOCAL_ADDRESS="${HTTP_SERVER_LOCAL_ADDRESS:-:3333}"
+DHT_SERVER_PORT="${DHT_SERVER_PORT:-3334}"
 
 load_optional_env() {
   local env_file
@@ -95,6 +97,8 @@ Environment:
   BITMAGNET_LOG_LEVEL       Alias of LOG_LEVEL (DEBUG/INFO/WARNING/ERROR/...)
   BITMAGNET_LOG_MAX_SIZE_MB Rotate log file size (MiB), maps to LOG_FILE_ROTATOR_MAX_SIZE in bytes
   BITMAGNET_LOG_MAX_BACKUPS Rotate log backup count, maps to LOG_FILE_ROTATOR_MAX_BACKUPS
+  HTTP_SERVER_LOCAL_ADDRESS Backend HTTP listen address, default :3333
+  DHT_SERVER_PORT          DHT crawler UDP listen port, default 3334
 USAGE
 }
 
@@ -266,6 +270,8 @@ set_runtime_env() {
   export POSTGRES_USER
   export POSTGRES_PASSWORD
   export BITMAGNET_RUNTIME_MODE
+  export HTTP_SERVER_LOCAL_ADDRESS
+  export DHT_SERVER_PORT
 }
 
 set_debug_env() {
@@ -373,7 +379,7 @@ run_backend() {
 
   run_args="$(build_run_args)"
 
-  echo "Starting bitmagnet on http://localhost:3333"
+  echo "Starting bitmagnet on http://localhost:$(extract_port_from_address "$HTTP_SERVER_LOCAL_ADDRESS" 3333)"
   echo "Using PostgreSQL at ${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
   echo "Worker args: ${run_args}"
 
@@ -405,6 +411,112 @@ normalize_mode() {
   esac
 }
 
+extract_port_from_address() {
+  local address="$1"
+  local fallback="$2"
+  local port
+
+  port="${address##*:}"
+  if [[ "$port" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$port"
+    return 0
+  fi
+
+  printf '%s\n' "$fallback"
+}
+
+worker_keys_include() {
+  local target="$1"
+  local raw_keys normalized
+
+  raw_keys="$(printf '%s' "$BITMAGNET_WORKER_KEYS" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$raw_keys" == "all" ]]; then
+    return 0
+  fi
+
+  normalized=",$(printf '%s' "$raw_keys" | tr -d '[:space:]'),"
+  [[ "$normalized" == *",$target,"* ]]
+}
+
+port_pids() {
+  local protocol="$1"
+  local port="$2"
+
+  if ! command -v lsof >/dev/null 2>&1; then
+    return 0
+  fi
+
+  case "$protocol" in
+    tcp)
+      lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | sort -u
+      ;;
+    udp)
+      lsof -nP -iUDP:"$port" -t 2>/dev/null | sort -u
+      ;;
+  esac
+}
+
+uppercase() {
+  printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+}
+
+kill_port_conflicts() {
+  local label="$1"
+  local protocol="$2"
+  local port="$3"
+  local pids remaining protocol_label
+
+  protocol_label="$(uppercase "$protocol")"
+
+  if ! command -v lsof >/dev/null 2>&1; then
+    echo "Skipping ${label} ${protocol_label} port ${port} check: lsof is not installed."
+    return 0
+  fi
+
+  pids="$(port_pids "$protocol" "$port" || true)"
+  if [[ -z "$pids" ]]; then
+    echo "${label} ${protocol_label} port ${port} is free."
+    return 0
+  fi
+
+  echo "${label} ${protocol_label} port ${port} is in use by PID(s): $(printf '%s' "$pids" | tr '\n' ' ')"
+  echo "Stopping conflicting process(es)..."
+  # shellcheck disable=SC2086
+  kill $pids 2>/dev/null || true
+  sleep 1
+
+  remaining="$(port_pids "$protocol" "$port" || true)"
+  if [[ -n "$remaining" ]]; then
+    echo "Force killing remaining PID(s): $(printf '%s' "$remaining" | tr '\n' ' ')"
+    # shellcheck disable=SC2086
+    kill -9 $remaining 2>/dev/null || true
+    sleep 1
+  fi
+
+  remaining="$(port_pids "$protocol" "$port" || true)"
+  if [[ -n "$remaining" ]]; then
+    echo "Could not free ${label} ${protocol_label} port ${port}; still held by PID(s): $(printf '%s' "$remaining" | tr '\n' ' ')" >&2
+    return 1
+  fi
+
+  echo "${label} ${protocol_label} port ${port} is now free."
+}
+
+clear_worker_port_conflicts() {
+  local http_port dht_port
+
+  http_port="$(extract_port_from_address "$HTTP_SERVER_LOCAL_ADDRESS" 3333)"
+  dht_port="$DHT_SERVER_PORT"
+
+  if worker_keys_include "http_server"; then
+    kill_port_conflicts "HTTP server" tcp "$http_port"
+  fi
+
+  if worker_keys_include "dht_crawler"; then
+    kill_port_conflicts "DHT crawler" udp "$dht_port"
+  fi
+}
+
 main() {
   load_optional_env
   restore_env_overrides
@@ -424,24 +536,8 @@ main() {
   fi
 
   set_runtime_env
+  clear_worker_port_conflicts
   run_backend
 }
-
-PORT=3333
-check_port() {
-    local port=$1
-    local pid=$(lsof -ti:$port)
-    if [ -n "$pid" ]; then
-        echo "Port $port is in use by PID $pid. Killing process..."
-        kill -9 $pid
-        sleep 1 # Wait for process to terminate
-        echo "Process killed."
-    else
-        echo "Port $port is free."
-    fi
-}
-
-echo "Checking port $PORT..."
-check_port $PORT
 
 main "$@"

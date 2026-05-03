@@ -1,0 +1,104 @@
+package mediaapi
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/nigowl/bitmagnet/internal/media"
+)
+
+func TestBuildPlayerFFmpegArgsUsesRealtimeInputOnlyForIncompleteFiles(t *testing.T) {
+	settings := media.PlayerFFmpegTranscodeSettings{
+		Preset:           "veryfast",
+		CRF:              23,
+		AudioBitrateKbps: 128,
+	}
+
+	incompleteArgs := buildPlayerFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 0, true)
+	if !containsArg(incompleteArgs, "-re") {
+		t.Fatalf("expected incomplete local input to include -re, args=%s", strings.Join(incompleteArgs, " "))
+	}
+
+	completedArgs := buildPlayerFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 0, false)
+	if containsArg(completedArgs, "-re") {
+		t.Fatalf("expected completed local input to skip -re, args=%s", strings.Join(completedArgs, " "))
+	}
+}
+
+func TestBuildPlayerHLSFFmpegArgsWritesSegmentedPlaylist(t *testing.T) {
+	settings := media.PlayerFFmpegTranscodeSettings{
+		Preset:           "veryfast",
+		CRF:              23,
+		AudioBitrateKbps: 128,
+	}
+
+	args := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 12.5, -1, 1080, false, "/tmp/hls-cache", 60)
+	joined := strings.Join(args, " ")
+	for _, expected := range []string{
+		"-f hls",
+		"-hls_time 2",
+		"-hls_list_size 0",
+		"-hls_playlist_type event",
+		"-hls_segment_type mpegts",
+		"-hls_segment_filename /tmp/hls-cache/segment-%06d.ts",
+		"/tmp/hls-cache/index.m3u8",
+		"-force_key_frames expr:gte(t,n_forced*2)",
+		"scale=w=-2:h=1080",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("expected HLS args to contain %q, args=%s", expected, joined)
+		}
+	}
+	if containsArg(args, "-re") {
+		t.Fatalf("expected completed HLS input to skip -re, args=%s", joined)
+	}
+	if containsArg(args, "-readrate") || containsArg(args, "-readrate_initial_burst") {
+		t.Fatalf("expected completed HLS input to transcode ahead without realtime throttling, args=%s", joined)
+	}
+}
+
+func TestRewritePlayerHLSPlaylist(t *testing.T) {
+	playlist := "#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:2.000,\nsegment-000000.ts\n#EXTINF:2.000,\nsegment-000001.ts\n"
+	rewritten := rewritePlayerHLSPlaylist(playlist, "0123456789abcdef0123456789abcdef01234567")
+	if !strings.Contains(rewritten, "/api/media/player/transmission/hls/segment/0123456789abcdef0123456789abcdef01234567/segment-000000.ts") {
+		t.Fatalf("expected segment URL rewrite, got=%s", rewritten)
+	}
+	if !strings.Contains(rewritten, "#EXT-X-START:TIME-OFFSET=0,PRECISE=YES") {
+		t.Fatalf("expected explicit playlist start, got=%s", rewritten)
+	}
+}
+
+func TestPlayerFFmpegH264LevelKeepsOriginalAnd4KPlayable(t *testing.T) {
+	if got := playerFFmpegH264Level(0); got != "5.1" {
+		t.Fatalf("expected original resolution to use 5.1, got=%s", got)
+	}
+	if got := playerFFmpegH264Level(2160); got != "5.1" {
+		t.Fatalf("expected 2160p to use 5.1, got=%s", got)
+	}
+	if got := playerFFmpegH264Level(1080); got != "4.1" {
+		t.Fatalf("expected 1080p to use 4.1, got=%s", got)
+	}
+}
+
+func TestNormalizePlayerHLSPrebufferSeconds(t *testing.T) {
+	for _, value := range []int{-1, 0, 1, 9, 10} {
+		if got := normalizePlayerHLSPrebufferSeconds(value); got != 10 {
+			t.Fatalf("expected %d to normalize to 10, got=%d", value, got)
+		}
+	}
+	if got := normalizePlayerHLSPrebufferSeconds(91); got != 92 {
+		t.Fatalf("expected odd values to align to segment size, got=%d", got)
+	}
+	if got := normalizePlayerHLSPrebufferSeconds(999); got != playerHLSMaxPrebufferSeconds {
+		t.Fatalf("expected max clamp, got=%d", got)
+	}
+}
+
+func containsArg(args []string, target string) bool {
+	for _, arg := range args {
+		if arg == target {
+			return true
+		}
+	}
+	return false
+}

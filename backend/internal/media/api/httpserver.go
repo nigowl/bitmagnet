@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -12,8 +14,10 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -26,6 +30,7 @@ import (
 type HTTPParams struct {
 	fx.In
 	Service media.Service
+	Config  media.Config
 	Logger  *zap.Logger
 }
 
@@ -42,12 +47,37 @@ func NewHTTPServer(p HTTPParams) HTTPResult {
 	return HTTPResult{Option: &builder{
 		service:      p.Service,
 		streamLogger: logger.Named("media_player_stream"),
+		hlsCacheDir:  filepath.Join(p.Config.CacheDir, "player-hls"),
+		hlsSessions:  make(map[string]*playerHLSSession),
 	}}
 }
 
 type builder struct {
 	service      media.Service
 	streamLogger *zap.Logger
+	hlsCacheDir  string
+	hlsMu        sync.Mutex
+	hlsSessions  map[string]*playerHLSSession
+}
+
+const statusClientClosedRequest = 499
+const playerHLSSegmentSeconds = 2
+const playerHLSDefaultPrebufferSeconds = 60
+const playerHLSMaxPrebufferSeconds = 180
+const playerHLSWaitPollInterval = 250 * time.Millisecond
+const playerHLSCacheTTL = 6 * time.Hour
+
+type playerHLSSession struct {
+	Key              string
+	GroupKey         string
+	Dir              string
+	PlaylistPath     string
+	StartedAt        time.Time
+	LastAccessedAt   time.Time
+	StartSeconds     float64
+	PrebufferSeconds int
+	Cmd              *exec.Cmd
+	Done             chan error
 }
 
 func (b *builder) Key() string {
@@ -65,6 +95,8 @@ func (b *builder) Apply(e *gin.Engine) error {
 	e.DELETE("/api/media/player/transmission/cache", b.playerTransmissionClearCache)
 	e.GET("/api/media/player/transmission/stream", b.playerTransmissionStream)
 	e.HEAD("/api/media/player/transmission/stream", b.playerTransmissionStream)
+	e.GET("/api/media/player/transmission/hls/playlist", b.playerTransmissionHLSPlaylist)
+	e.GET("/api/media/player/transmission/hls/segment/:session/:segment", b.playerTransmissionHLSSegment)
 	e.GET("/api/media/player/transmission/thumbnail", b.playerTransmissionThumbnail)
 	e.GET("/api/media/player/subtitles", b.playerSubtitleList)
 	e.POST("/api/media/player/subtitles", b.playerSubtitleCreate)
@@ -305,6 +337,14 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 	startBytes := parseInt64(c.Query("startBytes"), 0)
 	startedAt := time.Now()
 	responseError := ""
+	requestClosed := false
+	resolveRangeHeader := c.GetHeader("Range")
+	if preferTranscode {
+		resolveRangeHeader = ""
+		if startBytes > 0 {
+			resolveRangeHeader = fmt.Sprintf("bytes=%d-", startBytes)
+		}
+	}
 
 	baseFields := []zap.Field{
 		zap.String("method", c.Request.Method),
@@ -319,6 +359,7 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 		zap.Float64("start_seconds", startSeconds),
 		zap.Int64("start_bytes", startBytes),
 		zap.String("range", c.GetHeader("Range")),
+		zap.String("resolve_range", resolveRangeHeader),
 		zap.String("client_ip", c.ClientIP()),
 		zap.String("user_agent", c.Request.UserAgent()),
 	}
@@ -342,6 +383,8 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 			fields = append(fields, zap.String("gin_errors", c.Errors.String()))
 		}
 		switch {
+		case requestClosed || statusCode == statusClientClosedRequest:
+			b.streamLogger.Debug("player stream request closed", fields...)
 		case statusCode >= 500:
 			b.streamLogger.Warn("player stream request failed", fields...)
 		case statusCode >= 400:
@@ -356,7 +399,7 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 	resolveResult, err := b.service.PlayerTransmissionResolveStream(c.Request.Context(), media.PlayerTransmissionResolveStreamInput{
 		InfoHash:         infoHash,
 		FileIndex:        fileIndex,
-		RangeHeader:      c.GetHeader("Range"),
+		RangeHeader:      resolveRangeHeader,
 		PreferTranscode:  preferTranscode,
 		AudioTrackIndex:  audioTrackIndex,
 		OutputResolution: outputResolution,
@@ -366,6 +409,9 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 	if err != nil {
 		responseError = err.Error()
 		switch {
+		case isBenignStreamingError(err):
+			requestClosed = true
+			c.Status(statusClientClosedRequest)
 		case errors.Is(err, media.ErrInvalidInfoHash), errors.Is(err, media.ErrPlayerInvalidRange):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		case errors.Is(err, media.ErrPlayerDisabled):
@@ -426,6 +472,117 @@ func (b *builder) playerTransmissionStreamDirect(c *gin.Context, resolveResult m
 	c.Header("X-Bitmagnet-Stream-Source", "local")
 	c.Header("X-Bitmagnet-Stream-Path", inputPath)
 	http.ServeContent(c.Writer, c.Request, stat.Name(), stat.ModTime(), file)
+}
+
+func (b *builder) playerTransmissionHLSPlaylist(c *gin.Context) {
+	infoHash := strings.TrimSpace(c.Query("infoHash"))
+	fileIndex := parseInt(c.Query("fileIndex"), -1)
+	audioTrackIndex := parseInt(c.Query("audioTrack"), -1)
+	outputResolution := parseInt(c.Query("resolution"), 0)
+	startSeconds := parseFloat(c.Query("start"), 0)
+	startBytes := parseInt64(c.Query("startBytes"), 0)
+	prebufferSeconds := normalizePlayerHLSPrebufferSeconds(parseInt(c.Query("prebuffer"), playerHLSDefaultPrebufferSeconds))
+
+	resolveRangeHeader := ""
+	if startBytes > 0 {
+		resolveRangeHeader = fmt.Sprintf("bytes=%d-", startBytes)
+	}
+	resolveResult, err := b.service.PlayerTransmissionResolveStream(c.Request.Context(), media.PlayerTransmissionResolveStreamInput{
+		InfoHash:         infoHash,
+		FileIndex:        fileIndex,
+		RangeHeader:      resolveRangeHeader,
+		PreferTranscode:  true,
+		AudioTrackIndex:  audioTrackIndex,
+		OutputResolution: outputResolution,
+		StartSeconds:     startSeconds,
+		StartBytes:       startBytes,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrInvalidInfoHash), errors.Is(err, media.ErrPlayerInvalidRange):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrPlayerDisabled), errors.Is(err, media.ErrPlayerTransmissionDisabled), errors.Is(err, media.ErrPlayerTranscodeDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrPlayerStreamUnavailable), errors.Is(err, media.ErrPlayerStorageUnavailable):
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		case errors.Is(err, media.ErrNotFound), errors.Is(err, media.ErrPlayerFileNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	if !resolveResult.Transcode.Enabled {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "player transcode disabled"})
+		return
+	}
+
+	session, err := b.playerHLSStartOrReuseSession(resolveResult, media.PlayerTransmissionResolveStreamInput{
+		InfoHash:         infoHash,
+		FileIndex:        fileIndex,
+		AudioTrackIndex:  audioTrackIndex,
+		OutputResolution: outputResolution,
+		StartSeconds:     startSeconds,
+		StartBytes:       startBytes,
+	}, prebufferSeconds)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	cachedSeconds, ready, waitErr := waitForPlayerHLSPrebuffer(c.Request.Context(), session, prebufferSeconds)
+	if waitErr != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": waitErr.Error()})
+		return
+	}
+	playlistBytes, err := os.ReadFile(session.PlaylistPath)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+	playlist := rewritePlayerHLSPlaylist(string(playlistBytes), session.Key)
+
+	c.Header("Cache-Control", "no-store, max-age=0")
+	c.Header("Content-Type", "application/vnd.apple.mpegurl")
+	c.Header("X-Bitmagnet-HLS", "1")
+	c.Header("X-Bitmagnet-HLS-Session", session.Key)
+	c.Header("X-Bitmagnet-HLS-Prebuffer-Target", strconv.Itoa(prebufferSeconds))
+	c.Header("X-Bitmagnet-HLS-Prebuffer-Seconds", strconv.Itoa(int(math.Floor(cachedSeconds))))
+	c.Header("X-Bitmagnet-HLS-Prebuffer-Ready", strconv.FormatBool(ready))
+	c.String(http.StatusOK, playlist)
+}
+
+func (b *builder) playerTransmissionHLSSegment(c *gin.Context) {
+	sessionKey := strings.TrimSpace(c.Param("session"))
+	segmentName := strings.TrimSpace(c.Param("segment"))
+	if !isSafePlayerHLSName(sessionKey) || !isSafePlayerHLSSegmentName(segmentName) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid hls segment"})
+		return
+	}
+
+	b.hlsMu.Lock()
+	session := b.hlsSessions[sessionKey]
+	if session != nil {
+		session.LastAccessedAt = time.Now()
+	}
+	b.hlsMu.Unlock()
+
+	baseDir := filepath.Join(b.hlsCacheDir, sessionKey)
+	if session != nil {
+		baseDir = session.Dir
+	}
+	segmentPath := filepath.Join(baseDir, segmentName)
+	if filepath.Dir(segmentPath) != baseDir {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid hls segment"})
+		return
+	}
+	if _, err := os.Stat(segmentPath); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "hls segment not found"})
+		return
+	}
+	c.Header("Cache-Control", "public, max-age=3600, immutable")
+	c.Header("Content-Type", "video/MP2T")
+	c.File(segmentPath)
 }
 
 func (b *builder) playerTransmissionThumbnail(c *gin.Context) {
@@ -644,6 +801,7 @@ func (b *builder) playerTransmissionStreamTranscoded(c *gin.Context, resolveResu
 		transcodeStartSeconds,
 		resolveResult.AudioTrackIndex,
 		resolveResult.OutputResolution,
+		!resolveResult.Completed,
 	)
 	cmd := exec.CommandContext(c.Request.Context(), binaryPath, args...)
 	stdout, err := cmd.StdoutPipe()
@@ -663,6 +821,7 @@ func (b *builder) playerTransmissionStreamTranscoded(c *gin.Context, resolveResu
 	c.Header("X-Bitmagnet-Transcode-Seek-Bytes", strconv.FormatInt(transcodeSeekStartBytes, 10))
 	c.Header("X-Bitmagnet-Transcode-Audio-Track", strconv.Itoa(resolveResult.AudioTrackIndex))
 	c.Header("X-Bitmagnet-Transcode-Resolution", strconv.Itoa(resolveResult.OutputResolution))
+	c.Header("X-Bitmagnet-Transcode-Realtime-Input", strconv.FormatBool(!resolveResult.Completed))
 	c.Header("X-Bitmagnet-Stream-Source", streamSource)
 	if streamPath != "" {
 		c.Header("X-Bitmagnet-Stream-Path", streamPath)
@@ -697,6 +856,11 @@ func (b *builder) playerTransmissionStreamTranscoded(c *gin.Context, resolveResu
 	}
 	select {
 	case firstRead = <-firstReadCh:
+	case <-c.Request.Context().Done():
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+		c.Status(statusClientClosedRequest)
+		return
 	case <-time.After(firstChunkTimeout):
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
@@ -849,12 +1013,297 @@ func isRetryableFFmpegFailure(message string) bool {
 	return true
 }
 
+func (b *builder) playerHLSStartOrReuseSession(
+	resolveResult media.PlayerTransmissionResolveStreamResult,
+	input media.PlayerTransmissionResolveStreamInput,
+	prebufferSeconds int,
+) (*playerHLSSession, error) {
+	if b.hlsCacheDir == "" {
+		b.hlsCacheDir = filepath.Join("data", "cache", "player-hls")
+	}
+	if err := os.MkdirAll(b.hlsCacheDir, 0o755); err != nil {
+		return nil, err
+	}
+
+	sessionKey := buildPlayerHLSCacheKey(resolveResult, input, prebufferSeconds)
+	groupKey := buildPlayerHLSGroupKey(input)
+	sessionDir := filepath.Join(b.hlsCacheDir, sessionKey)
+	playlistPath := filepath.Join(sessionDir, "index.m3u8")
+
+	b.hlsMu.Lock()
+	b.cleanupPlayerHLSSessionsLocked(time.Now())
+	if existing := b.hlsSessions[sessionKey]; existing != nil {
+		existing.LastAccessedAt = time.Now()
+		if prebufferSeconds > existing.PrebufferSeconds {
+			existing.PrebufferSeconds = prebufferSeconds
+		}
+		b.hlsMu.Unlock()
+		return existing, nil
+	}
+	for key, existing := range b.hlsSessions {
+		if existing == nil || existing.GroupKey != groupKey {
+			continue
+		}
+		if existing.Cmd != nil && existing.Cmd.Process != nil {
+			_ = existing.Cmd.Process.Kill()
+		}
+		delete(b.hlsSessions, key)
+		go os.RemoveAll(existing.Dir)
+	}
+	b.hlsMu.Unlock()
+
+	if err := os.RemoveAll(sessionDir); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		return nil, err
+	}
+
+	binaryPath := strings.TrimSpace(resolveResult.Transcode.BinaryPath)
+	if binaryPath == "" {
+		binaryPath = "ffmpeg"
+	}
+	args := buildPlayerHLSFFmpegArgs(
+		resolveResult.FilePath,
+		resolveResult.Transcode,
+		resolveResult.StartSeconds,
+		resolveResult.AudioTrackIndex,
+		resolveResult.OutputResolution,
+		!resolveResult.Completed,
+		sessionDir,
+		prebufferSeconds,
+	)
+	cmd := exec.Command(binaryPath, args...)
+	stderrPath := filepath.Join(sessionDir, "ffmpeg.log")
+	stderrFile, err := os.Create(stderrPath)
+	if err != nil {
+		return nil, err
+	}
+	cmd.Stderr = stderrFile
+	if err := cmd.Start(); err != nil {
+		_ = stderrFile.Close()
+		return nil, err
+	}
+
+	session := &playerHLSSession{
+		Key:              sessionKey,
+		GroupKey:         groupKey,
+		Dir:              sessionDir,
+		PlaylistPath:     playlistPath,
+		StartedAt:        time.Now(),
+		LastAccessedAt:   time.Now(),
+		StartSeconds:     resolveResult.StartSeconds,
+		PrebufferSeconds: prebufferSeconds,
+		Cmd:              cmd,
+		Done:             make(chan error, 1),
+	}
+	go func() {
+		err := cmd.Wait()
+		_ = stderrFile.Close()
+		session.Done <- err
+		close(session.Done)
+	}()
+
+	b.hlsMu.Lock()
+	b.hlsSessions[sessionKey] = session
+	b.hlsMu.Unlock()
+	return session, nil
+}
+
+func (b *builder) cleanupPlayerHLSSessionsLocked(now time.Time) {
+	for key, session := range b.hlsSessions {
+		if session == nil {
+			delete(b.hlsSessions, key)
+			continue
+		}
+		if now.Sub(session.LastAccessedAt) < playerHLSCacheTTL {
+			continue
+		}
+		if session.Cmd != nil && session.Cmd.Process != nil {
+			_ = session.Cmd.Process.Kill()
+		}
+		delete(b.hlsSessions, key)
+		go os.RemoveAll(session.Dir)
+	}
+}
+
+func buildPlayerHLSCacheKey(resolveResult media.PlayerTransmissionResolveStreamResult, input media.PlayerTransmissionResolveStreamInput, prebufferSeconds int) string {
+	stat, _ := os.Stat(resolveResult.FilePath)
+	size := int64(0)
+	modUnix := int64(0)
+	if stat != nil {
+		size = stat.Size()
+		modUnix = stat.ModTime().UnixNano()
+	}
+	payload := fmt.Sprintf(
+		"%s|%d|%.3f|%d|%d|%d|%d|%s|%d|%d",
+		strings.TrimSpace(strings.ToLower(input.InfoHash)),
+		input.FileIndex,
+		math.Max(0, input.StartSeconds),
+		input.StartBytes,
+		input.AudioTrackIndex,
+		input.OutputResolution,
+		prebufferSeconds,
+		resolveResult.FilePath,
+		size,
+		modUnix,
+	)
+	sum := sha1.Sum([]byte(payload))
+	return hex.EncodeToString(sum[:])
+}
+
+func buildPlayerHLSGroupKey(input media.PlayerTransmissionResolveStreamInput) string {
+	payload := fmt.Sprintf(
+		"%s|%d|%d|%d",
+		strings.TrimSpace(strings.ToLower(input.InfoHash)),
+		input.FileIndex,
+		input.AudioTrackIndex,
+		input.OutputResolution,
+	)
+	sum := sha1.Sum([]byte(payload))
+	return hex.EncodeToString(sum[:])
+}
+
+func waitForPlayerHLSPrebuffer(ctx context.Context, session *playerHLSSession, targetSeconds int) (float64, bool, error) {
+	if targetSeconds <= 0 {
+		targetSeconds = 0
+	}
+	requiredSeconds := float64(targetSeconds)
+	if requiredSeconds <= 0 {
+		requiredSeconds = 0.1
+	}
+	timeout := time.Duration(maxInt(20, targetSeconds*4)) * time.Second
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	for {
+		cachedSeconds, endList := playerHLSCachedSeconds(session.PlaylistPath)
+		if cachedSeconds >= requiredSeconds || (endList && cachedSeconds > 0) {
+			return cachedSeconds, true, nil
+		}
+		select {
+		case <-ctx.Done():
+			return cachedSeconds, false, ctx.Err()
+		case err, ok := <-session.Done:
+			if !ok {
+				return cachedSeconds, false, fmt.Errorf("hls transcode stopped before prebuffer target")
+			}
+			if err != nil {
+				return cachedSeconds, false, fmt.Errorf("hls transcode failed before prebuffer target: %w", err)
+			}
+			if cachedSeconds > 0 {
+				return cachedSeconds, true, nil
+			}
+			return cachedSeconds, false, fmt.Errorf("hls transcode finished without playable segments")
+		case <-timer.C:
+			return cachedSeconds, false, fmt.Errorf("hls prebuffer target not ready: cached %.0fs / target %ds", cachedSeconds, targetSeconds)
+		case <-time.After(playerHLSWaitPollInterval):
+		}
+	}
+}
+
+func playerHLSCachedSeconds(playlistPath string) (float64, bool) {
+	raw, err := os.ReadFile(playlistPath)
+	if err != nil {
+		return 0, false
+	}
+	total := 0.0
+	endList := false
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#EXTINF:") {
+			value := strings.TrimSuffix(strings.TrimPrefix(line, "#EXTINF:"), ",")
+			if parsed, err := strconv.ParseFloat(value, 64); err == nil && parsed > 0 {
+				total += parsed
+			}
+		}
+		if line == "#EXT-X-ENDLIST" {
+			endList = true
+		}
+	}
+	return total, endList
+}
+
+func rewritePlayerHLSPlaylist(playlist string, sessionKey string) string {
+	lines := strings.Split(playlist, "\n")
+	hasStart := false
+	insertStartAt := -1
+	for idx, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#EXT-X-START:") {
+			hasStart = true
+		}
+		if insertStartAt < 0 && (strings.HasPrefix(trimmed, "#EXT-X-VERSION:") || strings.HasPrefix(trimmed, "#EXT-X-TARGETDURATION:")) {
+			insertStartAt = idx + 1
+		}
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") || strings.HasPrefix(trimmed, "/") {
+			continue
+		}
+		lines[idx] = fmt.Sprintf("/api/media/player/transmission/hls/segment/%s/%s", sessionKey, trimmed)
+	}
+	if !hasStart {
+		if insertStartAt < 0 || insertStartAt > len(lines) {
+			insertStartAt = 1
+		}
+		startTag := "#EXT-X-START:TIME-OFFSET=0,PRECISE=YES"
+		lines = append(lines, "")
+		copy(lines[insertStartAt+1:], lines[insertStartAt:])
+		lines[insertStartAt] = startTag
+	}
+	return strings.Join(lines, "\n")
+}
+
+func normalizePlayerHLSPrebufferSeconds(raw int) int {
+	if raw < 10 {
+		return 10
+	}
+	if raw > playerHLSMaxPrebufferSeconds {
+		return playerHLSMaxPrebufferSeconds
+	}
+	return int(math.Ceil(float64(raw)/float64(playerHLSSegmentSeconds))) * playerHLSSegmentSeconds
+}
+
+func isSafePlayerHLSName(value string) bool {
+	if len(value) != 40 {
+		return false
+	}
+	for _, ch := range value {
+		if (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func isSafePlayerHLSSegmentName(value string) bool {
+	if value == "" || strings.Contains(value, "/") || strings.Contains(value, "\\") || strings.Contains(value, "..") {
+		return false
+	}
+	return strings.HasPrefix(value, "segment-") && strings.HasSuffix(value, ".ts")
+}
+
+func maxInt(left int, right int) int {
+	if left > right {
+		return left
+	}
+	return right
+}
+
+func playerFFmpegH264Level(outputResolution int) string {
+	if outputResolution <= 0 || outputResolution >= 1440 {
+		return "5.1"
+	}
+	return "4.1"
+}
+
 func buildPlayerFFmpegArgs(
 	filePath string,
 	options media.PlayerFFmpegTranscodeSettings,
 	startSeconds float64,
 	audioTrackIndex int,
 	outputResolution int,
+	realTimeInput bool,
 ) []string {
 	preset := strings.TrimSpace(options.Preset)
 	if preset == "" {
@@ -883,7 +1332,7 @@ func buildPlayerFFmpegArgs(
 			args = append(args, "-ss", startValue)
 		}
 	}
-	if filePath != "pipe:0" {
+	if filePath != "pipe:0" && realTimeInput {
 		// Keep ffmpeg from racing ahead into sparse, not-yet-downloaded file ranges.
 		args = append(args, "-re")
 	}
@@ -902,7 +1351,7 @@ func buildPlayerFFmpegArgs(
 		"-crf", strconv.Itoa(crf),
 		"-pix_fmt", "yuv420p",
 		"-profile:v", "main",
-		"-level", "4.1",
+		"-level", playerFFmpegH264Level(outputResolution),
 		"-g", "48",
 		"-keyint_min", "48",
 		"-sc_threshold", "0",
@@ -923,6 +1372,95 @@ func buildPlayerFFmpegArgs(
 		args = append(args, strings.Fields(extra)...)
 	}
 	args = append(args, "-movflags", "+frag_keyframe+empty_moov+default_base_moof", "-f", "mp4", "pipe:1")
+	return args
+}
+
+func buildPlayerHLSFFmpegArgs(
+	filePath string,
+	options media.PlayerFFmpegTranscodeSettings,
+	startSeconds float64,
+	audioTrackIndex int,
+	outputResolution int,
+	realTimeInput bool,
+	outputDir string,
+	prebufferSeconds int,
+) []string {
+	preset := strings.TrimSpace(options.Preset)
+	if preset == "" {
+		preset = "veryfast"
+	}
+	crf := options.CRF
+	if crf < 16 || crf > 38 {
+		crf = 23
+	}
+	audioBitrate := options.AudioBitrateKbps
+	if audioBitrate < 64 || audioBitrate > 320 {
+		audioBitrate = 128
+	}
+
+	segmentPattern := filepath.Join(outputDir, "segment-%06d.ts")
+	playlistPath := filepath.Join(outputDir, "index.m3u8")
+	args := []string{
+		"-hide_banner",
+		"-loglevel", "error",
+		"-nostdin",
+		"-fflags", "+genpts",
+		"-avoid_negative_ts", "make_zero",
+	}
+	if startSeconds > 0 {
+		startValue := strconv.FormatFloat(startSeconds, 'f', 3, 64)
+		if filePath != "pipe:0" {
+			args = append(args, "-ss", startValue)
+		}
+	}
+	if filePath != "pipe:0" && realTimeInput {
+		args = append(args, "-re")
+	}
+	args = append(args, "-i", filePath)
+	if startSeconds > 0 && filePath == "pipe:0" {
+		args = append(args, "-ss", strconv.FormatFloat(startSeconds, 'f', 3, 64))
+	}
+	args = append(args,
+		"-map", "0:v:0",
+		"-map", selectedAudioTrackMap(audioTrackIndex),
+		"-sn",
+		"-dn",
+		"-c:v", "libx264",
+		"-preset", preset,
+		"-crf", strconv.Itoa(crf),
+		"-pix_fmt", "yuv420p",
+		"-profile:v", "main",
+		"-level", playerFFmpegH264Level(outputResolution),
+		"-g", "48",
+		"-keyint_min", "48",
+		"-sc_threshold", "0",
+		"-force_key_frames", fmt.Sprintf("expr:gte(t,n_forced*%d)", playerHLSSegmentSeconds),
+		"-c:a", "aac",
+		"-b:a", fmt.Sprintf("%dk", audioBitrate),
+		"-muxpreload", "0",
+		"-muxdelay", "0",
+		"-max_interleave_delta", "0",
+		"-max_muxing_queue_size", "4096",
+	)
+	if outputResolution > 0 {
+		args = append(args, "-vf", fmt.Sprintf("scale=w=-2:h=%d:force_original_aspect_ratio=decrease:force_divisible_by=2", outputResolution))
+	}
+	if options.Threads > 0 {
+		args = append(args, "-threads", strconv.Itoa(options.Threads))
+	}
+	if extra := strings.TrimSpace(options.ExtraArgs); extra != "" {
+		args = append(args, strings.Fields(extra)...)
+	}
+	args = append(args,
+		"-f", "hls",
+		"-hls_time", strconv.Itoa(playerHLSSegmentSeconds),
+		"-hls_list_size", "0",
+		"-hls_playlist_type", "event",
+		"-hls_segment_type", "mpegts",
+		"-hls_flags", "independent_segments+temp_file",
+		"-hls_segment_filename", segmentPattern,
+		playlistPath,
+	)
 	return args
 }
 

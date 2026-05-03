@@ -553,6 +553,37 @@ export function buildPlayerTransmissionStreamURL(
   return `${apiBaseURL}/api/media/player/transmission/stream?${query.toString()}`;
 }
 
+export function buildPlayerTransmissionHLSPlaylistURL(
+  infoHash: string,
+  fileIndex: number,
+  cacheBust?: string,
+  options?: { startSeconds?: number; startBytes?: number; audioTrackIndex?: number; outputResolution?: number; prebufferSeconds?: number }
+): string {
+  const query = new URLSearchParams({
+    infoHash: infoHash.trim().toLowerCase(),
+    fileIndex: String(fileIndex)
+  });
+  if (cacheBust) {
+    query.set("t", cacheBust);
+  }
+  if (Number.isFinite(options?.startSeconds) && (options?.startSeconds || 0) > 0) {
+    query.set("start", String(Math.max(0, options?.startSeconds || 0)));
+  }
+  if (Number.isFinite(options?.startBytes) && (options?.startBytes || 0) > 0) {
+    query.set("startBytes", String(Math.max(0, Math.floor(options?.startBytes || 0))));
+  }
+  if (Number.isInteger(options?.audioTrackIndex) && (options?.audioTrackIndex || -1) >= 0) {
+    query.set("audioTrack", String(Math.max(0, Math.floor(options?.audioTrackIndex || 0))));
+  }
+  if (Number.isInteger(options?.outputResolution) && (options?.outputResolution || 0) > 0) {
+    query.set("resolution", String(Math.max(1, Math.floor(options?.outputResolution || 0))));
+  }
+  if (Number.isFinite(options?.prebufferSeconds) && (options?.prebufferSeconds || 0) > 0) {
+    query.set("prebuffer", String(Math.max(10, Math.floor(options?.prebufferSeconds || 0))));
+  }
+  return `${apiBaseURL}/api/media/player/transmission/hls/playlist?${query.toString()}`;
+}
+
 export function buildPlayerTransmissionThumbnailURL(
   infoHash: string,
   fileIndex: number,

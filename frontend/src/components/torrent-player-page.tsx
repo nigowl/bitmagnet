@@ -21,14 +21,15 @@ import {
   Tooltip
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { AlertTriangle, ExternalLink, Maximize2, Minimize2, Minus, Pause, PictureInPicture2, Play, Plus, Settings2, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, ExternalLink, Maximize2, Minimize2, Minus, Pause, PictureInPicture2, Play, Plus, Settings2, Trash2, Upload, X } from "lucide-react";
 import { useAuth } from "@/auth/provider";
-import { graphqlRequest } from "@/lib/api";
+import { getAuthToken, graphqlRequest } from "@/lib/api";
 import { TORRENT_CONTENT_SEARCH_QUERY } from "@/lib/graphql";
 import { buildMediaEntryIdFromContentRef, resolveMediaCategory } from "@/lib/media";
 import { useI18n } from "@/languages/provider";
 import {
   buildPlayerSubtitleContentURL,
+  buildPlayerTransmissionHLSPlaylistURL,
   buildPlayerTransmissionThumbnailURL,
   buildPlayerTransmissionStreamURL,
   createPlayerSubtitle,
@@ -160,6 +161,36 @@ type PlyrLike = {
   };
 };
 
+type HlsLike = {
+  attachMedia: (media: HTMLMediaElement) => void;
+  destroy: () => void;
+  loadSource: (url: string) => void;
+  on: (event: string, handler: (event: string, data?: unknown) => void) => void;
+  startLoad?: (startPosition?: number) => void;
+};
+
+function buildPlaybackStreamConfigKey(input: {
+  fileIndex: number;
+  preferTranscode: boolean;
+  audioTrackIndex: number;
+  outputResolution: number;
+  prebufferSeconds: number;
+}): string {
+  return [
+    input.fileIndex,
+    input.preferTranscode ? "hls" : "direct",
+    input.audioTrackIndex,
+    input.outputResolution,
+    input.prebufferSeconds
+  ].join(":");
+}
+
+function hlsNetworkCacheDisplaySeconds(rawSeconds: number, targetSeconds: number): number {
+  const raw = Number.isFinite(rawSeconds) ? Math.max(0, rawSeconds) : 0;
+  const target = Number.isFinite(targetSeconds) ? Math.max(0, targetSeconds) : 0;
+  return target > 0 ? Math.min(raw, target) : raw;
+}
+
 type NativeAudioTrack = {
   id?: string;
   label?: string;
@@ -187,7 +218,6 @@ const PLAYER_GLOBAL_PREFS_KEY_PREFIX = "bitmagnet-player-global-prefs-v1";
 const PLAYER_TRACK_PREFS_KEY_PREFIX = "bitmagnet-player-track-prefs-v1";
 const PLAYER_FILE_SELECTION_KEY_PREFIX = "bitmagnet-player-file-selection-v1";
 const TRANSCODE_PREBUFFER_DEFAULT_SECONDS = 60;
-const TRANSCODE_PREBUFFER_MAX_WAIT_MS = 45000;
 const STREAM_RETRY_MAX_ATTEMPTS = 5;
 const STREAM_RETRY_BASE_DELAY_MS = 700;
 const STREAM_RETRY_MAX_DELAY_MS = 5000;
@@ -197,8 +227,11 @@ const PLAYBACK_STALL_GRACE_MS = 5000;
 const PLAYBACK_STALL_TICK_MS = 1000;
 const PLAYBACK_PROGRESS_EPSILON_SECONDS = 0.5;
 const PLAYBACK_RECOVERY_COOLDOWN_MS = 5000;
+const INLINE_CONTROLS_HIDE_MS = 2200;
+const INLINE_CONTROLS_KEYBOARD_HIDE_MS = 2600;
+const INLINE_CONTROLS_FULLSCREEN_HIDE_MS = 3000;
 const PLAYBACK_RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
-const TRANSCODE_PREBUFFER_OPTIONS = [30, 45, 60, 90, 120] as const;
+const TRANSCODE_PREBUFFER_OPTIONS = [10, 30, 45, 60, 90, 120] as const;
 const TRANSCODE_OUTPUT_RESOLUTION_OPTIONS = [0, 480, 720, 1080, 1440, 2160] as const;
 
 function firstNonEmpty(...values: Array<string | undefined | null>): string | null {
@@ -531,6 +564,24 @@ function formatClock(totalSecondsInput: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function formatSecondsCounter(totalSecondsInput: number): string {
+  const totalSeconds = Number.isFinite(totalSecondsInput) ? Math.max(0, Math.floor(totalSecondsInput)) : 0;
+  return String(totalSeconds).padStart(2, "0");
+}
+
+function resolveHLSLoadedSeconds(data: unknown): number {
+  const details = (data as { details?: { totalduration?: number; fragments?: Array<{ duration?: number }> } } | null)?.details;
+  const total = Number(details?.totalduration || 0);
+  if (Number.isFinite(total) && total > 0) {
+    return total;
+  }
+  const fragments = Array.isArray(details?.fragments) ? details.fragments : [];
+  return fragments.reduce((sum, fragment) => {
+    const duration = Number(fragment?.duration || 0);
+    return Number.isFinite(duration) && duration > 0 ? sum + duration : sum;
+  }, 0);
+}
+
 function parseVttTimestamp(raw: string): number | null {
   const normalized = raw.trim().replace(",", ".");
   if (!normalized) return null;
@@ -729,32 +780,6 @@ function fileExtension(name: string): string {
   return ext.length <= 12 ? ext : "";
 }
 
-function isDirectPlayableVideoFile(name: string): boolean {
-  return [".mp4", ".m4v", ".webm"].includes(fileExtension(name));
-}
-
-function isPlaybackFileCompleted(file: PlaybackFileOption | null, status: PlayerTransmissionStatusResponse | null): boolean {
-  if (!file || !status || status.selectedFileIndex !== file.index) return false;
-  const length = Math.max(0, Number(status.selectedFileLength || file.length || 0));
-  const completed = Math.max(0, Number(status.selectedFileBytesCompleted || 0));
-  if (length > 0 && completed >= length - 1) return true;
-  return (status.selectedFileReadyRatio || 0) >= 0.999;
-}
-
-function selectedServerAudioTrackNeedsTranscode(
-  selectedAudioTrackId: string,
-  serverAudioTracks: PlayerTransmissionAudioTrack[]
-): boolean {
-  if (!selectedAudioTrackId.startsWith("srv:")) return false;
-  const parsed = Number(selectedAudioTrackId.slice(4));
-  if (!Number.isInteger(parsed) || parsed < 0) return true;
-  const track = serverAudioTracks.find((item) => item.index === parsed);
-  if (!track) return true;
-  if (track.default) return false;
-  const hasExplicitDefault = serverAudioTracks.some((item) => item.default);
-  return hasExplicitDefault || serverAudioTracks[0]?.index !== track.index;
-}
-
 function shouldPreferTranscodeForPlayback(
   file: PlaybackFileOption | null,
   status: PlayerTransmissionStatusResponse | null,
@@ -763,10 +788,11 @@ function shouldPreferTranscodeForPlayback(
   serverAudioTracks: PlayerTransmissionAudioTrack[]
 ): boolean {
   if (!file) return true;
-  if (outputResolution > 0) return true;
-  if (selectedServerAudioTrackNeedsTranscode(selectedAudioTrackId, serverAudioTracks)) return true;
-  if (!isDirectPlayableVideoFile(file.name)) return true;
-  return !isPlaybackFileCompleted(file, status);
+  void status;
+  void outputResolution;
+  void selectedAudioTrackId;
+  void serverAudioTracks;
+  return true;
 }
 
 function detectResolutionLabel(name: string): string {
@@ -978,6 +1004,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const initializedInfoHashRef = useRef("");
   const subtitleLoadTokenRef = useRef(0);
   const audioTrackLoadTokenRef = useRef(0);
+  const hlsRef = useRef<HlsLike | null>(null);
+  const hlsLoadedDurationSecondsRef = useRef(0);
+  const activeStreamConfigKeyRef = useRef("");
   const selectedFileIndexRef = useRef(-1);
   const fileSwitchingRef = useRef(false);
   const streamUrlRef = useRef("");
@@ -1003,11 +1032,10 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const bootstrapRunTokenRef = useRef(0);
   const pendingResumeTargetRef = useRef<number | null>(null);
   const autoResumeWhenPlayableRef = useRef(false);
-  const prebufferWaitRef = useRef(false);
-  const prebufferStartedAtRef = useRef(0);
   const globalPreferencesHydratedRef = useRef(false);
   const trackPreferencesHydratedKeyRef = useRef("");
   const pendingRequestedFileIndexRef = useRef<number | null>(null);
+  const revealControlsTimerRef = useRef<number | null>(null);
 
   const [bootstrapLoading, setBootstrapLoading] = useState(false);
   const [bootstrapped, setBootstrapped] = useState(false);
@@ -1034,6 +1062,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const [seekHoverSeconds, setSeekHoverSeconds] = useState<number | null>(null);
   const [seekHoverRatio, setSeekHoverRatio] = useState(0);
   const [seekPreviewFailedKey, setSeekPreviewFailedKey] = useState("");
+  const [seekPreviewLoadedKey, setSeekPreviewLoadedKey] = useState("");
   const [videoFitMode, setVideoFitMode] = useState<"contain" | "cover" | "fill">("contain");
   const [transcodeStartOffsetSeconds, setTranscodeStartOffsetSeconds] = useState(0);
   const [statusSnapshot, setStatusSnapshot] = useState<PlayerTransmissionStatusResponse | null>(null);
@@ -1060,9 +1089,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const [diagnosticsOpened, setDiagnosticsOpened] = useState(false);
   const [playbackLoading, setPlaybackLoading] = useState(false);
   const [transcodePrebufferSeconds, setTranscodePrebufferSeconds] = useState(TRANSCODE_PREBUFFER_DEFAULT_SECONDS);
-  const [bufferedAheadSeconds, setBufferedAheadSeconds] = useState(0);
-  const [prebufferBufferedAheadSeconds, setPrebufferBufferedAheadSeconds] = useState(0);
-  const [prebufferWaiting, setPrebufferWaiting] = useState(false);
+  const [prebufferProgressSeconds, setPrebufferProgressSeconds] = useState(0);
+  const [networkCacheSeconds, setNetworkCacheSeconds] = useState(0);
+  const [playableCacheAheadSeconds, setPlayableCacheAheadSeconds] = useState(0);
 
   const [diagnostics, setDiagnostics] = useState<DiagnosticEntry[]>([]);
   const [resumePromptOpened, setResumePromptOpened] = useState(false);
@@ -1134,6 +1163,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         window.clearTimeout(controlsHideTimerRef.current);
         controlsHideTimerRef.current = null;
       }
+      if (revealControlsTimerRef.current !== null) {
+        window.clearTimeout(revealControlsTimerRef.current);
+        revealControlsTimerRef.current = null;
+      }
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
       for (const entry of subtitleBlobUrlsRef.current) {
         if (entry.startsWith("blob:")) {
           URL.revokeObjectURL(entry);
@@ -1372,6 +1407,20 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     [selectedAudioTrackQueryIndex, transcodeOutputResolution]
   );
 
+  const buildHLSPlaylistOptions = useCallback(
+    (overrides?: { audioTrackIndex?: number; startSeconds?: number; startBytes?: number }) => {
+      const base = buildTranscodeStreamOptions(overrides);
+      return {
+        audioTrackIndex: base.audioTrackIndex,
+        outputResolution: base.outputResolution,
+        startSeconds: base.startSeconds,
+        startBytes: base.startBytes,
+        prebufferSeconds: transcodePrebufferSeconds
+      };
+    },
+    [buildTranscodeStreamOptions, transcodePrebufferSeconds]
+  );
+
   const activePreferTranscode = useMemo(
     () => (selectedFileOption ? resolvePreferTranscode(selectedFileOption, statusSnapshot) : false),
     [resolvePreferTranscode, selectedFileOption, statusSnapshot]
@@ -1386,14 +1435,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       if (!selected) return "";
       const preferTranscode = resolvePreferTranscode(selected, statusSnapshotRef.current);
       const mode = preferTranscode ? "transcode" : "direct";
-      return buildPlayerTransmissionStreamURL(
-        infoHash,
-        index,
-        cacheTag || `${index}-${mode}-${preferTranscode ? "tc" : "direct"}-${Date.now()}`,
-        preferTranscode ? buildTranscodeStreamOptions() : undefined
-      );
+      const nextCacheTag = cacheTag || `${index}-${mode}-${preferTranscode ? "hls" : "direct"}-${Date.now()}`;
+      return preferTranscode
+        ? buildPlayerTransmissionHLSPlaylistURL(infoHash, index, nextCacheTag, buildHLSPlaylistOptions())
+        : buildPlayerTransmissionStreamURL(infoHash, index, nextCacheTag);
     },
-    [buildTranscodeStreamOptions, fileOptions, infoHash, resolvePreferTranscode]
+    [buildHLSPlaylistOptions, fileOptions, infoHash, resolvePreferTranscode]
   );
 
   const totalDurationSeconds = useMemo(() => {
@@ -1441,11 +1488,47 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     return 0;
   }, []);
 
-  const refreshBufferedAheadSeconds = useCallback(() => {
-    const next = resolveBufferedAheadSeconds();
-    setBufferedAheadSeconds((current) => (Math.abs(current - next) < 0.25 ? current : next));
-    return next;
-  }, [resolveBufferedAheadSeconds]);
+  const resolveHLSNetworkCacheAheadSeconds = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || !activePreferTranscodeRef.current) return 0;
+    const loadedDuration = Math.max(0, hlsLoadedDurationSecondsRef.current);
+    if (loadedDuration <= 0) return 0;
+    const current = Number.isFinite(video.currentTime) ? Math.max(0, video.currentTime) : 0;
+    return Math.max(0, loadedDuration - current);
+  }, []);
+
+  const resolveCachedAheadSeconds = useCallback(() => {
+    const browserAhead = resolveBufferedAheadSeconds();
+    if (activePreferTranscodeRef.current) {
+      return Math.max(browserAhead, resolveHLSNetworkCacheAheadSeconds());
+    }
+    const status = statusSnapshotRef.current;
+    const current = Math.max(0, resolveAbsoluteCurrent());
+    const timeline = Math.max(0, totalDurationSecondsRef.current);
+    if (!status || timeline <= 0 || status.selectedFileIndex !== selectedFileIndexRef.current) {
+      return browserAhead;
+    }
+
+    let cachedAhead = 0;
+    const ranges = Array.isArray(status.selectedFileAvailableRanges) ? status.selectedFileAvailableRanges : [];
+    for (const range of ranges) {
+      const start = Math.max(0, Math.min(1, Number(range?.startRatio ?? 0))) * timeline;
+      const end = Math.max(0, Math.min(1, Number(range?.endRatio ?? 0))) * timeline;
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+      if (current + 0.01 < start || current - 0.25 > end) continue;
+      cachedAhead = Math.max(cachedAhead, end - current);
+    }
+
+    const contiguousEnd = Math.max(0, Math.min(1, Number(status.selectedFileContiguousRatio || 0))) * timeline;
+    if (current <= contiguousEnd + 0.25) {
+      cachedAhead = Math.max(cachedAhead, contiguousEnd - current);
+    }
+    if ((status.selectedFileReadyRatio || 0) >= 0.999) {
+      cachedAhead = Math.max(cachedAhead, timeline - current);
+    }
+
+    return Math.max(0, browserAhead, cachedAhead);
+  }, [resolveAbsoluteCurrent, resolveBufferedAheadSeconds, resolveHLSNetworkCacheAheadSeconds]);
 
   const attemptResumePlayback = useCallback((reason: string, targetSeconds?: number) => {
     const video = videoRef.current;
@@ -1463,9 +1546,15 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       const errorName = error instanceof DOMException ? error.name : "";
       logInfo("playback", "waiting for playable data", { reason, targetSeconds: pendingTarget, errorName });
       if (errorName === "AbortError") {
+        if (video.paused) {
+          autoResumeWhenPlayableRef.current = false;
+          pendingResumeTargetRef.current = null;
+          setPlaybackLoading(false);
+          setPlayerStatus("ready");
+        }
         return;
       }
-      if (video.paused && video.readyState >= 2 && errorName === "NotAllowedError") {
+      if (video.paused && errorName === "NotAllowedError") {
         autoResumeWhenPlayableRef.current = false;
         pendingResumeTargetRef.current = null;
         setPlaybackLoading(false);
@@ -1492,11 +1581,116 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
   useEffect(() => {
     streamUrlRef.current = streamUrl;
-    prebufferWaitRef.current = false;
-    setPrebufferWaiting(false);
-    setBufferedAheadSeconds(0);
-    setPrebufferBufferedAheadSeconds(0);
+    setPrebufferProgressSeconds(0);
+    setNetworkCacheSeconds(0);
+    hlsLoadedDurationSecondsRef.current = 0;
   }, [streamUrl]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    hlsRef.current?.destroy();
+    hlsRef.current = null;
+
+    if (!streamUrl) {
+      video.removeAttribute("src");
+      video.load();
+      return;
+    }
+    if (!activePreferTranscode || !streamUrl.includes("/api/media/player/transmission/hls/playlist")) {
+      video.src = streamUrl;
+      return;
+    }
+
+    let cancelled = false;
+    const applyNativeHLS = () => {
+      video.src = streamUrl;
+      video.load();
+    };
+
+    void import("hls.js")
+      .then((module) => {
+        if (cancelled || !videoRef.current) return;
+        const HlsCtor = module.default;
+        if (!HlsCtor.isSupported()) {
+          if (video.canPlayType("application/vnd.apple.mpegurl")) {
+            applyNativeHLS();
+          } else {
+            setPlayerError(tRef.current("media.player.playbackError"));
+            setPlayerStatus("error");
+          }
+          return;
+        }
+        const hls = new HlsCtor({
+          autoStartLoad: false,
+          enableWorker: true,
+          lowLatencyMode: false,
+          startPosition: 0,
+          maxBufferLength: Math.max(30, transcodePrebufferSeconds),
+          maxMaxBufferLength: Math.max(60, transcodePrebufferSeconds),
+          backBufferLength: 30,
+          xhrSetup: (xhr: XMLHttpRequest) => {
+            const token = getAuthToken();
+            if (token) {
+              xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+            }
+            xhr.withCredentials = true;
+          }
+        }) as HlsLike;
+        hlsRef.current = hls;
+        activeStreamConfigKeyRef.current = buildPlaybackStreamConfigKey({
+          fileIndex: selectedFileIndexRef.current,
+          preferTranscode: true,
+          audioTrackIndex: selectedAudioTrackQueryIndexRef.current,
+          outputResolution: transcodeOutputResolution,
+          prebufferSeconds: transcodePrebufferSeconds
+        });
+        hls.attachMedia(video);
+        hls.loadSource(streamUrl);
+        hls.on(HlsCtor.Events.MANIFEST_PARSED, () => {
+          if (cancelled) return;
+          hls.startLoad?.(0);
+          if (Number.isFinite(video.currentTime) && video.currentTime > 0.25) {
+            try {
+              video.currentTime = 0;
+            } catch {
+              // keep the browser-selected start if the media element refuses the reset
+            }
+          }
+        });
+        hls.on(HlsCtor.Events.LEVEL_LOADED, (_event, data) => {
+          if (cancelled) return;
+          const seconds = resolveHLSLoadedSeconds(data);
+          hlsLoadedDurationSecondsRef.current = Math.max(0, seconds);
+          const ahead = resolveHLSNetworkCacheAheadSeconds();
+          const displayAhead = hlsNetworkCacheDisplaySeconds(ahead, transcodePrebufferSeconds);
+          setNetworkCacheSeconds((current) => (Math.abs(current - displayAhead) < 0.25 ? current : displayAhead));
+          setPlayableCacheAheadSeconds((current) => Math.max(current, ahead));
+        });
+        hls.on(HlsCtor.Events.ERROR, (_event, data) => {
+          if (cancelled) return;
+          const payload = data as { fatal?: boolean; type?: string; details?: string };
+          logWarnRef.current("hls", "hls playback error", payload);
+          if (!payload?.fatal) return;
+          if (retryCurrentStreamRef.current("hls_error")) return;
+          setPlaybackLoading(false);
+          setPlayerStatus("error");
+          setPlayerError(tRef.current("media.player.playbackError"));
+        });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        logWarnRef.current("hls", "failed to initialize hls.js", { message: toErrorMessage(error, "hls init failed") });
+        applyNativeHLS();
+      });
+
+    return () => {
+      cancelled = true;
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
+    };
+  }, [activePreferTranscode, resolveHLSNetworkCacheAheadSeconds, streamUrl, transcodeOutputResolution, transcodePrebufferSeconds]);
 
   useEffect(() => {
     tRef.current = t;
@@ -1599,7 +1793,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !streamUrl) return;
 
     const player = plyrRef.current;
     const syntheticDuration = Number.isFinite(totalDurationSecondsRef.current)
@@ -1618,7 +1812,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
     video.dispatchEvent(new Event("durationchange"));
     video.dispatchEvent(new Event("timeupdate"));
-  }, [activePreferTranscode, totalDurationSeconds, transcodeStartOffsetSeconds]);
+  }, [activePreferTranscode, streamUrl, totalDurationSeconds, transcodeStartOffsetSeconds]);
 
   const syncSelectedSubtitleTrack = useCallback(() => {
     const video = videoRef.current;
@@ -1809,6 +2003,18 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     }
     streamUrlRef.current = url;
     streamApplyOptionsRef.current = options || {};
+    if (!options?.autoplay) {
+      autoResumeWhenPlayableRef.current = false;
+      pendingResumeTargetRef.current = null;
+      const video = videoRef.current;
+      if (video) {
+        video.autoplay = false;
+        video.pause();
+      }
+      plyrRef.current?.pause?.();
+      setIsVideoPaused(true);
+      setPlaybackLoading(false);
+    }
     setStreamUrl(url);
   }, []);
 
@@ -1842,16 +2048,23 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         : 0;
     const nextUrl =
       preferTranscode && selected
-        ? buildPlayerTransmissionStreamURL(
+        ? buildPlayerTransmissionHLSPlaylistURL(
           infoHash,
           index,
           cacheTag,
-          buildTranscodeStreamOptions({ startSeconds: resumeAt, startBytes })
+          buildHLSPlaylistOptions({ startSeconds: resumeAt, startBytes })
         )
         : buildCurrentPlaybackStreamURL(cacheTag);
     if (!nextUrl) {
       return false;
     }
+    activeStreamConfigKeyRef.current = buildPlaybackStreamConfigKey({
+      fileIndex: index,
+      preferTranscode,
+      audioTrackIndex: selectedAudioTrackQueryIndexRef.current,
+      outputResolution: transcodeOutputResolution,
+      prebufferSeconds: transcodePrebufferSeconds
+    });
 
     pendingResumeTargetRef.current = resumeAt;
     autoResumeWhenPlayableRef.current = true;
@@ -1888,11 +2101,13 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   }, [
     applyStreamUrl,
     buildCurrentPlaybackStreamURL,
-    buildTranscodeStreamOptions,
+    buildHLSPlaylistOptions,
     fileOptions,
     infoHash,
     logWarn,
-    resolveAbsoluteCurrent
+    resolveAbsoluteCurrent,
+    transcodeOutputResolution,
+    transcodePrebufferSeconds
   ]);
 
   useEffect(() => {
@@ -2198,15 +2413,19 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
         const preferTranscode = resolvePreferTranscode(selected, activeResult.status);
         const mode = preferTranscode ? "transcode" : "direct";
-        const nextUrl = buildPlayerTransmissionStreamURL(
-          infoHash,
-          selected.index,
-          `${selected.index}-${mode}-${preferTranscode ? "tc" : "direct"}`,
-          preferTranscode ? buildTranscodeStreamOptions() : undefined
-        );
+        const nextUrl = preferTranscode
+          ? buildPlayerTransmissionHLSPlaylistURL(infoHash, selected.index, `${selected.index}-${mode}-hls`, buildHLSPlaylistOptions())
+          : buildPlayerTransmissionStreamURL(infoHash, selected.index, `${selected.index}-${mode}-direct`);
         setTranscodeStartOffsetSeconds(0);
         transcodeStartOffsetRef.current = 0;
         pendingTranscodeSeekDisplayRef.current = null;
+        activeStreamConfigKeyRef.current = buildPlaybackStreamConfigKey({
+          fileIndex: selected.index,
+          preferTranscode,
+          audioTrackIndex: selectedAudioTrackQueryIndexRef.current,
+          outputResolution: transcodeOutputResolution,
+          prebufferSeconds: transcodePrebufferSeconds
+        });
         applyStreamUrl(nextUrl, { autoplay: false });
 
         setBootstrapped(true);
@@ -2231,7 +2450,19 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         setBootstrapLoading(false);
       }
     }
-  }, [applyFileOptions, applyStreamUrl, buildTranscodeStreamOptions, infoHash, logError, logInfo, resolvePreferTranscode, t, user?.id]);
+  }, [
+    applyFileOptions,
+    applyStreamUrl,
+    buildHLSPlaylistOptions,
+    infoHash,
+    logError,
+    logInfo,
+    resolvePreferTranscode,
+    t,
+    transcodeOutputResolution,
+    transcodePrebufferSeconds,
+    user?.id
+  ]);
 
   const handleSelectFile = useCallback(
     async (
@@ -2287,12 +2518,14 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
             ? estimateTranscodeStartBytes(resumeAt, durationForStartBytes, selected.length)
             : 0;
 
-        const nextUrl = buildPlayerTransmissionStreamURL(
-          infoHash,
-          selected.index,
-          `${selected.index}-${preferTranscode ? "transcode" : "direct"}-${preferTranscode ? "tc" : "direct"}`,
-          preferTranscode ? buildTranscodeStreamOptions({ audioTrackIndex: -1, startSeconds: resumeAt, startBytes }) : undefined
-        );
+        const nextUrl = preferTranscode
+          ? buildPlayerTransmissionHLSPlaylistURL(
+            infoHash,
+            selected.index,
+            `${selected.index}-transcode-hls`,
+            buildHLSPlaylistOptions({ audioTrackIndex: -1, startSeconds: resumeAt, startBytes })
+          )
+          : buildPlayerTransmissionStreamURL(infoHash, selected.index, `${selected.index}-direct-direct`);
         setTranscodeStartOffsetSeconds(preferTranscode ? resumeAt : 0);
         transcodeStartOffsetRef.current = preferTranscode ? resumeAt : 0;
         pendingTranscodeSeekDisplayRef.current =
@@ -2302,6 +2535,13 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         setAbsoluteCurrentSeconds(resumeAt);
         setPlaybackLoading(true);
         setPlayerStatus("buffering");
+        activeStreamConfigKeyRef.current = buildPlaybackStreamConfigKey({
+          fileIndex: selected.index,
+          preferTranscode,
+          audioTrackIndex: selectedAudioTrackQueryIndexRef.current,
+          outputResolution: transcodeOutputResolution,
+          prebufferSeconds: transcodePrebufferSeconds
+        });
         applyStreamUrl(nextUrl, {
           autoplay,
           resumeAt: preferTranscode ? 0 : resumeAt
@@ -2324,7 +2564,18 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         setFileSwitching(false);
       }
     },
-    [applyFileOptions, applyStreamUrl, buildTranscodeStreamOptions, infoHash, logError, logInfo, t, transcodeOutputResolution, user?.id]
+    [
+      applyFileOptions,
+      applyStreamUrl,
+      buildHLSPlaylistOptions,
+      infoHash,
+      logError,
+      logInfo,
+      t,
+      transcodeOutputResolution,
+      transcodePrebufferSeconds,
+      user?.id
+    ]
   );
 
   useEffect(() => {
@@ -2450,13 +2701,22 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     const mode = preferTranscode ? "transcode" : "direct";
     const resumeAt = Math.max(0, resolveAbsoluteCurrent());
     const startBytes = estimateTranscodeStartBytes(resumeAt, totalDurationSecondsRef.current, selected.length);
-    const nextUrl = buildPlayerTransmissionStreamURL(
-      infoHash,
-      selectedFileIndex,
-      `${selectedFileIndex}-${mode}-${preferTranscode ? "tc" : "direct"}`,
-      preferTranscode ? buildTranscodeStreamOptions({ startSeconds: resumeAt, startBytes }) : undefined
-    );
-    if (streamUrlRef.current === nextUrl) {
+    const nextConfigKey = buildPlaybackStreamConfigKey({
+      fileIndex: selectedFileIndex,
+      preferTranscode,
+      audioTrackIndex: selectedAudioTrackQueryIndexRef.current,
+      outputResolution: transcodeOutputResolution,
+      prebufferSeconds: transcodePrebufferSeconds
+    });
+    const nextUrl = preferTranscode
+      ? buildPlayerTransmissionHLSPlaylistURL(
+        infoHash,
+        selectedFileIndex,
+        `${selectedFileIndex}-${mode}-hls-${Math.floor(resumeAt * 10)}-${transcodePrebufferSeconds}`,
+        buildHLSPlaylistOptions({ startSeconds: resumeAt, startBytes })
+      )
+      : buildPlayerTransmissionStreamURL(infoHash, selectedFileIndex, `${selectedFileIndex}-${mode}-direct`);
+    if (activeStreamConfigKeyRef.current === nextConfigKey) {
       return;
     }
 
@@ -2464,11 +2724,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     transcodeStartOffsetRef.current = preferTranscode ? resumeAt : 0;
     pendingTranscodeSeekDisplayRef.current = preferTranscode ? { target: resumeAt, at: Date.now() } : null;
     pendingResumeTargetRef.current = resumeAt;
-    autoResumeWhenPlayableRef.current = true;
+    autoResumeWhenPlayableRef.current = !videoRef.current?.paused;
     setPlaybackLoading(true);
     setPlayerStatus("buffering");
+    activeStreamConfigKeyRef.current = nextConfigKey;
     applyStreamUrl(nextUrl, {
-      autoplay: true,
+      autoplay: Boolean(!videoRef.current?.paused),
       resumeAt: preferTranscode ? 0 : resumeAt
     });
 
@@ -2481,13 +2742,15 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   }, [
     applyStreamUrl,
     activePreferTranscode,
-    buildTranscodeStreamOptions,
+    buildHLSPlaylistOptions,
     bootstrapped,
     fileOptions,
     infoHash,
     logInfo,
     resolveAbsoluteCurrent,
-    selectedFileIndex
+    selectedFileIndex,
+    transcodeOutputResolution,
+    transcodePrebufferSeconds
   ]);
 
   useEffect(() => {
@@ -2519,21 +2782,19 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       syncSelectedAudioTrack();
       if (autoplay) {
         if (activePreferTranscodeRef.current && transcodePrebufferSeconds > 0) {
-          prebufferWaitRef.current = true;
-          setPrebufferWaiting(true);
-          prebufferStartedAtRef.current = Date.now();
-          setPrebufferBufferedAheadSeconds(0);
-          setPlaybackLoading(true);
-          setPlayerStatus("buffering");
-          logInfo("prebuffer", "waiting transcode prebuffer", { targetSeconds: transcodePrebufferSeconds });
-        } else {
-          attemptResumePlayback("stream_loadedmetadata", resumeAt > 0 ? resumeAt : undefined);
+          setPrebufferProgressSeconds(0);
+          logInfo("prebuffer", "start playback without paused prebuffer wait", { targetSeconds: transcodePrebufferSeconds });
         }
+        attemptResumePlayback("stream_loadedmetadata", resumeAt > 0 ? resumeAt : undefined);
       } else {
-        prebufferWaitRef.current = false;
-        setPrebufferWaiting(false);
         autoResumeWhenPlayableRef.current = false;
         pendingResumeTargetRef.current = null;
+        try {
+          video.pause();
+        } catch {
+          // ignore pause failures from detached media elements
+        }
+        setIsVideoPaused(true);
         setPlaybackLoading(false);
         setPlayerStatus("ready");
       }
@@ -2551,42 +2812,22 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     const video = videoRef.current;
     if (!video) return;
 
-    const maybeStartPlaybackAfterPrebuffer = () => {
-      if (!prebufferWaitRef.current) return;
-      const bufferedAhead = refreshBufferedAheadSeconds();
-      setPrebufferBufferedAheadSeconds(bufferedAhead);
-      const elapsed = Date.now() - prebufferStartedAtRef.current;
-      if (bufferedAhead >= transcodePrebufferSeconds || elapsed >= TRANSCODE_PREBUFFER_MAX_WAIT_MS) {
-        prebufferWaitRef.current = false;
-        setPrebufferWaiting(false);
-        setPrebufferBufferedAheadSeconds(0);
-        attemptResumePlayback("transcode_prebuffer_ready");
+    const refreshBufferedAhead = () => {
+      if (!streamUrl) {
+        setPrebufferProgressSeconds(0);
+        setPlayableCacheAheadSeconds(0);
+        return;
+      }
+      const nextProgress = resolveBufferedAheadSeconds();
+      const nextPlayableCache = resolveCachedAheadSeconds();
+      setPrebufferProgressSeconds((current) => (Math.abs(current - nextProgress) < 0.25 ? current : nextProgress));
+      setPlayableCacheAheadSeconds((current) => (Math.abs(current - nextPlayableCache) < 0.25 ? current : nextPlayableCache));
+      if (activePreferTranscodeRef.current) {
+        const nextNetworkCache = hlsNetworkCacheDisplaySeconds(resolveHLSNetworkCacheAheadSeconds(), transcodePrebufferSeconds);
+        setNetworkCacheSeconds((current) => (Math.abs(current - nextNetworkCache) < 0.25 ? current : nextNetworkCache));
       }
     };
 
-    const events: Array<keyof HTMLMediaElementEventMap> = ["progress", "canplay", "canplaythrough", "loadeddata", "timeupdate"];
-    for (const eventName of events) {
-      video.addEventListener(eventName, maybeStartPlaybackAfterPrebuffer);
-    }
-    const timer = window.setInterval(maybeStartPlaybackAfterPrebuffer, 500);
-    return () => {
-      for (const eventName of events) {
-        video.removeEventListener(eventName, maybeStartPlaybackAfterPrebuffer);
-      }
-      window.clearInterval(timer);
-    };
-  }, [attemptResumePlayback, refreshBufferedAheadSeconds, transcodePrebufferSeconds]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !streamUrl) {
-      setBufferedAheadSeconds(0);
-      return;
-    }
-
-    const update = () => {
-      refreshBufferedAheadSeconds();
-    };
     const events: Array<keyof HTMLMediaElementEventMap> = [
       "progress",
       "canplay",
@@ -2599,18 +2840,18 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       "waiting",
       "playing"
     ];
-    update();
+    refreshBufferedAhead();
     for (const eventName of events) {
-      video.addEventListener(eventName, update);
+      video.addEventListener(eventName, refreshBufferedAhead);
     }
-    const timer = window.setInterval(update, 500);
+    const timer = window.setInterval(refreshBufferedAhead, 500);
     return () => {
       for (const eventName of events) {
-        video.removeEventListener(eventName, update);
+        video.removeEventListener(eventName, refreshBufferedAhead);
       }
       window.clearInterval(timer);
     };
-  }, [refreshBufferedAheadSeconds, streamUrl]);
+  }, [resolveBufferedAheadSeconds, resolveCachedAheadSeconds, resolveHLSNetworkCacheAheadSeconds, streamUrl, transcodePrebufferSeconds]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -2718,7 +2959,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
     const recoverIfStalled = (trigger: string) => {
       if (!streamUrlRef.current) return;
-      if (prebufferWaitRef.current || seekingSwitchingRef.current || transcodeSeekInFlightRef.current) return;
+      if (seekingSwitchingRef.current || transcodeSeekInFlightRef.current) return;
       if (video.ended) return;
       if (video.paused && !autoResumeWhenPlayableRef.current) {
         stallStartedAtRef.current = 0;
@@ -2745,7 +2986,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       );
       if (duration > 0 && duration - seconds <= 1.5) return;
 
-      const bufferedAhead = resolveBufferedAheadSeconds();
+      const bufferedAhead = resolveCachedAheadSeconds();
       const noProgressMs = now - previous.at;
       const stallMs = stallStartedAtRef.current > 0 ? now - stallStartedAtRef.current : 0;
       const isLikelyStalled =
@@ -2817,7 +3058,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       video.removeEventListener("canplaythrough", onCanPlayEvent);
       window.clearInterval(watchdogTimer);
     };
-  }, [logWarn, resolveAbsoluteCurrent, resolveBufferedAheadSeconds]);
+  }, [logWarn, resolveAbsoluteCurrent, resolveCachedAheadSeconds]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -2841,16 +3082,17 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       if (video.paused && !autoResumeWhenPlayableRef.current && !seekingSwitchingRef.current) {
         return;
       }
+      const cachedAhead = activePreferTranscodeRef.current ? resolveHLSNetworkCacheAheadSeconds() : resolveCachedAheadSeconds();
+      if (cachedAhead >= 1.5) {
+        setPlaybackLoading(false);
+        setPlayerStatus(video.paused ? "ready" : "playing");
+        return;
+      }
       setPlaybackLoading(true);
       setPlayerStatus("buffering");
     };
 
     const onCanPlay = () => {
-      if (prebufferWaitRef.current) {
-        setPlaybackLoading(true);
-        setPlayerStatus("buffering");
-        return;
-      }
       if (autoResumeWhenPlayableRef.current) {
         resumeIfPending();
         return;
@@ -2860,9 +3102,6 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     };
 
     const onPlaying = () => {
-      prebufferWaitRef.current = false;
-      setPrebufferWaiting(false);
-      setPrebufferBufferedAheadSeconds(0);
       autoResumeWhenPlayableRef.current = false;
       pendingResumeTargetRef.current = null;
       streamRetryRef.current = { key: "", attempts: 0 };
@@ -2872,9 +3111,6 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     };
 
     const onPause = () => {
-      prebufferWaitRef.current = false;
-      setPrebufferWaiting(false);
-      setPrebufferBufferedAheadSeconds(0);
       if (!autoResumeWhenPlayableRef.current) {
         setPlaybackLoading(false);
         setPlayerStatus("ready");
@@ -2883,9 +3119,6 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     };
 
     const onError = () => {
-      prebufferWaitRef.current = false;
-      setPrebufferWaiting(false);
-      setPrebufferBufferedAheadSeconds(0);
       transcodeSeekInFlightRef.current = false;
       seekingSwitchingRef.current = false;
       pendingTranscodeSeekDisplayRef.current = null;
@@ -2916,7 +3149,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       video.removeEventListener("pause", onPause);
       video.removeEventListener("error", onError);
     };
-  }, []);
+  }, [resolveCachedAheadSeconds, resolveHLSNetworkCacheAheadSeconds]);
 
   useEffect(() => {
     if (!statusSnapshot || !autoResumeWhenPlayableRef.current) return;
@@ -3240,6 +3473,27 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       try {
         seekingSwitchingRef.current = true;
         if (activePreferTranscode) {
+          const nativeTarget = clamped - transcodeStartOffsetRef.current;
+          const loadedDuration = hlsLoadedDurationSecondsRef.current;
+          if (nativeTarget >= 0 && loadedDuration > 0 && nativeTarget <= loadedDuration - 0.5) {
+            video.currentTime = nativeTarget;
+            setAbsoluteCurrentSeconds(clamped);
+            pendingTranscodeSeekDisplayRef.current = null;
+            transcodeSeekInFlightRef.current = false;
+            if (video.paused) {
+              attemptResumePlayback("hls_cached_seek", clamped);
+            } else {
+              setPlaybackLoading(false);
+              setPlayerStatus("playing");
+            }
+            logInfo("seek", "seek inside hls network cache", {
+              source,
+              targetSeconds: clamped,
+              cacheAheadSeconds: Math.max(0, loadedDuration - nativeTarget)
+            });
+            return;
+          }
+
           releaseOnLoadedMetadata = true;
           transcodeSeekInFlightRef.current = true;
           pendingTranscodeSeekDisplayRef.current = { target: clamped, at: Date.now() };
@@ -3249,11 +3503,11 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           setPlayerStatus("buffering");
           setAbsoluteCurrentSeconds(clamped);
           const startBytes = estimateTranscodeStartBytes(clamped, fullDuration, selectedFileOption.length);
-          const seekUrl = buildPlayerTransmissionStreamURL(
+          const seekUrl = buildPlayerTransmissionHLSPlaylistURL(
             infoHash,
             selectedFileOption.index,
-            `seek-${selectedFileOption.index}-${Math.floor(clamped * 10)}`,
-            buildTranscodeStreamOptions({ startSeconds: clamped, startBytes })
+            `seek-${selectedFileOption.index}-${Math.floor(clamped * 10)}-${transcodePrebufferSeconds}`,
+            buildHLSPlaylistOptions({ startSeconds: clamped, startBytes })
           );
           setTranscodeStartOffsetSeconds(clamped);
           transcodeStartOffsetRef.current = clamped;
@@ -3297,7 +3551,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       activePreferTranscode,
       applyStreamUrl,
       attemptResumePlayback,
-      buildTranscodeStreamOptions,
+      buildHLSPlaylistOptions,
       infoHash,
       logInfo,
       logWarn,
@@ -3306,6 +3560,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       setPlayerStatus,
       t,
       totalDurationSeconds,
+      transcodePrebufferSeconds,
       videoDuration
     ]
   );
@@ -3335,15 +3590,10 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     if (!video) return;
     const isPaused = video.paused;
     if (isPaused) {
-      prebufferWaitRef.current = false;
-      setPrebufferBufferedAheadSeconds(0);
       setIsVideoPaused(false);
       attemptResumePlayback("toggle_play");
       return;
     }
-    prebufferWaitRef.current = false;
-    setPrebufferWaiting(false);
-    setPrebufferBufferedAheadSeconds(0);
     autoResumeWhenPlayableRef.current = false;
     pendingResumeTargetRef.current = null;
     setPlaybackLoading(false);
@@ -3372,6 +3622,16 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       const tag = String(target?.tagName || "").toLowerCase();
       const editable = Boolean(target?.isContentEditable) || tag === "input" || tag === "textarea" || tag === "select";
       if (editable) return;
+      const revealControlsForKeyboardSeek = () => {
+        setControlsActive(true);
+        if (revealControlsTimerRef.current !== null) {
+          window.clearTimeout(revealControlsTimerRef.current);
+        }
+        revealControlsTimerRef.current = window.setTimeout(() => {
+          revealControlsTimerRef.current = null;
+          setControlsActive(false);
+        }, isFullscreenActive ? INLINE_CONTROLS_FULLSCREEN_HIDE_MS : INLINE_CONTROLS_KEYBOARD_HIDE_MS);
+      };
       if (event.key === " " || event.code === "Space") {
         event.preventDefault();
         handleTogglePlayback();
@@ -3379,19 +3639,25 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       }
       if (event.key === "ArrowLeft") {
         event.preventDefault();
+        revealControlsForKeyboardSeek();
         void handleSeekCommit(Math.max(0, resolveAbsoluteCurrent() - 30), "panel");
         return;
       }
       if (event.key === "ArrowRight") {
         event.preventDefault();
+        revealControlsForKeyboardSeek();
         void handleSeekCommit(resolveAbsoluteCurrent() + 30, "panel");
       }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
+      if (revealControlsTimerRef.current !== null) {
+        window.clearTimeout(revealControlsTimerRef.current);
+        revealControlsTimerRef.current = null;
+      }
     };
-  }, [canInitializePlyr, handleSeekCommit, handleTogglePlayback, resolveAbsoluteCurrent]);
+  }, [canInitializePlyr, handleSeekCommit, handleTogglePlayback, isFullscreenActive, resolveAbsoluteCurrent]);
 
   const handleSetPlaybackRate = useCallback((rate: number) => {
     const player = plyrRef.current;
@@ -3461,13 +3727,41 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   }, []);
 
   const handleToggleFullscreen = useCallback(async () => {
-    const player = plyrRef.current;
-    if (player?.fullscreen?.toggle) {
+    const stage = playerStageRef.current;
+    const docAny = document as Document & {
+      webkitFullscreenElement?: Element | null;
+      webkitExitFullscreen?: () => Promise<void> | void;
+    };
+    const stageAny = stage as (HTMLDivElement & {
+      webkitRequestFullscreen?: () => Promise<void> | void;
+    }) | null;
+    const currentFullscreen = document.fullscreenElement || docAny.webkitFullscreenElement || null;
+
+    if (currentFullscreen) {
       try {
-        player.fullscreen.toggle();
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if (docAny.webkitExitFullscreen) {
+          await docAny.webkitExitFullscreen();
+        }
         return;
       } catch {
-        // fallback to native request below
+        // no-op
+      }
+    }
+
+    if (stage) {
+      try {
+        if (stage.requestFullscreen) {
+          await stage.requestFullscreen();
+          return;
+        }
+        if (stageAny?.webkitRequestFullscreen) {
+          await stageAny.webkitRequestFullscreen();
+          return;
+        }
+      } catch {
+        // fallback to native video fullscreen below
       }
     }
 
@@ -3625,6 +3919,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const playedRatio = Math.max(0, Math.min(1, seekMax > 0 ? displayedCurrentSeconds / seekMax : 0));
   const sourceResolutionLabel = selectedFileOption?.resolutionLabel || "-";
   const outputResolutionLabel = transcodeOutputResolution > 0 ? `${transcodeOutputResolution}p` : t("media.player.resolutionOutputOriginal");
+  const networkCacheLabel = `${formatSecondsCounter(activePreferTranscode ? networkCacheSeconds : prebufferProgressSeconds)} ${t("media.player.prebufferSeconds")}`;
   const playbackStatusLabel =
     isVideoPaused && (playerStatus === "playing" || playerStatus === "ready")
       ? t("media.player.statusPaused")
@@ -3677,17 +3972,25 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     ["--torrent-player-aspect-ratio-value" as string]: String(videoAspectRatioValue),
     ["--torrent-player-height-offset" as string]: isFullscreenActive ? "132px" : "340px"
   };
+  const effectivePlaybackCacheAheadSeconds = activePreferTranscode ? networkCacheSeconds : playableCacheAheadSeconds;
   const showPlaybackBusyOverlay =
     !stageBootstrapLoading &&
-    (playbackLoading || fileSwitching || (playerStatus === "buffering" && !isVideoPaused));
+    (
+      fileSwitching ||
+      ((playbackLoading || (playerStatus === "buffering" && !isVideoPaused)) && effectivePlaybackCacheAheadSeconds < 1.5)
+    );
   const shouldKeepInlineControlsVisible =
-    settingsOpen || isSeekingDrag || showPlaybackBusyOverlay || isVideoPaused;
-  const inlineControlsVisible = shouldKeepInlineControlsVisible || controlsActive;
+    settingsOpen || subtitleManagerOpened || resumePromptOpened || isSeekingDrag || showPlaybackBusyOverlay || isVideoPaused;
+  const inlineControlsVisible = !isFullscreenActive || shouldKeepInlineControlsVisible || controlsActive;
 
   const scheduleControlsHide = useCallback((delayMs: number) => {
     if (controlsHideTimerRef.current !== null) {
       window.clearTimeout(controlsHideTimerRef.current);
       controlsHideTimerRef.current = null;
+    }
+    if (!isFullscreenActive) {
+      setControlsActive(true);
+      return;
     }
     if (shouldKeepInlineControlsVisible) {
       setControlsActive(true);
@@ -3696,9 +3999,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     controlsHideTimerRef.current = window.setTimeout(() => {
       setControlsActive(false);
     }, Math.max(0, delayMs));
-  }, [shouldKeepInlineControlsVisible]);
+  }, [isFullscreenActive, shouldKeepInlineControlsVisible]);
 
-  const revealInlineControls = useCallback((delayMs = 2200) => {
+  const revealInlineControls = useCallback((delayMs = INLINE_CONTROLS_HIDE_MS) => {
     setControlsActive(true);
     scheduleControlsHide(delayMs);
   }, [scheduleControlsHide]);
@@ -3712,8 +4015,276 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       setControlsActive(true);
       return;
     }
-    scheduleControlsHide(2200);
-  }, [scheduleControlsHide, shouldKeepInlineControlsVisible]);
+    if (!isFullscreenActive) {
+      setControlsActive(true);
+      return;
+    }
+    scheduleControlsHide(INLINE_CONTROLS_FULLSCREEN_HIDE_MS);
+  }, [isFullscreenActive, scheduleControlsHide, shouldKeepInlineControlsVisible]);
+
+  const inlineControlRevealDelayMs = isFullscreenActive ? INLINE_CONTROLS_FULLSCREEN_HIDE_MS : INLINE_CONTROLS_HIDE_MS;
+
+  const subtitleManagerPanel = subtitleManagerOpened ? (
+    <div
+      className="torrent-player-floating-panel torrent-player-subtitle-panel"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="torrent-player-panel-header">
+        <div className="torrent-player-panel-title">{t("media.player.subtitleManagerTitle")}</div>
+        <button
+          type="button"
+          className="torrent-inline-title-icon-btn"
+          onClick={() => setSubtitleManagerOpened(false)}
+          aria-label={t("common.close")}
+        >
+          <X size={14} />
+        </button>
+      </div>
+      <Tabs value={subtitleManagerTab} onChange={setSubtitleManagerTab} className="torrent-player-panel-tabs">
+        <Tabs.List>
+          <Tabs.Tab value="files">{t("media.player.subtitleManagerTabFiles")}</Tabs.Tab>
+          <Tabs.Tab value="style">{t("media.player.subtitleManagerTabStyle")}</Tabs.Tab>
+        </Tabs.List>
+
+        <Tabs.Panel value="files" pt="sm">
+          <Stack gap="md">
+            <Group justify="space-between" align="center" wrap="nowrap">
+              <Text c="dimmed" size="sm">{t("media.player.subtitleManagerHint")}</Text>
+              <Tooltip label={t("media.player.subtitleUploadPlaceholder")} withArrow>
+                <ActionIcon
+                  variant="light"
+                  size="lg"
+                  aria-label={t("media.player.subtitleUpload")}
+                  title={t("media.player.subtitleUploadPlaceholder")}
+                  disabled={subtitleLoading}
+                  onClick={() => {
+                    subtitleUploadInputRef.current?.click();
+                  }}
+                >
+                  <Upload size={18} />
+                </ActionIcon>
+              </Tooltip>
+            </Group>
+            <input
+              ref={subtitleUploadInputRef}
+              type="file"
+              accept=".srt,.vtt,.ass,.ssa"
+              disabled={subtitleLoading}
+              className="torrent-subtitle-upload-input"
+              onChange={(event) => {
+                const picked = event.currentTarget.files?.[0] || null;
+                event.currentTarget.value = "";
+                if (!picked) return;
+                void handleSubtitleUploadPick(picked);
+              }}
+            />
+
+            {subtitleItems.length === 0 ? (
+              <Text size="sm" c="dimmed">{t("media.player.subtitleManagerEmpty")}</Text>
+            ) : (
+              <Stack gap="xs">
+                {subtitleItems.map((item) => (
+                  <div className="torrent-subtitle-item-card" key={item.id}>
+                    <Group justify="space-between" align="center" gap="xs" wrap="nowrap">
+                      <Stack gap={2} style={{ minWidth: 0 }}>
+                        <Text fw={700} size="sm" className="torrent-subtitle-item-title">
+                          {item.label || `Subtitle ${item.id}`}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {t("media.player.subtitleOffset")}: {formatSubtitleOffsetLabel(item.offsetSeconds || 0)}
+                        </Text>
+                      </Stack>
+                      <Group gap={4} wrap="nowrap">
+                        <ActionIcon
+                          size="sm"
+                          variant="light"
+                          disabled={subtitleLoading}
+                          onClick={() => {
+                            void handleAdjustSubtitleOffset(item.id, -0.5);
+                          }}
+                          aria-label={t("media.player.subtitleOffsetMinus")}
+                        >
+                          <Minus size={14} />
+                        </ActionIcon>
+                        <ActionIcon
+                          size="sm"
+                          variant="light"
+                          disabled={subtitleLoading}
+                          onClick={() => {
+                            void handleAdjustSubtitleOffset(item.id, 0.5);
+                          }}
+                          aria-label={t("media.player.subtitleOffsetPlus")}
+                        >
+                          <Plus size={14} />
+                        </ActionIcon>
+                        <ActionIcon
+                          size="sm"
+                          color="red"
+                          variant="light"
+                          disabled={subtitleLoading}
+                          onClick={() => {
+                            void handleDeleteSubtitle(item.id);
+                          }}
+                          aria-label={t("media.player.subtitleDelete")}
+                        >
+                          <Trash2 size={14} />
+                        </ActionIcon>
+                      </Group>
+                    </Group>
+                  </div>
+                ))}
+              </Stack>
+            )}
+            {subtitleSiteLinks.length > 0 ? (
+              <div className="torrent-subtitle-site-links">
+                <Group gap="xs" wrap="wrap">
+                  {subtitleSiteLinks.map((link) => (
+                    <Button
+                      key={link.id}
+                      component="a"
+                      href={link.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      variant="light"
+                      size="xs"
+                      rightSection={<ExternalLink size={13} />}
+                    >
+                      {link.label}
+                    </Button>
+                  ))}
+                </Group>
+              </div>
+            ) : null}
+          </Stack>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="style" pt="sm">
+          <Stack gap="md">
+            <div className="torrent-inline-settings-section">
+              <div className="torrent-inline-settings-title">{t("media.player.subtitleStyleSize")}</div>
+              <div className="torrent-inline-rate-grid torrent-inline-rate-grid-6">
+                {[
+                  { value: 0.9, label: "S" },
+                  { value: 1, label: "M" },
+                  { value: 1.15, label: "L" },
+                  { value: 1.3, label: "XL" },
+                  { value: 1.5, label: "XXL" },
+                  { value: 1.7, label: "XXXL" }
+                ].map((item) => (
+                  <button
+                    key={`ssm:${item.value}`}
+                    type="button"
+                    className={`torrent-inline-rate-btn${Math.abs(subtitleStylePreset.scale - item.value) < 0.01 ? " is-active" : ""}`}
+                    onClick={() => {
+                      setSubtitleStylePreset((current) => ({ ...current, scale: item.value }));
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <div className="torrent-inline-settings-title">{t("media.player.subtitleStylePosition")}</div>
+              <div className="torrent-inline-rate-grid torrent-inline-rate-grid-6">
+                {[
+                  { value: 0, label: "0%" },
+                  { value: 4, label: "4%" },
+                  { value: 8, label: "8%" },
+                  { value: 12, label: "12%" },
+                  { value: 15, label: "15%" },
+                  { value: 18, label: "18%" }
+                ].map((item) => (
+                  <button
+                    key={`spm:${item.value}`}
+                    type="button"
+                    className={`torrent-inline-rate-btn${subtitleStylePreset.verticalPercent === item.value ? " is-active" : ""}`}
+                    onClick={() => {
+                      setSubtitleStylePreset((current) => ({ ...current, verticalPercent: item.value }));
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <div className="torrent-inline-settings-title">{t("media.player.subtitleStyleColor")}</div>
+              <div className="torrent-inline-rate-grid torrent-inline-rate-grid-6">
+                {[
+                  { value: "#f6f9ff", label: t("media.player.subtitleStyleColorWhite") },
+                  { value: "#ffe082", label: t("media.player.subtitleStyleColorYellow") },
+                  { value: "#d3ecff", label: t("media.player.subtitleStyleColorCyan") },
+                  { value: "#b6f8c8", label: t("media.player.subtitleStyleColorGreen") },
+                  { value: "#ffc88a", label: t("media.player.subtitleStyleColorOrange") },
+                  { value: "#ffd2ef", label: t("media.player.subtitleStyleColorPink") }
+                ].map((item) => (
+                  <button
+                    key={`scm:${item.value}`}
+                    type="button"
+                    className={`torrent-inline-rate-btn${subtitleStylePreset.textColor === item.value ? " is-active" : ""}`}
+                    onClick={() => {
+                      setSubtitleStylePreset((current) => ({ ...current, textColor: item.value }));
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <div className="torrent-inline-settings-title">{t("media.player.subtitleStyleBackground")}</div>
+              <div className="torrent-inline-rate-grid torrent-inline-rate-grid-6">
+                {[
+                  { value: "rgba(0, 0, 0, 0)", label: t("media.player.subtitleStyleBgNone") },
+                  { value: "rgba(0, 0, 0, 0.15)", label: "15%" },
+                  { value: "rgba(0, 0, 0, 0.25)", label: "25%" },
+                  { value: "rgba(0, 0, 0, 0.4)", label: "40%" },
+                  { value: "rgba(0, 0, 0, 0.55)", label: "55%" },
+                  { value: "rgba(0, 0, 0, 0.7)", label: "70%" }
+                ].map((item) => (
+                  <button
+                    key={`sbm:${item.value}`}
+                    type="button"
+                    className={`torrent-inline-rate-btn${subtitleStylePreset.backgroundColor === item.value ? " is-active" : ""}`}
+                    onClick={() => {
+                      setSubtitleStylePreset((current) => ({ ...current, backgroundColor: item.value }));
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </Stack>
+        </Tabs.Panel>
+      </Tabs>
+    </div>
+  ) : null;
+
+  const resumePromptPanel = resumePromptOpened ? (
+    <div className="torrent-player-center-layer" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+      <div className="torrent-player-floating-panel torrent-player-resume-panel">
+        <div className="torrent-player-panel-header">
+          <div className="torrent-player-panel-title">{t("media.player.resumePromptTitle")}</div>
+          <button
+            type="button"
+            className="torrent-inline-title-icon-btn"
+            onClick={handleResumePromptRestart}
+            aria-label={t("common.close")}
+          >
+            <X size={14} />
+          </button>
+        </div>
+        <Text size="sm" c="dimmed">
+          {t("media.player.resumePromptMessage")} <span className="torrent-player-resume-time">{formatClock(resumePromptSeconds)}</span>
+        </Text>
+        <div className="torrent-player-panel-actions">
+          <button type="button" className="torrent-player-panel-action" onClick={handleResumePromptRestart}>
+            {t("media.player.resumePromptRestart")}
+          </button>
+          <button type="button" className="torrent-player-panel-action is-primary" onClick={() => void handleResumePromptContinue()}>
+            {t("media.player.resumePromptContinue")}
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <Stack gap="md" className="torrent-player-page">
@@ -3773,18 +4344,19 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           <div
             ref={playerStageRef}
             className={`torrent-player-stage-shell${isVideoPaused ? " is-paused" : ""}${isFullscreenActive ? " is-fullscreen" : ""}${inlineControlsVisible ? " controls-visible" : ""}`}
-            onMouseMove={() => revealInlineControls(2200)}
-            onMouseEnter={() => revealInlineControls(2200)}
-            onPointerDown={() => revealInlineControls(2600)}
-            onTouchStart={() => revealInlineControls(3000)}
+            onMouseMove={() => revealInlineControls(inlineControlRevealDelayMs)}
+            onMouseEnter={() => revealInlineControls(inlineControlRevealDelayMs)}
+            onPointerDown={() => revealInlineControls(isFullscreenActive ? INLINE_CONTROLS_FULLSCREEN_HIDE_MS : INLINE_CONTROLS_KEYBOARD_HIDE_MS)}
+            onTouchStart={() => revealInlineControls(INLINE_CONTROLS_FULLSCREEN_HIDE_MS)}
           >
             <div className="torrent-player-wrap torrent-player-plyr-wrap" style={playerStageStyle} onClick={handleStageClickTogglePlayback}>
               <video
                 ref={videoRef}
-                src={streamUrl || undefined}
+                src={!activePreferTranscode ? streamUrl || undefined : undefined}
                 className="torrent-player-video torrent-plyr"
+                autoPlay={false}
                 playsInline
-                preload="metadata"
+                preload="auto"
                 crossOrigin="anonymous"
               >
                 {subtitleItems.map((item) => {
@@ -3808,14 +4380,16 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
                   <Loader size="sm" />
                   <Text fw={600} size="sm">{t("media.player.waitingPlayableTitle")}</Text>
                   <Text c="dimmed" size="xs">{t("media.player.waitingPlayableHint")}</Text>
-                  {prebufferWaiting ? (
+                  {activePreferTranscode ? (
                     <Text c="dimmed" size="xs">
-                      {t("media.player.prebufferStatus")} {Math.floor(prebufferBufferedAheadSeconds)}/{transcodePrebufferSeconds}s
+                      {t("media.player.networkCacheStatus")} {networkCacheLabel}
                     </Text>
                   ) : null}
                 </Stack>
               </div>
             ) : null}
+            {resumePromptPanel}
+            {subtitleManagerPanel}
 
             <div className="torrent-inline-controls">
               <div className="torrent-inline-controls-row">
@@ -3842,23 +4416,28 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
                   onMouseLeave={() => {
                     setSeekHoverSeconds(null);
                     setSeekPreviewFailedKey("");
+                    setSeekPreviewLoadedKey("");
                   }}
                 >
                   {seekHoverSeconds !== null ? (
                     <div className="torrent-inline-seek-hover" style={{ left: `${seekHoverRatio * 100}%` }}>
+                      <span className="torrent-inline-seek-preview-time">{formatClock(seekHoverSeconds)}</span>
                       {seekHoverThumbnail && seekPreviewFailedKey !== seekHoverThumbnail.key ? (
                         <Image
-                          className="torrent-inline-seek-preview-img"
+                          className={`torrent-inline-seek-preview-img${seekPreviewLoadedKey === seekHoverThumbnail.key ? " is-loaded" : ""}`}
                           src={seekHoverThumbnail.url}
                           alt=""
                           width={160}
                           height={90}
                           unoptimized
                           loading="eager"
-                          onError={() => setSeekPreviewFailedKey(seekHoverThumbnail.key)}
+                          onLoad={() => setSeekPreviewLoadedKey(seekHoverThumbnail.key)}
+                          onError={() => {
+                            setSeekPreviewLoadedKey("");
+                            setSeekPreviewFailedKey(seekHoverThumbnail.key);
+                          }}
                         />
                       ) : null}
-                      <span className="torrent-inline-seek-preview-time">{formatClock(seekHoverSeconds)}</span>
                     </div>
                   ) : null}
                   <div className="torrent-inline-seek-track">
@@ -3992,7 +4571,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
                         </div>
 
                         <div className="torrent-inline-settings-section">
-                          <div className="torrent-inline-settings-title">{t("media.player.prebufferTitle")}</div>
+                          <div className="torrent-inline-settings-title">{t("media.player.prebufferTargetTitle")}</div>
                           <div className="torrent-inline-rate-grid">
                             {TRANSCODE_PREBUFFER_OPTIONS.map((seconds) => (
                               <button
@@ -4003,7 +4582,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
                                   setTranscodePrebufferSeconds(seconds);
                                 }}
                               >
-                                {seconds <= 0 ? t("media.player.prebufferOff") : `${seconds}s`}
+                                {`${seconds}s`}
                               </button>
                             ))}
                           </div>
@@ -4137,10 +4716,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
                       <Badge variant="outline">{t("media.player.downloadSpeed")}: {formatSpeed(statusSnapshot?.downloadRate || 0)}</Badge>
                       <Badge variant="outline">{t("media.player.peers")}: {statusSnapshot?.peersConnected || 0}</Badge>
                       <Badge variant="outline">{t("media.player.downloadedLabel")}: {downloadedRatio}%</Badge>
-                      <Badge variant="outline">{t("media.player.bufferAheadLabel")}: {formatClock(bufferedAheadSeconds)}</Badge>
-                      {prebufferWaiting ? (
+                      {streamUrl ? (
                         <Badge variant="outline">
-                          {t("media.player.prebufferTitle")}: {formatClock(prebufferBufferedAheadSeconds)} / {formatClock(transcodePrebufferSeconds)}
+                          {t("media.player.networkCacheTitle")}: {networkCacheLabel}
                         </Badge>
                       ) : null}
                       {!isDownloadComplete ? (
@@ -4216,27 +4794,6 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       ) : null}
 
       <Modal
-        opened={resumePromptOpened}
-        onClose={handleResumePromptRestart}
-        title={t("media.player.resumePromptTitle")}
-        centered
-      >
-        <Stack gap="md">
-          <Text size="sm">
-            {t("media.player.resumePromptMessage")} {formatClock(resumePromptSeconds)}
-          </Text>
-          <Group justify="flex-end">
-            <Button variant="default" onClick={handleResumePromptRestart}>
-              {t("media.player.resumePromptRestart")}
-            </Button>
-            <Button onClick={() => void handleResumePromptContinue()}>
-              {t("media.player.resumePromptContinue")}
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-
-      <Modal
         opened={diagnosticsOpened}
         onClose={() => setDiagnosticsOpened(false)}
         title={t("media.player.diagnosticsTitle")}
@@ -4271,226 +4828,6 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         </Stack>
       </Modal>
 
-      <Modal
-        opened={subtitleManagerOpened}
-        onClose={() => setSubtitleManagerOpened(false)}
-        title={t("media.player.subtitleManagerTitle")}
-        size="lg"
-      >
-        <Tabs value={subtitleManagerTab} onChange={setSubtitleManagerTab}>
-          <Tabs.List>
-            <Tabs.Tab value="files">{t("media.player.subtitleManagerTabFiles")}</Tabs.Tab>
-            <Tabs.Tab value="style">{t("media.player.subtitleManagerTabStyle")}</Tabs.Tab>
-          </Tabs.List>
-
-          <Tabs.Panel value="files" pt="md">
-            <Stack gap="md">
-              <Group justify="space-between" align="center">
-                <Text c="dimmed" size="sm">{t("media.player.subtitleManagerHint")}</Text>
-                <Tooltip label={t("media.player.subtitleUploadPlaceholder")} withArrow>
-                  <ActionIcon
-                    variant="light"
-                    size="lg"
-                    aria-label={t("media.player.subtitleUpload")}
-                    title={t("media.player.subtitleUploadPlaceholder")}
-                    disabled={subtitleLoading}
-                    onClick={() => {
-                      subtitleUploadInputRef.current?.click();
-                    }}
-                  >
-                    <Upload size={18} />
-                  </ActionIcon>
-                </Tooltip>
-              </Group>
-              <input
-                ref={subtitleUploadInputRef}
-                type="file"
-                accept=".srt,.vtt,.ass,.ssa"
-                disabled={subtitleLoading}
-                className="torrent-subtitle-upload-input"
-                onChange={(event) => {
-                  const picked = event.currentTarget.files?.[0] || null;
-                  event.currentTarget.value = "";
-                  if (!picked) return;
-                  void handleSubtitleUploadPick(picked);
-                }}
-              />
-
-              {subtitleItems.length === 0 ? (
-                <Text size="sm" c="dimmed">{t("media.player.subtitleManagerEmpty")}</Text>
-              ) : (
-                <Stack gap="xs">
-                  {subtitleItems.map((item) => (
-                    <div className="torrent-subtitle-item-card" key={item.id}>
-                      <Group justify="space-between" align="center" gap="xs" wrap="nowrap">
-                        <Stack gap={2} style={{ minWidth: 0 }}>
-                          <Text fw={700} size="sm" className="torrent-subtitle-item-title">
-                            {item.label || `Subtitle ${item.id}`}
-                          </Text>
-                          <Text size="xs" c="dimmed">
-                            {t("media.player.subtitleOffset")}: {formatSubtitleOffsetLabel(item.offsetSeconds || 0)}
-                          </Text>
-                        </Stack>
-                        <Group gap={4} wrap="nowrap">
-                          <ActionIcon
-                            size="sm"
-                            variant="light"
-                            disabled={subtitleLoading}
-                            onClick={() => {
-                              void handleAdjustSubtitleOffset(item.id, -0.5);
-                            }}
-                            aria-label={t("media.player.subtitleOffsetMinus")}
-                          >
-                            <Minus size={14} />
-                          </ActionIcon>
-                          <ActionIcon
-                            size="sm"
-                            variant="light"
-                            disabled={subtitleLoading}
-                            onClick={() => {
-                              void handleAdjustSubtitleOffset(item.id, 0.5);
-                            }}
-                            aria-label={t("media.player.subtitleOffsetPlus")}
-                          >
-                            <Plus size={14} />
-                          </ActionIcon>
-                          <ActionIcon
-                            size="sm"
-                            color="red"
-                            variant="light"
-                            disabled={subtitleLoading}
-                            onClick={() => {
-                              void handleDeleteSubtitle(item.id);
-                            }}
-                            aria-label={t("media.player.subtitleDelete")}
-                          >
-                            <Trash2 size={14} />
-                          </ActionIcon>
-                        </Group>
-                      </Group>
-                    </div>
-                  ))}
-                </Stack>
-              )}
-              {subtitleSiteLinks.length > 0 ? (
-                <div className="torrent-subtitle-site-links">
-                  <Group gap="xs" wrap="wrap">
-                    {subtitleSiteLinks.map((link) => (
-                      <Button
-                        key={link.id}
-                        component="a"
-                        href={link.href}
-                        target="_blank"
-                        rel="noreferrer"
-                        variant="light"
-                        size="xs"
-                        rightSection={<ExternalLink size={13} />}
-                      >
-                        {link.label}
-                      </Button>
-                    ))}
-                  </Group>
-                </div>
-              ) : null}
-            </Stack>
-          </Tabs.Panel>
-
-          <Tabs.Panel value="style" pt="md">
-            <Stack gap="md">
-              <div className="torrent-inline-settings-section">
-                <div className="torrent-inline-settings-title">{t("media.player.subtitleStyleSize")}</div>
-                <div className="torrent-inline-rate-grid torrent-inline-rate-grid-6">
-                  {[
-                    { value: 0.9, label: "S" },
-                    { value: 1, label: "M" },
-                    { value: 1.15, label: "L" },
-                    { value: 1.3, label: "XL" },
-                    { value: 1.5, label: "XXL" },
-                    { value: 1.7, label: "XXXL" }
-                  ].map((item) => (
-                    <button
-                      key={`ssm:${item.value}`}
-                      type="button"
-                      className={`torrent-inline-rate-btn${Math.abs(subtitleStylePreset.scale - item.value) < 0.01 ? " is-active" : ""}`}
-                      onClick={() => {
-                        setSubtitleStylePreset((current) => ({ ...current, scale: item.value }));
-                      }}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="torrent-inline-settings-title">{t("media.player.subtitleStylePosition")}</div>
-                <div className="torrent-inline-rate-grid torrent-inline-rate-grid-6">
-                  {[
-                    { value: 0, label: "0%" },
-                    { value: 4, label: "4%" },
-                    { value: 8, label: "8%" },
-                    { value: 12, label: "12%" },
-                    { value: 15, label: "15%" },
-                    { value: 18, label: "18%" }
-                  ].map((item) => (
-                    <button
-                      key={`spm:${item.value}`}
-                      type="button"
-                      className={`torrent-inline-rate-btn${subtitleStylePreset.verticalPercent === item.value ? " is-active" : ""}`}
-                      onClick={() => {
-                        setSubtitleStylePreset((current) => ({ ...current, verticalPercent: item.value }));
-                      }}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="torrent-inline-settings-title">{t("media.player.subtitleStyleColor")}</div>
-                <div className="torrent-inline-rate-grid torrent-inline-rate-grid-6">
-                  {[
-                    { value: "#f6f9ff", label: t("media.player.subtitleStyleColorWhite") },
-                    { value: "#ffe082", label: t("media.player.subtitleStyleColorYellow") },
-                    { value: "#d3ecff", label: t("media.player.subtitleStyleColorCyan") },
-                    { value: "#b6f8c8", label: t("media.player.subtitleStyleColorGreen") },
-                    { value: "#ffc88a", label: t("media.player.subtitleStyleColorOrange") },
-                    { value: "#ffd2ef", label: t("media.player.subtitleStyleColorPink") }
-                  ].map((item) => (
-                    <button
-                      key={`scm:${item.value}`}
-                      type="button"
-                      className={`torrent-inline-rate-btn${subtitleStylePreset.textColor === item.value ? " is-active" : ""}`}
-                      onClick={() => {
-                        setSubtitleStylePreset((current) => ({ ...current, textColor: item.value }));
-                      }}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="torrent-inline-settings-title">{t("media.player.subtitleStyleBackground")}</div>
-                <div className="torrent-inline-rate-grid torrent-inline-rate-grid-6">
-                  {[
-                    { value: "rgba(0, 0, 0, 0)", label: t("media.player.subtitleStyleBgNone") },
-                    { value: "rgba(0, 0, 0, 0.15)", label: "15%" },
-                    { value: "rgba(0, 0, 0, 0.25)", label: "25%" },
-                    { value: "rgba(0, 0, 0, 0.4)", label: "40%" },
-                    { value: "rgba(0, 0, 0, 0.55)", label: "55%" },
-                    { value: "rgba(0, 0, 0, 0.7)", label: "70%" }
-                  ].map((item) => (
-                    <button
-                      key={`sbm:${item.value}`}
-                      type="button"
-                      className={`torrent-inline-rate-btn${subtitleStylePreset.backgroundColor === item.value ? " is-active" : ""}`}
-                      onClick={() => {
-                        setSubtitleStylePreset((current) => ({ ...current, backgroundColor: item.value }));
-                      }}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </Stack>
-          </Tabs.Panel>
-        </Tabs>
-      </Modal>
     </Stack>
   );
 }
