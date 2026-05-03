@@ -651,9 +651,14 @@ func (b *builder) playerTransmissionHLSHeartbeat(c *gin.Context) {
 		OutputResolution: outputResolution,
 	})
 	state := strings.ToLower(strings.TrimSpace(input.State))
-	if state != "playing" {
+	if state == "idle" {
 		stopped := b.stopPlayerHLSGroup(groupKey, true)
 		c.JSON(http.StatusOK, gin.H{"active": false, "stopped": stopped})
+		return
+	}
+	if state != "playing" {
+		stopped, pending := b.pausePlayerHLSGroup(groupKey, true)
+		c.JSON(http.StatusOK, gin.H{"active": false, "stopped": stopped, "pending": pending})
 		return
 	}
 
@@ -1260,6 +1265,29 @@ func (b *builder) stopPlayerHLSGroup(groupKey string, removeFiles bool) int {
 	}
 	b.hlsMu.Unlock()
 	return stopped
+}
+
+func (b *builder) pausePlayerHLSGroup(groupKey string, removeFiles bool) (int, int) {
+	stopped := 0
+	pending := 0
+	now := time.Now()
+	b.hlsMu.Lock()
+	for key, session := range b.hlsSessions {
+		if session == nil || session.GroupKey != groupKey {
+			continue
+		}
+		session.PlaybackActive = false
+		session.LastHeartbeatAt = now
+		session.LastAccessedAt = now
+		if session.ReadyAt.IsZero() {
+			pending++
+			continue
+		}
+		b.stopPlayerHLSSessionLocked(key, session, removeFiles)
+		stopped++
+	}
+	b.hlsMu.Unlock()
+	return stopped, pending
 }
 
 func (b *builder) stopPlayerHLSSession(sessionKey string, removeFiles bool) {

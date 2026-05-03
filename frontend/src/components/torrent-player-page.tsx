@@ -1096,6 +1096,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const [subtitleManagerTab, setSubtitleManagerTab] = useState<string | null>("files");
   const [diagnosticsOpened, setDiagnosticsOpened] = useState(false);
   const [playbackLoading, setPlaybackLoading] = useState(false);
+  const playbackLoadingRef = useRef(false);
+  const playerStatusRef = useRef<PlayerStatus>("idle");
   const [transcodePrebufferSeconds, setTranscodePrebufferSeconds] = useState(TRANSCODE_PREBUFFER_DEFAULT_SECONDS);
   const [prebufferProgressSeconds, setPrebufferProgressSeconds] = useState(0);
   const [networkCacheSeconds, setNetworkCacheSeconds] = useState(0);
@@ -1584,6 +1586,14 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   useEffect(() => {
     statusSnapshotRef.current = statusSnapshot;
   }, [statusSnapshot]);
+
+  useEffect(() => {
+    playerStatusRef.current = playerStatus;
+  }, [playerStatus]);
+
+  useEffect(() => {
+    playbackLoadingRef.current = playbackLoading;
+  }, [playbackLoading]);
 
   useEffect(() => {
     setVideoDuration(0);
@@ -2102,9 +2112,16 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
     const video = videoRef.current;
     const visible = typeof document === "undefined" ? true : document.visibilityState !== "hidden";
-    const state = stateOverride || (
-      userPausedRef.current || !video || video.paused || hlsSuspendedRef.current || !visible ? "paused" : "playing"
+    const startingOrBuffering = autoResumeWhenPlayableRef.current ||
+      playbackLoadingRef.current ||
+      playerStatusRef.current === "buffering";
+    const playbackActive = Boolean(
+      visible &&
+      !userPausedRef.current &&
+      !hlsSuspendedRef.current &&
+      (!video || !video.paused || startingOrBuffering)
     );
+    const state = stateOverride || (playbackActive ? "playing" : "paused");
     const url = buildPlayerTransmissionHLSHeartbeatURL(infoHash, index, {
       audioTrackIndex: selectedAudioTrackQueryIndexRef.current,
       outputResolution: transcodeOutputResolution
