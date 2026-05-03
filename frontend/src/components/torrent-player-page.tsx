@@ -573,19 +573,6 @@ function formatSecondsCounter(totalSecondsInput: number): string {
   return String(totalSeconds).padStart(2, "0");
 }
 
-function resolveHLSLoadedSeconds(data: unknown): number {
-  const details = (data as { details?: { totalduration?: number; fragments?: Array<{ duration?: number }> } } | null)?.details;
-  const total = Number(details?.totalduration || 0);
-  if (Number.isFinite(total) && total > 0) {
-    return total;
-  }
-  const fragments = Array.isArray(details?.fragments) ? details.fragments : [];
-  return fragments.reduce((sum, fragment) => {
-    const duration = Number(fragment?.duration || 0);
-    return Number.isFinite(duration) && duration > 0 ? sum + duration : sum;
-  }, 0);
-}
-
 function parseVttTimestamp(raw: string): number | null {
   const normalized = raw.trim().replace(",", ".");
   if (!normalized) return null;
@@ -1009,7 +996,6 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const subtitleLoadTokenRef = useRef(0);
   const audioTrackLoadTokenRef = useRef(0);
   const hlsRef = useRef<HlsLike | null>(null);
-  const hlsLoadedDurationSecondsRef = useRef(0);
   const hlsSuspendedRef = useRef(false);
   const hlsReleasedForPauseRef = useRef(false);
   const userPausedRef = useRef(false);
@@ -1483,10 +1469,14 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     return nativeCurrent;
   }, []);
 
-  const resolveBufferedAheadSeconds = useCallback(() => {
+  const resolveBufferedAheadAtSeconds = useCallback((secondsInput?: number) => {
     const video = videoRef.current;
     if (!video) return 0;
-    const current = Number.isFinite(video.currentTime) ? Math.max(0, video.currentTime) : 0;
+    const current = Number.isFinite(secondsInput)
+      ? Math.max(0, Number(secondsInput))
+      : Number.isFinite(video.currentTime)
+        ? Math.max(0, video.currentTime)
+        : 0;
     const ranges = video.buffered;
     if (!ranges || ranges.length <= 0) return 0;
     for (let idx = 0; idx < ranges.length; idx += 1) {
@@ -1498,19 +1488,17 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     return 0;
   }, []);
 
+  const resolveBufferedAheadSeconds = useCallback(() => resolveBufferedAheadAtSeconds(), [resolveBufferedAheadAtSeconds]);
+
   const resolveHLSNetworkCacheAheadSeconds = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || !activePreferTranscodeRef.current) return 0;
-    const loadedDuration = Math.max(0, hlsLoadedDurationSecondsRef.current);
-    if (loadedDuration <= 0) return 0;
-    const current = Number.isFinite(video.currentTime) ? Math.max(0, video.currentTime) : 0;
-    return Math.max(0, loadedDuration - current);
-  }, []);
+    if (!activePreferTranscodeRef.current) return 0;
+    return resolveBufferedAheadSeconds();
+  }, [resolveBufferedAheadSeconds]);
 
   const resolveCachedAheadSeconds = useCallback(() => {
     const browserAhead = resolveBufferedAheadSeconds();
     if (activePreferTranscodeRef.current) {
-      return Math.max(browserAhead, resolveHLSNetworkCacheAheadSeconds());
+      return browserAhead;
     }
     const status = statusSnapshotRef.current;
     const current = Math.max(0, resolveAbsoluteCurrent());
@@ -1538,7 +1526,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     }
 
     return Math.max(0, browserAhead, cachedAhead);
-  }, [resolveAbsoluteCurrent, resolveBufferedAheadSeconds, resolveHLSNetworkCacheAheadSeconds]);
+  }, [resolveAbsoluteCurrent, resolveBufferedAheadSeconds]);
 
   const settlePausedPlayback = useCallback((status: PlayerStatus = "ready") => {
     autoResumeWhenPlayableRef.current = false;
@@ -1607,7 +1595,6 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     streamUrlRef.current = streamUrl;
     setPrebufferProgressSeconds(0);
     setNetworkCacheSeconds(0);
-    hlsLoadedDurationSecondsRef.current = 0;
   }, [streamUrl]);
 
   useEffect(() => {
@@ -1690,14 +1677,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
             }
           }
         });
-        hls.on(HlsCtor.Events.LEVEL_LOADED, (_event, data) => {
+        hls.on(HlsCtor.Events.LEVEL_LOADED, () => {
           if (cancelled) return;
-          const seconds = resolveHLSLoadedSeconds(data);
-          hlsLoadedDurationSecondsRef.current = Math.max(0, seconds);
           const ahead = resolveHLSNetworkCacheAheadSeconds();
           const displayAhead = hlsNetworkCacheDisplaySeconds(ahead, transcodePrebufferSeconds);
           setNetworkCacheSeconds((current) => (Math.abs(current - displayAhead) < 0.25 ? current : displayAhead));
-          setPlayableCacheAheadSeconds((current) => Math.max(current, ahead));
+          setPlayableCacheAheadSeconds((current) => (Math.abs(current - ahead) < 0.25 ? current : ahead));
         });
         hls.on(HlsCtor.Events.ERROR, (_event, data) => {
           if (cancelled) return;
@@ -2067,7 +2052,6 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
     hlsSuspendedRef.current = true;
     hlsReleasedForPauseRef.current = true;
-    hlsLoadedDurationSecondsRef.current = 0;
     const hls = hlsRef.current;
     if (hls) {
       if (preserveFrame) {
@@ -3711,8 +3695,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         userPausedRef.current = false;
         if (activePreferTranscode) {
           const nativeTarget = clamped - transcodeStartOffsetRef.current;
-          const loadedDuration = hlsLoadedDurationSecondsRef.current;
-          if (nativeTarget >= 0 && loadedDuration > 0 && nativeTarget <= loadedDuration - 0.5) {
+          const bufferedAhead = resolveBufferedAheadAtSeconds(nativeTarget);
+          if (nativeTarget >= 0 && bufferedAhead >= 0.5) {
             video.currentTime = nativeTarget;
             setAbsoluteCurrentSeconds(clamped);
             pendingTranscodeSeekDisplayRef.current = null;
@@ -3726,7 +3710,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
             logInfo("seek", "seek inside hls network cache", {
               source,
               targetSeconds: clamped,
-              cacheAheadSeconds: Math.max(0, loadedDuration - nativeTarget)
+              cacheAheadSeconds: bufferedAhead
             });
             return;
           }
@@ -3792,6 +3776,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       infoHash,
       logInfo,
       logWarn,
+      resolveBufferedAheadAtSeconds,
       selectedFileOption,
       setPlaybackLoading,
       setPlayerStatus,
