@@ -230,6 +230,8 @@ const PLAYBACK_STALL_GRACE_MS = 5000;
 const PLAYBACK_STALL_TICK_MS = 1000;
 const PLAYBACK_PROGRESS_EPSILON_SECONDS = 0.5;
 const PLAYBACK_RECOVERY_COOLDOWN_MS = 5000;
+const HLS_STARTUP_RECOVERY_GRACE_MS = 30000;
+const HLS_ACTIVITY_RECOVERY_GRACE_MS = 15000;
 const HLS_HEARTBEAT_INTERVAL_MS = 3000;
 const INLINE_CONTROLS_HIDE_MS = 2200;
 const INLINE_CONTROLS_KEYBOARD_HIDE_MS = 2600;
@@ -997,6 +999,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const subtitleLoadTokenRef = useRef(0);
   const audioTrackLoadTokenRef = useRef(0);
   const hlsRef = useRef<HlsLike | null>(null);
+  const hlsStartupAtRef = useRef(0);
+  const hlsLastActivityAtRef = useRef(0);
+  const hlsLastFragmentBufferedAtRef = useRef(0);
   const hlsSuspendedRef = useRef(false);
   const hlsReleasedForPauseRef = useRef(false);
   const userPausedRef = useRef(false);
@@ -1675,7 +1680,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           return;
         }
         const hls = new HlsCtor({
-          autoStartLoad: false,
+          autoStartLoad: true,
           enableWorker: true,
           lowLatencyMode: false,
           startPosition: 0,
@@ -1691,6 +1696,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           }
         }) as HlsLike;
         hlsRef.current = hls;
+        hlsStartupAtRef.current = Date.now();
+        hlsLastActivityAtRef.current = hlsStartupAtRef.current;
+        hlsLastFragmentBufferedAtRef.current = 0;
         activeStreamConfigKeyRef.current = buildPlaybackStreamConfigKey({
           fileIndex: selectedFileIndexRef.current,
           preferTranscode: true,
@@ -1698,11 +1706,18 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           outputResolution: transcodeOutputResolution,
           prebufferSeconds: transcodePrebufferSeconds
         });
-        hls.attachMedia(video);
-        hls.loadSource(streamUrl);
-        hls.on(HlsCtor.Events.MANIFEST_PARSED, () => {
+
+        const refreshHLSCacheState = () => {
+          hlsLastActivityAtRef.current = Date.now();
+          const ahead = resolveHLSNetworkCacheAheadSeconds();
+          const displayAhead = hlsNetworkCacheDisplaySeconds(ahead, transcodePrebufferSeconds);
+          setNetworkCacheSeconds((current) => (Math.abs(current - displayAhead) < 0.25 ? current : displayAhead));
+          setPlayableCacheAheadSeconds((current) => (Math.abs(current - ahead) < 0.25 ? current : ahead));
+        };
+        const startHLSLoad = () => {
           if (cancelled) return;
           if (userPausedRef.current || hlsSuspendedRef.current) return;
+          hlsLastActivityAtRef.current = Date.now();
           hls.startLoad?.(0);
           if (Number.isFinite(video.currentTime) && video.currentTime > 0.25) {
             try {
@@ -1711,16 +1726,26 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
               // keep the browser-selected start if the media element refuses the reset
             }
           }
+        };
+
+        hls.on(HlsCtor.Events.MEDIA_ATTACHED, () => {
+          if (cancelled) return;
+          if (userPausedRef.current || hlsSuspendedRef.current) return;
+          hlsLastActivityAtRef.current = Date.now();
+          hls.loadSource(streamUrl);
         });
+        hls.on(HlsCtor.Events.MANIFEST_PARSED, startHLSLoad);
         hls.on(HlsCtor.Events.LEVEL_LOADED, () => {
           if (cancelled) return;
-          const ahead = resolveHLSNetworkCacheAheadSeconds();
-          const displayAhead = hlsNetworkCacheDisplaySeconds(ahead, transcodePrebufferSeconds);
-          setNetworkCacheSeconds((current) => (Math.abs(current - displayAhead) < 0.25 ? current : displayAhead));
-          setPlayableCacheAheadSeconds((current) => (Math.abs(current - ahead) < 0.25 ? current : ahead));
+          refreshHLSCacheState();
+        });
+        hls.on(HlsCtor.Events.FRAG_BUFFERED, () => {
+          hlsLastFragmentBufferedAtRef.current = Date.now();
+          refreshHLSCacheState();
         });
         hls.on(HlsCtor.Events.ERROR, (_event, data) => {
           if (cancelled) return;
+          hlsLastActivityAtRef.current = Date.now();
           const payload = data as { fatal?: boolean; type?: string; details?: string };
           logWarnRef.current("hls", "hls playback error", payload);
           if (!payload?.fatal) return;
@@ -1733,6 +1758,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           setPlayerStatus("error");
           setPlayerError(tRef.current("media.player.playbackError"));
         });
+        hls.attachMedia(video);
       })
       .catch((error) => {
         if (cancelled) return;
@@ -3191,6 +3217,18 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       const bufferedAhead = resolveCachedAheadSeconds();
       const noProgressMs = now - previous.at;
       const stallMs = stallStartedAtRef.current > 0 ? now - stallStartedAtRef.current : 0;
+      if (activePreferTranscodeRef.current && hlsRef.current) {
+        const startupElapsed = now - hlsStartupAtRef.current;
+        const lastActivityElapsed = now - hlsLastActivityAtRef.current;
+        const lastFragmentElapsed = hlsLastFragmentBufferedAtRef.current > 0 ? now - hlsLastFragmentBufferedAtRef.current : Number.POSITIVE_INFINITY;
+        if (
+          startupElapsed < HLS_STARTUP_RECOVERY_GRACE_MS ||
+          lastActivityElapsed < HLS_ACTIVITY_RECOVERY_GRACE_MS ||
+          lastFragmentElapsed < HLS_ACTIVITY_RECOVERY_GRACE_MS
+        ) {
+          return;
+        }
+      }
       const isLikelyStalled =
         autoResumeWhenPlayableRef.current ||
         stallStartedAtRef.current > 0 ||

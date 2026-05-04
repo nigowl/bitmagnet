@@ -47,6 +47,8 @@ func TestBuildPlayerHLSFFmpegArgsWritesSegmentedPlaylist(t *testing.T) {
 		"-hls_segment_filename /tmp/hls-cache/segment-%06d.ts",
 		"/tmp/hls-cache/index.m3u8",
 		"-force_key_frames expr:gte(t,n_forced*2)",
+		"-ac 2",
+		"-ar 48000",
 		"scale=w=-2:h=1080",
 	} {
 		if !strings.Contains(joined, expected) {
