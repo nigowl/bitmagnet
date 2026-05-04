@@ -233,6 +233,8 @@ const PLAYBACK_RECOVERY_COOLDOWN_MS = 5000;
 const HLS_STARTUP_RECOVERY_GRACE_MS = 30000;
 const HLS_ACTIVITY_RECOVERY_GRACE_MS = 15000;
 const HLS_HEARTBEAT_INTERVAL_MS = 3000;
+const HLS_FILE_CACHE_EDGE_GUARD_SECONDS = 0.75;
+const HLS_FILE_CACHE_MIN_AHEAD_SECONDS = 6;
 const INLINE_CONTROLS_HIDE_MS = 2200;
 const INLINE_CONTROLS_KEYBOARD_HIDE_MS = 2600;
 const INLINE_CONTROLS_FULLSCREEN_HIDE_MS = 3000;
@@ -706,6 +708,213 @@ function estimateTranscodeStartBytes(
   const estimated = Math.floor(ratio * totalFileBytes);
   if (!Number.isFinite(estimated) || estimated <= 0) return 0;
   return Math.max(0, Math.min(totalFileBytes - 1, estimated));
+}
+
+type PlayableRatioRange = {
+  start: number;
+  end: number;
+};
+
+type PlayableTranscodeStart = {
+  seconds: number;
+  startBytes: number;
+  prebufferSeconds: number;
+  availableAheadSeconds: number;
+  adjusted: boolean;
+  originalSeconds: number;
+  reason: "complete" | "no_status" | "no_timeline" | "inside_range" | "outside_cached_range" | "near_range_end";
+  range?: PlayableRatioRange;
+};
+
+function normalizePlayableRanges(status?: PlayerTransmissionStatusResponse | null): PlayableRatioRange[] {
+  if (!status) return [];
+  if ((status.selectedFileReadyRatio || 0) >= 0.999) {
+    return [{ start: 0, end: 1 }];
+  }
+
+  const ranges: PlayableRatioRange[] = [];
+  const contiguousEnd = Math.max(0, Math.min(1, Number(status.selectedFileContiguousRatio || 0)));
+  if (contiguousEnd > 0) {
+    ranges.push({ start: 0, end: contiguousEnd });
+  }
+  const raw = Array.isArray(status.selectedFileAvailableRanges) ? status.selectedFileAvailableRanges : [];
+  for (const item of raw) {
+    const start = Math.max(0, Math.min(1, Number(item?.startRatio ?? 0)));
+    const end = Math.max(0, Math.min(1, Number(item?.endRatio ?? 0)));
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    ranges.push({ start, end });
+  }
+
+  ranges.sort((a, b) => (a.start === b.start ? a.end - b.end : a.start - b.start));
+  const merged: PlayableRatioRange[] = [];
+  for (const range of ranges) {
+    const last = merged[merged.length - 1];
+    if (!last || range.start > last.end + 1e-6) {
+      merged.push({ ...range });
+      continue;
+    }
+    if (range.end > last.end) {
+      last.end = range.end;
+    }
+  }
+  return merged;
+}
+
+function resolvePlayableTranscodeStart(input: {
+  targetSeconds: number;
+  totalDurationSeconds: number;
+  totalFileBytes: number;
+  status?: PlayerTransmissionStatusResponse | null;
+  prebufferSeconds: number;
+}): PlayableTranscodeStart {
+  const timeline = Math.max(0, Number(input.totalDurationSeconds || 0));
+  const fileBytes = Math.max(0, Number(input.totalFileBytes || 0));
+  const originalSeconds = Math.max(0, Number.isFinite(input.targetSeconds) ? input.targetSeconds : 0);
+  const clampedSeconds = timeline > 0 ? Math.min(timeline, originalSeconds) : originalSeconds;
+  const rawStartBytes = estimateTranscodeStartBytes(clampedSeconds, timeline, fileBytes);
+  const configuredPrebufferSeconds = Math.max(10, Number.isFinite(input.prebufferSeconds) ? Math.floor(input.prebufferSeconds) : TRANSCODE_PREBUFFER_DEFAULT_SECONDS);
+  const baseResult = {
+    prebufferSeconds: configuredPrebufferSeconds,
+    availableAheadSeconds: timeline > 0 ? Math.max(0, timeline - clampedSeconds) : 0
+  };
+
+  if (!input.status) {
+    return {
+      seconds: clampedSeconds,
+      startBytes: rawStartBytes,
+      ...baseResult,
+      adjusted: false,
+      originalSeconds,
+      reason: "no_status"
+    };
+  }
+  if ((input.status.selectedFileReadyRatio || 0) >= 0.999) {
+    return {
+      seconds: clampedSeconds,
+      startBytes: rawStartBytes,
+      ...baseResult,
+      adjusted: false,
+      originalSeconds,
+      reason: "complete",
+      range: { start: 0, end: 1 }
+    };
+  }
+  if (timeline <= 0 || fileBytes <= 0) {
+    return {
+      seconds: clampedSeconds,
+      startBytes: rawStartBytes,
+      ...baseResult,
+      adjusted: false,
+      originalSeconds,
+      reason: "no_timeline"
+    };
+  }
+
+  const ranges = normalizePlayableRanges(input.status);
+  if (ranges.length === 0) {
+    return {
+      seconds: clampedSeconds,
+      startBytes: rawStartBytes,
+      ...baseResult,
+      adjusted: false,
+      originalSeconds,
+      reason: "no_status"
+    };
+  }
+
+  const targetRatio = Math.max(0, Math.min(1, clampedSeconds / timeline));
+  const guardSeconds = Math.min(HLS_FILE_CACHE_EDGE_GUARD_SECONDS, Math.max(0, timeline - clampedSeconds));
+  const guardRatio = timeline > 0 ? guardSeconds / timeline : 0;
+  const minAheadSeconds = Math.min(
+    Math.max(HLS_FILE_CACHE_MIN_AHEAD_SECONDS, Math.min(input.prebufferSeconds || 0, 12)),
+    Math.max(1, timeline)
+  );
+  const minAheadRatio = Math.min(1, minAheadSeconds / timeline);
+  const toSeconds = (ratio: number) => Math.max(0, Math.min(timeline, ratio * timeline));
+  const hasEnoughAhead = (range: PlayableRatioRange, ratio: number) =>
+    range.end >= 0.999 || range.end - ratio >= Math.min(minAheadRatio, Math.max(0, 1 - ratio));
+
+  const containing = ranges.find((range) => targetRatio >= range.start && targetRatio <= range.end);
+  if (containing && hasEnoughAhead(containing, targetRatio)) {
+    const availableAheadSeconds = Math.max(0, toSeconds(containing.end) - clampedSeconds);
+    return {
+      seconds: clampedSeconds,
+      startBytes: rawStartBytes,
+      prebufferSeconds: Math.max(10, Math.min(configuredPrebufferSeconds, Math.floor(availableAheadSeconds))),
+      availableAheadSeconds,
+      adjusted: false,
+      originalSeconds,
+      reason: "inside_range",
+      range: containing
+    };
+  }
+  if (containing) {
+    const availableAheadSeconds = Math.max(0, toSeconds(containing.end) - clampedSeconds);
+    return {
+      seconds: clampedSeconds,
+      startBytes: rawStartBytes,
+      prebufferSeconds: Math.max(10, Math.min(configuredPrebufferSeconds, Math.floor(availableAheadSeconds))),
+      availableAheadSeconds,
+      adjusted: false,
+      originalSeconds,
+      reason: "near_range_end",
+      range: containing
+    };
+  }
+
+  type Candidate = {
+    ratio: number;
+    range: PlayableRatioRange;
+    score: number;
+    reason: PlayableTranscodeStart["reason"];
+  };
+  const candidates: Candidate[] = [];
+  for (const range of ranges) {
+    const rangeStart = Math.min(range.end, range.start + guardRatio);
+    const rangeEnd = Math.max(range.start, range.end - guardRatio);
+    const enoughAheadRatio = Math.min(minAheadRatio, Math.max(0, range.end - range.start));
+    const latestUsefulStart = Math.max(range.start, range.end - enoughAheadRatio);
+    const ratio = targetRatio < range.start
+      ? rangeStart
+      : targetRatio > range.end
+        ? rangeStart
+        : Math.min(targetRatio, latestUsefulStart, rangeEnd);
+    const safeRatio = Math.max(range.start, Math.min(range.end, ratio));
+    const ahead = range.end - safeRatio;
+    if (ahead <= 0 && range.end < 0.999) continue;
+    const enoughPenalty = hasEnoughAhead(range, safeRatio) ? 0 : 2;
+    candidates.push({
+      ratio: safeRatio,
+      range,
+      score: Math.abs(safeRatio - targetRatio) + enoughPenalty,
+      reason: targetRatio >= range.start && targetRatio <= range.end ? "near_range_end" : "outside_cached_range"
+    });
+  }
+
+  const best = candidates.sort((a, b) => a.score - b.score)[0];
+  if (!best) {
+    return {
+      seconds: clampedSeconds,
+      startBytes: rawStartBytes,
+      ...baseResult,
+      adjusted: false,
+      originalSeconds,
+      reason: "no_status"
+    };
+  }
+
+  const seconds = toSeconds(best.ratio);
+  const availableAheadSeconds = Math.max(0, toSeconds(best.range.end) - seconds);
+  return {
+    seconds,
+    startBytes: estimateTranscodeStartBytes(seconds, timeline, fileBytes),
+    prebufferSeconds: Math.max(10, Math.min(configuredPrebufferSeconds, Math.floor(availableAheadSeconds))),
+    availableAheadSeconds,
+    adjusted: Math.abs(seconds - clampedSeconds) >= 0.25,
+    originalSeconds,
+    reason: best.reason,
+    range: best.range
+  };
 }
 
 function parseHmsDurationToSeconds(raw: string): number {
@@ -1440,21 +1649,57 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   );
 
   const buildHLSPlaylistOptions = useCallback(
-    (overrides?: { audioTrackIndex?: number; startSeconds?: number; startBytes?: number; durationSeconds?: number }) => {
+    (overrides?: { audioTrackIndex?: number; startSeconds?: number; startBytes?: number; durationSeconds?: number; prebufferSeconds?: number }) => {
       const base = buildTranscodeStreamOptions(overrides);
       const durationSeconds = Number.isFinite(overrides?.durationSeconds) && (overrides?.durationSeconds || 0) > 0
         ? Math.max(0, overrides?.durationSeconds || 0)
         : Math.max(0, totalDurationSecondsRef.current);
+      const prebufferSeconds = Number.isFinite(overrides?.prebufferSeconds) && (overrides?.prebufferSeconds || 0) > 0
+        ? Math.max(10, Math.floor(overrides?.prebufferSeconds || 0))
+        : transcodePrebufferSeconds;
       return {
         audioTrackIndex: base.audioTrackIndex,
         outputResolution: base.outputResolution,
         startSeconds: base.startSeconds,
         startBytes: base.startBytes,
-        prebufferSeconds: transcodePrebufferSeconds,
+        prebufferSeconds,
         durationSeconds
       };
     },
     [buildTranscodeStreamOptions, transcodePrebufferSeconds]
+  );
+
+  const resolvePlayableTranscodeStartForFile = useCallback(
+    (
+      targetSeconds: number,
+      totalDurationSeconds: number,
+      file: { length: number },
+      status: PlayerTransmissionStatusResponse | null | undefined,
+      source: string
+    ) => {
+      const result = resolvePlayableTranscodeStart({
+        targetSeconds,
+        totalDurationSeconds,
+        totalFileBytes: file.length,
+        status,
+        prebufferSeconds: transcodePrebufferSeconds
+      });
+      if (result.adjusted || result.prebufferSeconds < transcodePrebufferSeconds) {
+        logInfo("file_cache", "resolve transcode start from available file cache range", {
+          source,
+          requestedSeconds: result.originalSeconds,
+          adjustedSeconds: result.seconds,
+          startBytes: result.startBytes,
+          prebufferSeconds: result.prebufferSeconds,
+          availableAheadSeconds: result.availableAheadSeconds,
+          reason: result.reason,
+          rangeStartRatio: result.range?.start,
+          rangeEndRatio: result.range?.end
+        });
+      }
+      return result;
+    },
+    [logInfo, transcodePrebufferSeconds]
   );
 
   const activePreferTranscode = useMemo(
@@ -1911,6 +2156,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
     if (player) {
       try {
+        player.toggleCaptions?.(selectedIndex >= 0);
         if (selectedIndex >= 0 && selectedIndex < video.textTracks.length) {
           player.currentTrack = selectedIndex;
         }
@@ -2239,17 +2485,30 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     const mode = preferTranscode ? "transcode" : "direct";
     const cacheTag = `retry-${index}-${mode}-${attempt}-${now}`;
     const selected = fileOptions.find((item) => item.index === index);
-    const startBytes =
+    const playableStart =
       preferTranscode && selected
-        ? estimateTranscodeStartBytes(resumeAt, totalDurationSecondsRef.current, selected.length)
-        : 0;
+        ? resolvePlayableTranscodeStartForFile(
+          resumeAt,
+          totalDurationSecondsRef.current,
+          selected,
+          statusSnapshotRef.current,
+          `retry:${reason}`
+        )
+        : null;
+    const effectiveResumeAt = playableStart?.seconds ?? resumeAt;
+    const startBytes = playableStart?.startBytes ?? 0;
     const nextUrl =
       preferTranscode && selected
         ? buildPlayerTransmissionHLSPlaylistURL(
           infoHash,
           index,
           cacheTag,
-          buildHLSPlaylistOptions({ startSeconds: resumeAt, startBytes, durationSeconds: totalDurationSecondsRef.current })
+          buildHLSPlaylistOptions({
+            startSeconds: effectiveResumeAt,
+            startBytes,
+            prebufferSeconds: playableStart?.prebufferSeconds,
+            durationSeconds: totalDurationSecondsRef.current
+          })
         )
         : buildCurrentPlaybackStreamURL(cacheTag);
     if (!nextUrl) {
@@ -2263,12 +2522,13 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       prebufferSeconds: transcodePrebufferSeconds
     });
 
-    pendingResumeTargetRef.current = resumeAt;
+    pendingResumeTargetRef.current = effectiveResumeAt;
     autoResumeWhenPlayableRef.current = true;
-    pendingTranscodeSeekDisplayRef.current = preferTranscode ? { target: resumeAt, at: now } : null;
+    pendingTranscodeSeekDisplayRef.current = preferTranscode ? { target: effectiveResumeAt, at: now } : null;
     if (preferTranscode) {
-      setTranscodeStartOffsetSeconds(resumeAt);
-      transcodeStartOffsetRef.current = resumeAt;
+      setTranscodeStartOffsetSeconds(effectiveResumeAt);
+      transcodeStartOffsetRef.current = effectiveResumeAt;
+      setAbsoluteCurrentSeconds(effectiveResumeAt);
     }
     setPlayerError(null);
     setPlaybackLoading(true);
@@ -2291,6 +2551,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       maxAttempts: STREAM_RETRY_MAX_ATTEMPTS,
       delayMs,
       resumeAt,
+      effectiveResumeAt,
       mode,
       preferTranscode
     });
@@ -2303,6 +2564,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     infoHash,
     logWarn,
     resolveAbsoluteCurrent,
+    resolvePlayableTranscodeStartForFile,
     settlePausedPlayback,
     transcodeOutputResolution,
     transcodePrebufferSeconds
@@ -2731,10 +2993,17 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           []
         );
         const durationForStartBytes = Math.max(0, result.status.selectedFileDurationSeconds || 0);
-        const startBytes =
-          preferTranscode && resumeAt > 0
-            ? estimateTranscodeStartBytes(resumeAt, durationForStartBytes, selected.length)
-            : 0;
+        const playableStart = preferTranscode
+          ? resolvePlayableTranscodeStartForFile(
+            resumeAt,
+            durationForStartBytes,
+            selected,
+            result.status,
+            `select_file:${source}`
+          )
+          : null;
+        const effectiveResumeAt = playableStart?.seconds ?? resumeAt;
+        const startBytes = playableStart?.startBytes ?? 0;
 
         const nextUrl = preferTranscode
           ? buildPlayerTransmissionHLSPlaylistURL(
@@ -2743,20 +3012,21 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
             `${selected.index}-transcode-hls`,
             buildHLSPlaylistOptions({
               audioTrackIndex: -1,
-              startSeconds: resumeAt,
+              startSeconds: effectiveResumeAt,
               startBytes,
+              prebufferSeconds: playableStart?.prebufferSeconds,
               durationSeconds: result.status.selectedFileDurationSeconds || totalDurationSecondsRef.current
             })
           )
           : buildPlayerTransmissionStreamURL(infoHash, selected.index, `${selected.index}-direct-direct`);
-        setTranscodeStartOffsetSeconds(preferTranscode ? resumeAt : 0);
-        transcodeStartOffsetRef.current = preferTranscode ? resumeAt : 0;
+        setTranscodeStartOffsetSeconds(preferTranscode ? effectiveResumeAt : 0);
+        transcodeStartOffsetRef.current = preferTranscode ? effectiveResumeAt : 0;
         pendingTranscodeSeekDisplayRef.current =
-          preferTranscode && resumeAt > 0 ? { target: resumeAt, at: Date.now() } : null;
-        pendingResumeTargetRef.current = resumeAt;
+          preferTranscode && effectiveResumeAt > 0 ? { target: effectiveResumeAt, at: Date.now() } : null;
+        pendingResumeTargetRef.current = effectiveResumeAt;
         userPausedRef.current = false;
         autoResumeWhenPlayableRef.current = autoplay;
-        setAbsoluteCurrentSeconds(resumeAt);
+        setAbsoluteCurrentSeconds(effectiveResumeAt);
         setPlaybackLoading(true);
         setPlayerStatus("buffering");
         activeStreamConfigKeyRef.current = buildPlaybackStreamConfigKey({
@@ -2768,14 +3038,15 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         });
         applyStreamUrl(nextUrl, {
           autoplay,
-          resumeAt: preferTranscode ? 0 : resumeAt
+          resumeAt: preferTranscode ? 0 : effectiveResumeAt
         });
 
         logInfo("stream", "playback file switched", {
           source,
           selectedFileIndex: selected.index,
           preferTranscode,
-          resumeAt
+          resumeAt: effectiveResumeAt,
+          requestedResumeAt: resumeAt
         });
       } catch (error) {
         const message = toErrorMessage(error, t("media.player.playbackError"));
@@ -2795,6 +3066,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       infoHash,
       logError,
       logInfo,
+      resolvePlayableTranscodeStartForFile,
       t,
       transcodeOutputResolution,
       transcodePrebufferSeconds,
@@ -2924,7 +3196,17 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     const preferTranscode = activePreferTranscode;
     const mode = preferTranscode ? "transcode" : "direct";
     const resumeAt = Math.max(0, resolveAbsoluteCurrent());
-    const startBytes = estimateTranscodeStartBytes(resumeAt, totalDurationSecondsRef.current, selected.length);
+    const playableStart = preferTranscode
+      ? resolvePlayableTranscodeStartForFile(
+        resumeAt,
+        totalDurationSecondsRef.current,
+        selected,
+        statusSnapshotRef.current,
+        "stream_config"
+      )
+      : null;
+    const effectiveResumeAt = playableStart?.seconds ?? resumeAt;
+    const startBytes = playableStart?.startBytes ?? 0;
     const nextConfigKey = buildPlaybackStreamConfigKey({
       fileIndex: selectedFileIndex,
       preferTranscode,
@@ -2936,18 +3218,26 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       ? buildPlayerTransmissionHLSPlaylistURL(
         infoHash,
         selectedFileIndex,
-        `${selectedFileIndex}-${mode}-hls-${Math.floor(resumeAt * 10)}-${transcodePrebufferSeconds}`,
-        buildHLSPlaylistOptions({ startSeconds: resumeAt, startBytes, durationSeconds: totalDurationSecondsRef.current })
+        `${selectedFileIndex}-${mode}-hls-${Math.floor(effectiveResumeAt * 10)}-${transcodePrebufferSeconds}`,
+        buildHLSPlaylistOptions({
+          startSeconds: effectiveResumeAt,
+          startBytes,
+          prebufferSeconds: playableStart?.prebufferSeconds,
+          durationSeconds: totalDurationSecondsRef.current
+        })
       )
       : buildPlayerTransmissionStreamURL(infoHash, selectedFileIndex, `${selectedFileIndex}-${mode}-direct`);
     if (activeStreamConfigKeyRef.current === nextConfigKey) {
       return;
     }
 
-    setTranscodeStartOffsetSeconds(preferTranscode ? resumeAt : 0);
-    transcodeStartOffsetRef.current = preferTranscode ? resumeAt : 0;
-    pendingTranscodeSeekDisplayRef.current = preferTranscode ? { target: resumeAt, at: Date.now() } : null;
-    pendingResumeTargetRef.current = resumeAt;
+    setTranscodeStartOffsetSeconds(preferTranscode ? effectiveResumeAt : 0);
+    transcodeStartOffsetRef.current = preferTranscode ? effectiveResumeAt : 0;
+    pendingTranscodeSeekDisplayRef.current = preferTranscode ? { target: effectiveResumeAt, at: Date.now() } : null;
+    pendingResumeTargetRef.current = effectiveResumeAt;
+    if (preferTranscode) {
+      setAbsoluteCurrentSeconds(effectiveResumeAt);
+    }
     const shouldAutoplay = shouldAutoplayStreamChange();
     autoResumeWhenPlayableRef.current = shouldAutoplay;
     setPlaybackLoading(shouldAutoplay);
@@ -2955,14 +3245,15 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     activeStreamConfigKeyRef.current = nextConfigKey;
     applyStreamUrl(nextUrl, {
       autoplay: shouldAutoplay,
-      resumeAt: preferTranscode ? 0 : resumeAt
+      resumeAt: preferTranscode ? 0 : effectiveResumeAt
     });
 
     logInfo("stream", "stream mode updated", {
       mode,
       selectedFileIndex,
       preferTranscode,
-      resumeAt
+      resumeAt: effectiveResumeAt,
+      requestedResumeAt: resumeAt
     });
   }, [
     applyStreamUrl,
@@ -2973,6 +3264,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     infoHash,
     logInfo,
     resolveAbsoluteCurrent,
+    resolvePlayableTranscodeStartForFile,
     selectedFileIndex,
     shouldAutoplayStreamChange,
     transcodeOutputResolution,
@@ -3369,6 +3661,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       autoResumeWhenPlayableRef.current = false;
       pendingResumeTargetRef.current = null;
       streamRetryRef.current = { key: "", attempts: 0 };
+      syncSelectedSubtitleTrack();
+      syncSelectedAudioTrack();
       setPlaybackLoading(false);
       setPlayerStatus("playing");
       setIsVideoPaused(false);
@@ -3429,7 +3723,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       video.removeEventListener("pause", onPause);
       video.removeEventListener("error", onError);
     };
-  }, [resolveCachedAheadSeconds, resolveHLSNetworkCacheAheadSeconds, settlePausedPlayback]);
+  }, [resolveCachedAheadSeconds, resolveHLSNetworkCacheAheadSeconds, settlePausedPlayback, syncSelectedAudioTrack, syncSelectedSubtitleTrack]);
 
   useEffect(() => {
     if (!statusSnapshot || !autoResumeWhenPlayableRef.current || userPausedRef.current) return;
@@ -3438,8 +3732,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
     const timeline = Math.max(totalDurationSecondsRef.current, videoDuration, target || 0);
     if (!Number.isFinite(timeline) || timeline <= 0) return;
-    const contiguous = Math.max(0, Math.min(timeline, (statusSnapshot.selectedFileContiguousRatio || 0) * timeline));
-    if (contiguous + 1 < (target || 0)) return;
+    const targetRatio = Math.max(0, Math.min(1, (target || 0) / timeline));
+    const targetAvailable = normalizePlayableRanges(statusSnapshot).some((range) => {
+      const end = Math.max(0, range.end * timeline);
+      return targetRatio >= range.start && targetRatio <= range.end && end - (target || 0) >= 1;
+    });
+    if (!targetAvailable) return;
 
     const video = videoRef.current;
     if (!video) return;
@@ -3610,6 +3908,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       localPlayer.on("ready", () => {
         if (cancelled) return;
         setPlayerStatus("ready");
+        syncSelectedSubtitleTrack();
+        syncSelectedAudioTrack();
         emitTimelineRefreshEvents();
       });
 
@@ -3628,6 +3928,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         autoResumeWhenPlayableRef.current = false;
         pendingResumeTargetRef.current = null;
         streamRetryRef.current = { key: "", attempts: 0 };
+        syncSelectedSubtitleTrack();
+        syncSelectedAudioTrack();
         setPlaybackLoading(false);
         setPlayerStatus("playing");
         setIsVideoPaused(false);
@@ -3689,7 +3991,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         plyrRef.current = null;
       }
     };
-  }, [canInitializePlyr, emitTimelineRefreshEvents, settlePausedPlayback]);
+  }, [canInitializePlyr, emitTimelineRefreshEvents, settlePausedPlayback, syncSelectedAudioTrack, syncSelectedSubtitleTrack]);
 
   const handleUploadSubtitle = useCallback(
     async (file: File | null) => {
@@ -3813,25 +4115,39 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
           releaseOnLoadedMetadata = true;
           transcodeSeekInFlightRef.current = true;
-          pendingTranscodeSeekDisplayRef.current = { target: clamped, at: Date.now() };
-          pendingResumeTargetRef.current = clamped;
           autoResumeWhenPlayableRef.current = true;
           setPlaybackLoading(true);
           setPlayerStatus("buffering");
-          setAbsoluteCurrentSeconds(clamped);
-          const startBytes = estimateTranscodeStartBytes(clamped, fullDuration, selectedFileOption.length);
+          const playableStart = resolvePlayableTranscodeStartForFile(
+            clamped,
+            fullDuration,
+            selectedFileOption,
+            statusSnapshotRef.current,
+            `seek:${source}`
+          );
+          const effectiveSeekSeconds = playableStart.seconds;
+          pendingTranscodeSeekDisplayRef.current = { target: effectiveSeekSeconds, at: Date.now() };
+          pendingResumeTargetRef.current = effectiveSeekSeconds;
+          setAbsoluteCurrentSeconds(effectiveSeekSeconds);
+          const startBytes = playableStart.startBytes;
           const seekUrl = buildPlayerTransmissionHLSPlaylistURL(
             infoHash,
             selectedFileOption.index,
-            `seek-${selectedFileOption.index}-${Math.floor(clamped * 10)}-${transcodePrebufferSeconds}`,
-            buildHLSPlaylistOptions({ startSeconds: clamped, startBytes, durationSeconds: fullDuration })
+            `seek-${selectedFileOption.index}-${Math.floor(effectiveSeekSeconds * 10)}-${transcodePrebufferSeconds}`,
+            buildHLSPlaylistOptions({
+              startSeconds: effectiveSeekSeconds,
+              startBytes,
+              prebufferSeconds: playableStart.prebufferSeconds,
+              durationSeconds: fullDuration
+            })
           );
-          setTranscodeStartOffsetSeconds(clamped);
-          transcodeStartOffsetRef.current = clamped;
+          setTranscodeStartOffsetSeconds(effectiveSeekSeconds);
+          transcodeStartOffsetRef.current = effectiveSeekSeconds;
           applyStreamUrl(seekUrl, { autoplay: true, resumeAt: 0 });
           logInfo("seek", "seek via transcode restart", {
             source,
-            targetSeconds: clamped,
+            targetSeconds: effectiveSeekSeconds,
+            requestedTargetSeconds: clamped,
             startBytes
           });
           return;
@@ -3873,6 +4189,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       logInfo,
       logWarn,
       resolveBufferedAheadAtSeconds,
+      resolvePlayableTranscodeStartForFile,
       selectedFileOption,
       setPlaybackLoading,
       setPlayerStatus,
@@ -3911,17 +4228,31 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       userPausedRef.current = false;
       if (activePreferTranscode && (hlsSuspendedRef.current || hlsReleasedForPauseRef.current) && infoHash && selectedFileOption) {
         const resumeAt = Math.max(0, resolveAbsoluteCurrent());
-        const startBytes = estimateTranscodeStartBytes(resumeAt, totalDurationSecondsRef.current, selectedFileOption.length);
+        const playableStart = resolvePlayableTranscodeStartForFile(
+          resumeAt,
+          totalDurationSecondsRef.current,
+          selectedFileOption,
+          statusSnapshotRef.current,
+          "resume_playback"
+        );
+        const effectiveResumeAt = playableStart.seconds;
+        const startBytes = playableStart.startBytes;
         const nextUrl = buildPlayerTransmissionHLSPlaylistURL(
           infoHash,
           selectedFileOption.index,
-          `resume-${selectedFileOption.index}-${Math.floor(resumeAt * 10)}-${Date.now()}`,
-          buildHLSPlaylistOptions({ startSeconds: resumeAt, startBytes, durationSeconds: totalDurationSecondsRef.current })
+          `resume-${selectedFileOption.index}-${Math.floor(effectiveResumeAt * 10)}-${Date.now()}`,
+          buildHLSPlaylistOptions({
+            startSeconds: effectiveResumeAt,
+            startBytes,
+            prebufferSeconds: playableStart.prebufferSeconds,
+            durationSeconds: totalDurationSecondsRef.current
+          })
         );
-        setTranscodeStartOffsetSeconds(resumeAt);
-        transcodeStartOffsetRef.current = resumeAt;
-        pendingTranscodeSeekDisplayRef.current = resumeAt > 0 ? { target: resumeAt, at: Date.now() } : null;
-        pendingResumeTargetRef.current = resumeAt;
+        setTranscodeStartOffsetSeconds(effectiveResumeAt);
+        transcodeStartOffsetRef.current = effectiveResumeAt;
+        pendingTranscodeSeekDisplayRef.current = effectiveResumeAt > 0 ? { target: effectiveResumeAt, at: Date.now() } : null;
+        pendingResumeTargetRef.current = effectiveResumeAt;
+        setAbsoluteCurrentSeconds(effectiveResumeAt);
         autoResumeWhenPlayableRef.current = true;
         hlsSuspendedRef.current = false;
         hlsReleasedForPauseRef.current = false;
@@ -3967,12 +4298,24 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     buildHLSPlaylistOptions,
     infoHash,
     resolveAbsoluteCurrent,
+    resolvePlayableTranscodeStartForFile,
     selectedFileOption,
     transcodeOutputResolution,
     transcodePrebufferSeconds
   ]);
 
+  const handleUserTogglePlayback = useCallback((source: "button" | "stage" | "keyboard") => {
+    handleTogglePlayback();
+    window.requestAnimationFrame(() => {
+      syncSelectedSubtitleTrack();
+      syncSelectedAudioTrack();
+      logInfo("playback", "toggle playback from unified control", { source });
+    });
+  }, [handleTogglePlayback, logInfo, syncSelectedAudioTrack, syncSelectedSubtitleTrack]);
+
   const handleStageClickTogglePlayback = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     const target = event.target as HTMLElement | null;
     if (!target) return;
     if (target.closest(".torrent-inline-controls") || target.closest(".torrent-inline-settings-menu")) {
@@ -3986,9 +4329,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     }
     stageClickTimerRef.current = window.setTimeout(() => {
       stageClickTimerRef.current = null;
-      handleTogglePlayback();
+      handleUserTogglePlayback("stage");
     }, PLAYER_STAGE_CLICK_DELAY_MS);
-  }, [handleTogglePlayback]);
+  }, [handleUserTogglePlayback]);
 
   useEffect(() => {
     if (!canInitializePlyr) return;
@@ -4009,7 +4352,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       };
       if (event.key === " " || event.code === "Space") {
         event.preventDefault();
-        handleTogglePlayback();
+        handleUserTogglePlayback("keyboard");
         return;
       }
       if (event.key === "ArrowLeft") {
@@ -4032,7 +4375,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         revealControlsTimerRef.current = null;
       }
     };
-  }, [canInitializePlyr, handleSeekCommit, handleTogglePlayback, isFullscreenActive, resolveAbsoluteCurrent]);
+  }, [canInitializePlyr, handleSeekCommit, handleUserTogglePlayback, isFullscreenActive, resolveAbsoluteCurrent]);
 
   const handleSetPlaybackRate = useCallback((rate: number) => {
     const player = plyrRef.current;
@@ -4151,19 +4494,21 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   }, []);
 
   const handleStageDoubleClickToggleFullscreen = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     const target = event.target as HTMLElement | null;
     if (!target) return;
     if (target.closest(".torrent-inline-controls") || target.closest(".torrent-inline-settings-menu")) {
       return;
     }
-    event.preventDefault();
-    event.stopPropagation();
     if (stageClickTimerRef.current !== null) {
       window.clearTimeout(stageClickTimerRef.current);
       stageClickTimerRef.current = null;
     }
+    setControlsActive(true);
+    syncSelectedSubtitleTrack();
     void handleToggleFullscreen();
-  }, [handleToggleFullscreen]);
+  }, [handleToggleFullscreen, syncSelectedSubtitleTrack]);
 
   const handleSettingsButtonClick = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -4253,36 +4598,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const downloadedRatio = Math.round((statusSnapshot?.selectedFileReadyRatio || 0) * 100);
   const contiguousRatio = Math.round((statusSnapshot?.selectedFileContiguousRatio || 0) * 100);
   const { playableRatio, availableRanges } = useMemo(() => {
-    const raw = statusSnapshot?.selectedFileAvailableRanges;
-    if (!Array.isArray(raw) || raw.length === 0) {
+    const merged = normalizePlayableRanges(statusSnapshot);
+    if (merged.length === 0) {
       return {
         playableRatio: 0,
         availableRanges: [] as Array<{ start: number; end: number }>
       };
-    }
-    const normalized = raw
-      .map((item) => ({
-        start: Math.max(0, Math.min(1, Number(item?.startRatio ?? 0))),
-        end: Math.max(0, Math.min(1, Number(item?.endRatio ?? 0)))
-      }))
-      .filter((item) => Number.isFinite(item.start) && Number.isFinite(item.end) && item.end > item.start)
-      .sort((a, b) => a.start - b.start);
-    if (normalized.length === 0) {
-      return {
-        playableRatio: 0,
-        availableRanges: [] as Array<{ start: number; end: number }>
-      };
-    }
-    const merged: Array<{ start: number; end: number }> = [];
-    for (const item of normalized) {
-      const last = merged[merged.length - 1];
-      if (!last || item.start > last.end) {
-        merged.push({ ...item });
-        continue;
-      }
-      if (item.end > last.end) {
-        last.end = item.end;
-      }
     }
     const ratio = Math.round(merged.reduce((acc, item) => acc + Math.max(0, item.end - item.start), 0) * 100);
     const maxSegments = 220;
@@ -4306,7 +4627,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       playableRatio: ratio,
       availableRanges: sampled
     };
-  }, [statusSnapshot?.selectedFileAvailableRanges]);
+  }, [statusSnapshot]);
   const playedRatio = Math.max(0, Math.min(1, seekMax > 0 ? displayedCurrentSeconds / seekMax : 0));
   const sourceResolutionLabel = selectedFileOption?.resolutionLabel || "-";
   const outputResolutionLabel = transcodeOutputResolution > 0 ? `${transcodeOutputResolution}p` : t("media.player.resolutionOutputOriginal");
@@ -4743,8 +5064,6 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
             <div
               className="torrent-player-wrap torrent-player-plyr-wrap"
               style={playerStageStyle}
-              onClick={handleStageClickTogglePlayback}
-              onDoubleClick={handleStageDoubleClickToggleFullscreen}
             >
               <video
                 ref={videoRef}
@@ -4769,6 +5088,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
                   );
                 })}
               </video>
+              <div
+                className="torrent-player-click-layer"
+                aria-hidden="true"
+                onClick={handleStageClickTogglePlayback}
+                onDoubleClick={handleStageDoubleClickToggleFullscreen}
+              />
             </div>
             {showPlaybackBusyOverlay ? (
               <div className="torrent-player-buffering-overlay">
@@ -4793,7 +5118,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
                   type="button"
                   className="torrent-inline-play-btn"
                   aria-label={isVideoPaused ? t("media.player.play") : t("media.player.pause")}
-                  onClick={handleTogglePlayback}
+                  onClick={() => handleUserTogglePlayback("button")}
                 >
                   {isVideoPaused ? <Play size={16} /> : <Pause size={16} />}
                 </button>

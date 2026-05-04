@@ -61,6 +61,11 @@ func TestBuildPlayerHLSFFmpegArgsWritesSegmentedPlaylist(t *testing.T) {
 	if containsArg(args, "-readrate") || containsArg(args, "-readrate_initial_burst") {
 		t.Fatalf("expected completed HLS input to transcode ahead without realtime throttling, args=%s", joined)
 	}
+
+	incompleteArgs := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 12.5, -1, 1080, true, "/tmp/hls-cache", 60)
+	if containsArg(incompleteArgs, "-re") || containsArg(incompleteArgs, "-readrate") {
+		t.Fatalf("expected incomplete HLS input to transcode cached segments ahead, args=%s", strings.Join(incompleteArgs, " "))
+	}
 }
 
 func TestRewritePlayerHLSPlaylist(t *testing.T) {

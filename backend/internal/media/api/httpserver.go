@@ -1626,9 +1626,6 @@ func buildPlayerHLSFFmpegArgs(
 			args = append(args, "-ss", startValue)
 		}
 	}
-	if filePath != "pipe:0" && realTimeInput {
-		args = append(args, "-re")
-	}
 	args = append(args, "-i", filePath)
 	if startSeconds > 0 && filePath == "pipe:0" {
 		args = append(args, "-ss", strconv.FormatFloat(startSeconds, 'f', 3, 64))

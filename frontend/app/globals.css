@@ -2656,10 +2656,19 @@ body {
 }
 
 .torrent-player-wrap {
+  position: relative;
   border-radius: var(--radius-md);
   overflow: hidden;
   background: linear-gradient(180deg, rgba(3, 5, 10, 1), rgba(8, 12, 22, 0.98));
   box-shadow: 0 18px 42px rgba(4, 8, 18, 0.32);
+}
+
+.torrent-player-click-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: transparent;
+  cursor: pointer;
 }
 
 .torrent-plyr {
