@@ -64,9 +64,11 @@ const statusClientClosedRequest = 499
 const playerHLSSegmentSeconds = 2
 const playerHLSDefaultPrebufferSeconds = 60
 const playerHLSMaxPrebufferSeconds = 180
+const playerHLSBootstrapSeconds = playerHLSSegmentSeconds * 2
 const playerHLSWaitPollInterval = 250 * time.Millisecond
 const playerHLSCacheTTL = 6 * time.Hour
 const playerHLSIdleTranscodeTTL = 20 * time.Second
+const playerHLSPendingTranscodeTTL = 90 * time.Second
 const playerHLSIdleCheckInterval = 5 * time.Second
 const playerHLSHeartbeatTimeout = 10 * time.Second
 
@@ -543,10 +545,17 @@ func (b *builder) playerTransmissionHLSPlaylist(c *gin.Context) {
 		return
 	}
 
-	cachedSeconds, ready, waitErr := waitForPlayerHLSPrebuffer(c.Request.Context(), session, prebufferSeconds)
+	touchSession := func() {
+		b.hlsMu.Lock()
+		if current := b.hlsSessions[session.Key]; current != nil {
+			current.LastAccessedAt = time.Now()
+		}
+		b.hlsMu.Unlock()
+	}
+	cachedSeconds, ready, waitErr := waitForPlayerHLSPrebuffer(c.Request.Context(), session, prebufferSeconds, touchSession)
 	if waitErr != nil {
 		if errors.Is(waitErr, context.Canceled) || errors.Is(waitErr, context.DeadlineExceeded) {
-			b.stopPlayerHLSSession(session.Key, true)
+			return
 		}
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": waitErr.Error()})
 		return
@@ -1230,7 +1239,13 @@ func (b *builder) watchPlayerHLSSession(sessionKey string) {
 			b.hlsMu.Unlock()
 			return
 		}
-		if !session.ReadyAt.IsZero() {
+		if session.ReadyAt.IsZero() {
+			if now.Sub(session.LastAccessedAt) >= playerHLSPendingTranscodeTTL {
+				b.stopPlayerHLSSessionLocked(sessionKey, session, true)
+				b.hlsMu.Unlock()
+				return
+			}
+		} else {
 			if session.PlaybackActive {
 				lastHeartbeat := session.LastHeartbeatAt
 				if lastHeartbeat.IsZero() {
@@ -1350,7 +1365,7 @@ func buildPlayerHLSGroupKey(input media.PlayerTransmissionResolveStreamInput) st
 	return hex.EncodeToString(sum[:])
 }
 
-func waitForPlayerHLSPrebuffer(ctx context.Context, session *playerHLSSession, targetSeconds int) (float64, bool, error) {
+func waitForPlayerHLSPrebuffer(ctx context.Context, session *playerHLSSession, targetSeconds int, touch func()) (float64, bool, error) {
 	if targetSeconds <= 0 {
 		targetSeconds = 0
 	}
@@ -1358,14 +1373,24 @@ func waitForPlayerHLSPrebuffer(ctx context.Context, session *playerHLSSession, t
 	if requiredSeconds <= 0 {
 		requiredSeconds = 0.1
 	}
+	bootstrapSeconds := math.Min(float64(playerHLSBootstrapSeconds), requiredSeconds)
+	if bootstrapSeconds <= 0 {
+		bootstrapSeconds = 0.1
+	}
 	timeout := time.Duration(maxInt(20, targetSeconds*4)) * time.Second
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
 	for {
+		if touch != nil {
+			touch()
+		}
 		cachedSeconds, endList := playerHLSCachedSeconds(session.PlaylistPath)
 		if cachedSeconds >= requiredSeconds || (endList && cachedSeconds > 0) {
 			return cachedSeconds, true, nil
+		}
+		if cachedSeconds >= bootstrapSeconds {
+			return cachedSeconds, false, nil
 		}
 		select {
 		case <-ctx.Done():

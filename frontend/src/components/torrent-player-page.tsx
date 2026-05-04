@@ -2956,6 +2956,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !streamUrl) return;
+    const isHLSStream = streamUrl.includes("/api/media/player/transmission/hls/playlist");
 
     const applyOptions = streamApplyOptionsRef.current;
     const resumeAt = Number.isFinite(applyOptions.resumeAt) ? Math.max(0, applyOptions.resumeAt || 0) : 0;
@@ -2998,7 +2999,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     };
 
     video.addEventListener("loadedmetadata", onLoaded, { once: true });
-    video.load();
+    if (!isHLSStream) {
+      video.load();
+    }
     return () => {
       video.removeEventListener("loadedmetadata", onLoaded);
     };

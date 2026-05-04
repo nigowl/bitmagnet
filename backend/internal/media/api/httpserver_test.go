@@ -1,6 +1,9 @@
 package mediaapi
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -92,6 +95,34 @@ func TestNormalizePlayerHLSPrebufferSeconds(t *testing.T) {
 	}
 	if got := normalizePlayerHLSPrebufferSeconds(999); got != playerHLSMaxPrebufferSeconds {
 		t.Fatalf("expected max clamp, got=%d", got)
+	}
+}
+
+func TestWaitForPlayerHLSPrebufferReturnsBootstrapPlaylistBeforeTarget(t *testing.T) {
+	dir := t.TempDir()
+	playlistPath := filepath.Join(dir, "index.m3u8")
+	playlist := "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2.000000,\nsegment-000000.ts\n#EXTINF:2.000000,\nsegment-000001.ts\n"
+	if err := os.WriteFile(playlistPath, []byte(playlist), 0o644); err != nil {
+		t.Fatalf("write playlist: %v", err)
+	}
+	touched := false
+	cachedSeconds, ready, err := waitForPlayerHLSPrebuffer(context.Background(), &playerHLSSession{
+		PlaylistPath: playlistPath,
+		Done:         make(chan error),
+	}, 60, func() {
+		touched = true
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ready {
+		t.Fatalf("expected bootstrap playlist to be returned before full prebuffer target")
+	}
+	if cachedSeconds != 4 {
+		t.Fatalf("expected 4 cached seconds, got=%f", cachedSeconds)
+	}
+	if !touched {
+		t.Fatalf("expected wait loop to refresh session access")
 	}
 }
 
