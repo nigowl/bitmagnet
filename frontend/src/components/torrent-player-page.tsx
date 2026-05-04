@@ -234,6 +234,7 @@ const HLS_HEARTBEAT_INTERVAL_MS = 3000;
 const INLINE_CONTROLS_HIDE_MS = 2200;
 const INLINE_CONTROLS_KEYBOARD_HIDE_MS = 2600;
 const INLINE_CONTROLS_FULLSCREEN_HIDE_MS = 3000;
+const PLAYER_STAGE_CLICK_DELAY_MS = 280;
 const PLAYBACK_RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 const TRANSCODE_PREBUFFER_OPTIONS = [10, 30, 45, 60, 90, 120] as const;
 const TRANSCODE_OUTPUT_RESOLUTION_OPTIONS = [0, 480, 720, 1080, 1440, 2160] as const;
@@ -1009,6 +1010,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const retryCurrentStreamRef = useRef<(reason: string) => boolean>(() => false);
   const releaseCurrentHLSRef = useRef<(reason: string, keepalive?: boolean) => void>(() => {});
   const controlsHideTimerRef = useRef<number | null>(null);
+  const stageClickTimerRef = useRef<number | null>(null);
   const streamApplyOptionsRef = useRef<{ resumeAt?: number; autoplay?: boolean; recovery?: boolean }>({});
   const activePreferTranscodeRef = useRef(false);
   const statusSnapshotRef = useRef<PlayerTransmissionStatusResponse | null>(null);
@@ -1347,6 +1349,35 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     }
   }, [transcodeOutputResolution, transcodeResolutionOptions]);
 
+  const shouldAutoplayStreamChange = useCallback(() => {
+    const video = videoRef.current;
+    return Boolean(
+      !userPausedRef.current &&
+      (
+        autoResumeWhenPlayableRef.current ||
+        playbackLoadingRef.current ||
+        playerStatusRef.current === "buffering" ||
+        playerStatusRef.current === "playing" ||
+        Boolean(video && !video.paused)
+      )
+    );
+  }, []);
+
+  const handleSetTranscodeOutputResolution = useCallback(
+    (nextResolution: number) => {
+      if (nextResolution === transcodeOutputResolution) return;
+      if (shouldAutoplayStreamChange()) {
+        autoResumeWhenPlayableRef.current = true;
+        userPausedRef.current = false;
+        setIsVideoPaused(false);
+        setPlaybackLoading(true);
+        setPlayerStatus("buffering");
+      }
+      setTranscodeOutputResolution(nextResolution);
+    },
+    [shouldAutoplayStreamChange, transcodeOutputResolution]
+  );
+
   const selectedFileOption = useMemo(
     () => fileOptions.find((item) => item.index === selectedFileIndex) || null,
     [fileOptions, selectedFileIndex]
@@ -1375,7 +1406,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   }, [selectedAudioTrackId, serverAudioTracks]);
 
   const buildTranscodeStreamOptions = useCallback(
-    (overrides?: { audioTrackIndex?: number; startSeconds?: number; startBytes?: number }) => {
+    (overrides?: { audioTrackIndex?: number; startSeconds?: number; startBytes?: number; durationSeconds?: number }) => {
       const options: {
         transcode: true;
         audioTrackIndex: number;
@@ -1404,14 +1435,18 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   );
 
   const buildHLSPlaylistOptions = useCallback(
-    (overrides?: { audioTrackIndex?: number; startSeconds?: number; startBytes?: number }) => {
+    (overrides?: { audioTrackIndex?: number; startSeconds?: number; startBytes?: number; durationSeconds?: number }) => {
       const base = buildTranscodeStreamOptions(overrides);
+      const durationSeconds = Number.isFinite(overrides?.durationSeconds) && (overrides?.durationSeconds || 0) > 0
+        ? Math.max(0, overrides?.durationSeconds || 0)
+        : Math.max(0, totalDurationSecondsRef.current);
       return {
         audioTrackIndex: base.audioTrackIndex,
         outputResolution: base.outputResolution,
         startSeconds: base.startSeconds,
         startBytes: base.startBytes,
-        prebufferSeconds: transcodePrebufferSeconds
+        prebufferSeconds: transcodePrebufferSeconds,
+        durationSeconds
       };
     },
     [buildTranscodeStreamOptions, transcodePrebufferSeconds]
@@ -1433,7 +1468,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       const mode = preferTranscode ? "transcode" : "direct";
       const nextCacheTag = cacheTag || `${index}-${mode}-${preferTranscode ? "hls" : "direct"}-${Date.now()}`;
       return preferTranscode
-        ? buildPlayerTransmissionHLSPlaylistURL(infoHash, index, nextCacheTag, buildHLSPlaylistOptions())
+        ? buildPlayerTransmissionHLSPlaylistURL(infoHash, index, nextCacheTag, buildHLSPlaylistOptions({ durationSeconds: totalDurationSecondsRef.current }))
         : buildPlayerTransmissionStreamURL(infoHash, index, nextCacheTag);
     },
     [buildHLSPlaylistOptions, fileOptions, infoHash, resolvePreferTranscode]
@@ -2188,7 +2223,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           infoHash,
           index,
           cacheTag,
-          buildHLSPlaylistOptions({ startSeconds: resumeAt, startBytes })
+          buildHLSPlaylistOptions({ startSeconds: resumeAt, startBytes, durationSeconds: totalDurationSecondsRef.current })
         )
         : buildCurrentPlaybackStreamURL(cacheTag);
     if (!nextUrl) {
@@ -2565,7 +2600,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         const preferTranscode = resolvePreferTranscode(selected, activeResult.status);
         const mode = preferTranscode ? "transcode" : "direct";
         const nextUrl = preferTranscode
-          ? buildPlayerTransmissionHLSPlaylistURL(infoHash, selected.index, `${selected.index}-${mode}-hls`, buildHLSPlaylistOptions())
+          ? buildPlayerTransmissionHLSPlaylistURL(
+            infoHash,
+            selected.index,
+            `${selected.index}-${mode}-hls`,
+            buildHLSPlaylistOptions({ durationSeconds: activeResult.status.selectedFileDurationSeconds || 0 })
+          )
           : buildPlayerTransmissionStreamURL(infoHash, selected.index, `${selected.index}-${mode}-direct`);
         setTranscodeStartOffsetSeconds(0);
         transcodeStartOffsetRef.current = 0;
@@ -2675,7 +2715,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
             infoHash,
             selected.index,
             `${selected.index}-transcode-hls`,
-            buildHLSPlaylistOptions({ audioTrackIndex: -1, startSeconds: resumeAt, startBytes })
+            buildHLSPlaylistOptions({
+              audioTrackIndex: -1,
+              startSeconds: resumeAt,
+              startBytes,
+              durationSeconds: result.status.selectedFileDurationSeconds || totalDurationSecondsRef.current
+            })
           )
           : buildPlayerTransmissionStreamURL(infoHash, selected.index, `${selected.index}-direct-direct`);
         setTranscodeStartOffsetSeconds(preferTranscode ? resumeAt : 0);
@@ -2866,7 +2911,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         infoHash,
         selectedFileIndex,
         `${selectedFileIndex}-${mode}-hls-${Math.floor(resumeAt * 10)}-${transcodePrebufferSeconds}`,
-        buildHLSPlaylistOptions({ startSeconds: resumeAt, startBytes })
+        buildHLSPlaylistOptions({ startSeconds: resumeAt, startBytes, durationSeconds: totalDurationSecondsRef.current })
       )
       : buildPlayerTransmissionStreamURL(infoHash, selectedFileIndex, `${selectedFileIndex}-${mode}-direct`);
     if (activeStreamConfigKeyRef.current === nextConfigKey) {
@@ -2877,10 +2922,10 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     transcodeStartOffsetRef.current = preferTranscode ? resumeAt : 0;
     pendingTranscodeSeekDisplayRef.current = preferTranscode ? { target: resumeAt, at: Date.now() } : null;
     pendingResumeTargetRef.current = resumeAt;
-    const shouldAutoplay = Boolean(!userPausedRef.current && !videoRef.current?.paused);
+    const shouldAutoplay = shouldAutoplayStreamChange();
     autoResumeWhenPlayableRef.current = shouldAutoplay;
-    setPlaybackLoading(true);
-    setPlayerStatus("buffering");
+    setPlaybackLoading(shouldAutoplay);
+    setPlayerStatus(shouldAutoplay ? "buffering" : "ready");
     activeStreamConfigKeyRef.current = nextConfigKey;
     applyStreamUrl(nextUrl, {
       autoplay: shouldAutoplay,
@@ -2903,6 +2948,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     logInfo,
     resolveAbsoluteCurrent,
     selectedFileIndex,
+    shouldAutoplayStreamChange,
     transcodeOutputResolution,
     transcodePrebufferSeconds
   ]);
@@ -3475,6 +3521,15 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   }, [settingsOpen]);
 
   useEffect(() => {
+    return () => {
+      if (stageClickTimerRef.current !== null) {
+        window.clearTimeout(stageClickTimerRef.current);
+        stageClickTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     let localPlayer: PlyrLike | null = null;
 
@@ -3728,7 +3783,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
             infoHash,
             selectedFileOption.index,
             `seek-${selectedFileOption.index}-${Math.floor(clamped * 10)}-${transcodePrebufferSeconds}`,
-            buildHLSPlaylistOptions({ startSeconds: clamped, startBytes })
+            buildHLSPlaylistOptions({ startSeconds: clamped, startBytes, durationSeconds: fullDuration })
           );
           setTranscodeStartOffsetSeconds(clamped);
           transcodeStartOffsetRef.current = clamped;
@@ -3820,7 +3875,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           infoHash,
           selectedFileOption.index,
           `resume-${selectedFileOption.index}-${Math.floor(resumeAt * 10)}-${Date.now()}`,
-          buildHLSPlaylistOptions({ startSeconds: resumeAt, startBytes })
+          buildHLSPlaylistOptions({ startSeconds: resumeAt, startBytes, durationSeconds: totalDurationSecondsRef.current })
         );
         setTranscodeStartOffsetSeconds(resumeAt);
         transcodeStartOffsetRef.current = resumeAt;
@@ -3882,7 +3937,16 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     if (target.closest(".torrent-inline-controls") || target.closest(".torrent-inline-settings-menu")) {
       return;
     }
-    handleTogglePlayback();
+    if (event.detail > 1) {
+      return;
+    }
+    if (stageClickTimerRef.current !== null) {
+      window.clearTimeout(stageClickTimerRef.current);
+    }
+    stageClickTimerRef.current = window.setTimeout(() => {
+      stageClickTimerRef.current = null;
+      handleTogglePlayback();
+    }, PLAYER_STAGE_CLICK_DELAY_MS);
   }, [handleTogglePlayback]);
 
   useEffect(() => {
@@ -4044,6 +4108,21 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       }
     }
   }, []);
+
+  const handleStageDoubleClickToggleFullscreen = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    if (target.closest(".torrent-inline-controls") || target.closest(".torrent-inline-settings-menu")) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (stageClickTimerRef.current !== null) {
+      window.clearTimeout(stageClickTimerRef.current);
+      stageClickTimerRef.current = null;
+    }
+    void handleToggleFullscreen();
+  }, [handleToggleFullscreen]);
 
   const handleSettingsButtonClick = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -4620,7 +4699,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
             onPointerDown={() => revealInlineControls(isFullscreenActive ? INLINE_CONTROLS_FULLSCREEN_HIDE_MS : INLINE_CONTROLS_KEYBOARD_HIDE_MS)}
             onTouchStart={() => revealInlineControls(INLINE_CONTROLS_FULLSCREEN_HIDE_MS)}
           >
-            <div className="torrent-player-wrap torrent-player-plyr-wrap" style={playerStageStyle} onClick={handleStageClickTogglePlayback}>
+            <div
+              className="torrent-player-wrap torrent-player-plyr-wrap"
+              style={playerStageStyle}
+              onClick={handleStageClickTogglePlayback}
+              onDoubleClick={handleStageDoubleClickToggleFullscreen}
+            >
               <video
                 ref={videoRef}
                 src={!activePreferTranscode ? streamUrl || undefined : undefined}
@@ -4832,7 +4916,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
                                 type="button"
                                 className={`torrent-inline-rate-btn${transcodeOutputResolution === item.value ? " is-active" : ""}`}
                                 onClick={() => {
-                                  setTranscodeOutputResolution(item.value);
+                                  handleSetTranscodeOutputResolution(item.value);
                                 }}
                               >
                                 {item.label}

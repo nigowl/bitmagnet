@@ -1,6 +1,9 @@
 package httpserver
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -59,4 +62,100 @@ func TestResolveOptionsSelectedSubsetStillSorted(t *testing.T) {
 	require.Equal(t, "auth", resolved[0].Key())
 	require.Equal(t, "admin_settings", resolved[1].Key())
 	require.Equal(t, "media", resolved[2].Key())
+}
+
+func TestAPIEnvelopeMiddlewareWrapsSuccessJSON(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(apiEnvelopeMiddleware())
+	router.GET("/api/example", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/example", nil)
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &payload))
+	require.EqualValues(t, 0, payload["code"])
+	require.Equal(t, "success", payload["message"])
+	require.Equal(t, true, payload["data"].(map[string]any)["ok"])
+}
+
+func TestAPIEnvelopeMiddlewareWrapsErrorJSONAsHTTP200(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(apiEnvelopeMiddleware())
+	router.GET("/api/example", func(c *gin.Context) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid input"})
+	})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/example", nil)
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &payload))
+	require.EqualValues(t, http.StatusBadRequest, payload["code"])
+	require.Equal(t, "invalid input", payload["message"])
+	require.Nil(t, payload["data"])
+}
+
+func TestAPIEnvelopeMiddlewareWrapsEmptySuccessAsCodeZero(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(apiEnvelopeMiddleware())
+	router.POST("/api/example", func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/example", nil)
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &payload))
+	require.EqualValues(t, 0, payload["code"])
+	require.Equal(t, "success", payload["message"])
+	require.Nil(t, payload["data"])
+}
+
+func TestAPIEnvelopeMiddlewareKeepsExistingEnvelope(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(apiEnvelopeMiddleware())
+	router.GET("/api/example", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"code": 7, "message": "custom", "data": gin.H{"ok": false}})
+	})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/example", nil)
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &payload))
+	require.EqualValues(t, 7, payload["code"])
+	require.Equal(t, "custom", payload["message"])
+	require.Equal(t, false, payload["data"].(map[string]any)["ok"])
+}
+
+func TestAPIEnvelopeMiddlewareSkipsStreamRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(apiEnvelopeMiddleware())
+	router.GET("/api/media/player/transmission/stream", func(c *gin.Context) {
+		c.Data(http.StatusPartialContent, "video/mp4", []byte("media"))
+	})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/media/player/transmission/stream", nil)
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusPartialContent, response.Code)
+	require.Equal(t, "media", response.Body.String())
 }

@@ -409,7 +409,19 @@ func (s *service) PlayerTransmissionResolveStream(
 	if fileLength > 0 && input.StartBytes >= fileLength {
 		input.StartBytes = fileLength - 1
 	}
-	rangeStart, rangeEnd, partial, err := parsePlayerByteRange(input.RangeHeader, fileLength)
+	maxRangeBytes := defaultPlayerStreamMaxRangeBytes
+	if input.PreferTranscode && input.PrebufferSeconds > 0 {
+		prebufferWindowBytes := playerTransmissionPrebufferWindowBytes(fileLength, input.DurationSeconds, input.PrebufferSeconds)
+		maxRangeBytes = maxInt64(maxRangeBytes, prebufferWindowBytes)
+		input.RangeHeader = playerTransmissionPrebufferRangeHeader(
+			input.RangeHeader,
+			fileLength,
+			input.StartBytes,
+			input.DurationSeconds,
+			input.PrebufferSeconds,
+		)
+	}
+	rangeStart, rangeEnd, partial, err := parsePlayerByteRangeWithMax(input.RangeHeader, fileLength, maxRangeBytes)
 	if err != nil {
 		return PlayerTransmissionResolveStreamResult{}, err
 	}
@@ -2158,9 +2170,98 @@ func playerTransmissionHasPiece(pieceBits []byte, piece int) bool {
 	return (pieceBits[byteIndex] & (1 << bitIndex)) != 0
 }
 
+func playerTransmissionPrebufferRangeHeader(
+	header string,
+	total int64,
+	startBytes int64,
+	durationSeconds float64,
+	prebufferSeconds int,
+) string {
+	if total <= 0 || prebufferSeconds <= 0 {
+		return header
+	}
+	start := startBytes
+	trimmed := strings.TrimSpace(header)
+	if strings.HasPrefix(strings.ToLower(trimmed), "bytes=") {
+		spec := strings.TrimSpace(trimmed[6:])
+		if comma := strings.Index(spec, ","); comma >= 0 {
+			spec = strings.TrimSpace(spec[:comma])
+		}
+		parts := strings.SplitN(spec, "-", 2)
+		if len(parts) != 2 {
+			return header
+		}
+		left := strings.TrimSpace(parts[0])
+		right := strings.TrimSpace(parts[1])
+		if left == "" {
+			return header
+		}
+		parsedStart, err := strconv.ParseInt(left, 10, 64)
+		if err != nil || parsedStart < 0 {
+			return header
+		}
+		start = parsedStart
+		if right != "" {
+			return header
+		}
+	}
+	if start < 0 {
+		start = 0
+	}
+	if start >= total {
+		start = total - 1
+	}
+
+	windowBytes := playerTransmissionPrebufferWindowBytes(total, durationSeconds, prebufferSeconds)
+	if windowBytes <= 0 {
+		return header
+	}
+	end := start + windowBytes - 1
+	if end >= total {
+		end = total - 1
+	}
+	return fmt.Sprintf("bytes=%d-%d", start, end)
+}
+
+func playerTransmissionPrebufferWindowBytes(total int64, durationSeconds float64, prebufferSeconds int) int64 {
+	if total <= 0 || prebufferSeconds <= 0 {
+		return 0
+	}
+	window := defaultPlayerStreamProbeChunkBytes
+	if durationSeconds > 0 && !math.IsNaN(durationSeconds) && !math.IsInf(durationSeconds, 0) {
+		bytesPerSecond := float64(total) / durationSeconds
+		estimated := int64(math.Ceil(bytesPerSecond * float64(prebufferSeconds) * 1.35))
+		if estimated > window {
+			window = estimated
+		}
+	} else if prebufferSeconds > 30 {
+		steps := int64((prebufferSeconds + 29) / 30)
+		if estimated := defaultPlayerStreamProbeChunkBytes * steps; estimated > window {
+			window = estimated
+		}
+	}
+	if !(durationSeconds > 0 && !math.IsNaN(durationSeconds) && !math.IsInf(durationSeconds, 0)) && window > defaultPlayerStreamMaxRangeBytes {
+		window = defaultPlayerStreamMaxRangeBytes
+	}
+	if window > total {
+		window = total
+	}
+	if window < 1 {
+		return 1
+	}
+	return window
+}
+
 func parsePlayerByteRange(header string, total int64) (int64, int64, bool, error) {
+	return parsePlayerByteRangeWithMax(header, total, defaultPlayerStreamMaxRangeBytes)
+}
+
+func parsePlayerByteRangeWithMax(header string, total int64, maxRangeBytes int64) (int64, int64, bool, error) {
 	if total <= 0 {
 		return 0, 0, false, ErrPlayerInvalidRange
+	}
+	if maxRangeBytes <= 0 {
+		maxRangeBytes = defaultPlayerStreamMaxRangeBytes
 	}
 
 	if strings.TrimSpace(header) == "" {
@@ -2231,7 +2332,7 @@ func parsePlayerByteRange(header string, total int64) (int64, int64, bool, error
 			end = parsedEnd
 		}
 	}
-	maxEnd := start + defaultPlayerStreamMaxRangeBytes - 1
+	maxEnd := start + maxRangeBytes - 1
 	if end > maxEnd {
 		end = maxEnd
 	}

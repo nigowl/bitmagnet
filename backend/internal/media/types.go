@@ -378,6 +378,8 @@ type PlayerTransmissionResolveStreamInput struct {
 	OutputResolution int     `json:"outputResolution"`
 	StartSeconds     float64 `json:"startSeconds"`
 	StartBytes       int64   `json:"startBytes"`
+	PrebufferSeconds int     `json:"prebufferSeconds"`
+	DurationSeconds  float64 `json:"durationSeconds"`
 }
 
 type PlayerTransmissionResolveStreamResult struct {

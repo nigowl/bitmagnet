@@ -557,7 +557,7 @@ export function buildPlayerTransmissionHLSPlaylistURL(
   infoHash: string,
   fileIndex: number,
   cacheBust?: string,
-  options?: { startSeconds?: number; startBytes?: number; audioTrackIndex?: number; outputResolution?: number; prebufferSeconds?: number }
+  options?: { startSeconds?: number; startBytes?: number; audioTrackIndex?: number; outputResolution?: number; prebufferSeconds?: number; durationSeconds?: number }
 ): string {
   const query = new URLSearchParams({
     infoHash: infoHash.trim().toLowerCase(),
@@ -580,6 +580,9 @@ export function buildPlayerTransmissionHLSPlaylistURL(
   }
   if (Number.isFinite(options?.prebufferSeconds) && (options?.prebufferSeconds || 0) > 0) {
     query.set("prebuffer", String(Math.max(10, Math.floor(options?.prebufferSeconds || 0))));
+  }
+  if (Number.isFinite(options?.durationSeconds) && (options?.durationSeconds || 0) > 0) {
+    query.set("duration", String(Math.max(0, options?.durationSeconds || 0)));
   }
   return `${apiBaseURL}/api/media/player/transmission/hls/playlist?${query.toString()}`;
 }

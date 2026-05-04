@@ -490,6 +490,7 @@ func (b *builder) playerTransmissionHLSPlaylist(c *gin.Context) {
 	startSeconds := parseFloat(c.Query("start"), 0)
 	startBytes := parseInt64(c.Query("startBytes"), 0)
 	prebufferSeconds := normalizePlayerHLSPrebufferSeconds(parseInt(c.Query("prebuffer"), playerHLSDefaultPrebufferSeconds))
+	durationSeconds := parseFloat(c.Query("duration"), 0)
 
 	resolveRangeHeader := ""
 	if startBytes > 0 {
@@ -504,6 +505,8 @@ func (b *builder) playerTransmissionHLSPlaylist(c *gin.Context) {
 		OutputResolution: outputResolution,
 		StartSeconds:     startSeconds,
 		StartBytes:       startBytes,
+		PrebufferSeconds: prebufferSeconds,
+		DurationSeconds:  durationSeconds,
 	})
 	if err != nil {
 		switch {
@@ -532,6 +535,8 @@ func (b *builder) playerTransmissionHLSPlaylist(c *gin.Context) {
 		OutputResolution: outputResolution,
 		StartSeconds:     startSeconds,
 		StartBytes:       startBytes,
+		PrebufferSeconds: prebufferSeconds,
+		DurationSeconds:  durationSeconds,
 	}, prebufferSeconds)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

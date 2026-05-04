@@ -6,6 +6,35 @@ import (
 	"testing"
 )
 
+func TestPlayerTransmissionPrebufferWindowBytesUsesDurationEstimate(t *testing.T) {
+	got := playerTransmissionPrebufferWindowBytes(20*1024*1024*1024, 10800, 60)
+	const want int64 = 161061274
+	if got != want {
+		t.Fatalf("expected high bitrate window to follow duration estimate, got=%d want=%d", got, want)
+	}
+}
+
+func TestParsePlayerByteRangeWithMaxAllowsTranscodePrebufferWindow(t *testing.T) {
+	const maxRange int64 = 160 * 1024 * 1024
+	_, end, _, err := parsePlayerByteRangeWithMax("bytes=1024-500000000", 500*1024*1024, maxRange)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if want := int64(1024) + maxRange - 1; end != want {
+		t.Fatalf("expected custom max range end, got=%d want=%d", end, want)
+	}
+}
+
+func TestPlayerTransmissionPrebufferRangeHeaderBuildsClosedWindow(t *testing.T) {
+	got := playerTransmissionPrebufferRangeHeader("", 100000000, 0, 3600, 60)
+	if got == "" || got == "bytes=0-" {
+		t.Fatalf("expected explicit range header, got=%q", got)
+	}
+	if got != "bytes=0-16777215" {
+		t.Fatalf("expected bounded probe window for small bitrate stream, got=%q", got)
+	}
+}
+
 func TestPlayerTransmissionContiguousBytesFromStartBoundaryPieceFallback(t *testing.T) {
 	snapshot := &playerTransmissionRPCTorrent{
 		PieceSize:   1024,

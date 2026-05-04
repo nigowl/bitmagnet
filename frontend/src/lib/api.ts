@@ -11,6 +11,12 @@ interface GraphQLResponse<T> {
   errors?: GraphQLError[];
 }
 
+interface APIEnvelope<T> {
+  code: number;
+  message: string;
+  data: T;
+}
+
 const authTokenStorageKey = "bitmagnet-auth-token";
 const authTokenCookieKey = "bitmagnet-auth-token";
 
@@ -95,24 +101,53 @@ export async function graphqlRequest<T>(query: string, variables?: Record<string
 export async function apiRequest<T>(path: string, options?: { method?: "GET" | "POST" | "PUT" | "DELETE"; data?: unknown }) {
   const token = getAuthToken();
   try {
-    const response = await axios.request<T>({
+    const response = await axios.request<T | APIEnvelope<T>>({
       url: `${apiBaseURL}${path}`,
       method: options?.method || "GET",
       data: options?.data,
       timeout: 30000,
       headers: token ? { Authorization: `Bearer ${token}` } : undefined
     });
-    return response.data;
+    return unwrapAPIResponse<T>(response.data);
   } catch (error) {
     if (axios.isAxiosError(error)) {
-      const message =
-        typeof error.response?.data === "object" && error.response?.data && "error" in error.response.data
-          ? String((error.response.data as { error?: unknown }).error || error.message)
-          : error.message;
+      const payload = error.response?.data;
+      const message = extractAPIErrorMessage(payload, error.message);
       throw new Error(message);
     }
     throw error;
   }
+}
+
+function unwrapAPIResponse<T>(payload: T | APIEnvelope<T>): T {
+  if (!isAPIEnvelope<T>(payload)) {
+    return payload as T;
+  }
+  if (payload.code !== 0) {
+    throw new Error(payload.message || "Request failed.");
+  }
+  return payload.data;
+}
+
+function isAPIEnvelope<T>(payload: unknown): payload is APIEnvelope<T> {
+  if (!payload || typeof payload !== "object") return false;
+  const object = payload as Record<string, unknown>;
+  return typeof object.code === "number" && typeof object.message === "string" && "data" in object;
+}
+
+function extractAPIErrorMessage(payload: unknown, fallback: string): string {
+  if (isAPIEnvelope<unknown>(payload)) {
+    return payload.message || fallback;
+  }
+  if (payload && typeof payload === "object") {
+    const object = payload as Record<string, unknown>;
+    if (typeof object.error === "string" && object.error.trim()) return object.error.trim();
+    if (typeof object.message === "string" && object.message.trim()) return object.message.trim();
+  }
+  if (typeof payload === "string" && payload.trim()) {
+    return payload.trim();
+  }
+  return fallback;
 }
 
 export { apiBaseURL };
