@@ -48,6 +48,7 @@ type playerTransmissionRPCArguments struct {
 	PriorityLow     []int    `json:"priority-low,omitempty"`
 	PriorityNormal  []int    `json:"priority-normal,omitempty"`
 	Sequential      *bool    `json:"sequential_download,omitempty"`
+	SequentialFrom  *int     `json:"sequential_download_from_piece,omitempty"`
 	DeleteLocalData *bool    `json:"delete-local-data,omitempty"`
 }
 
@@ -134,7 +135,7 @@ func (s *service) PlayerTransmissionBootstrap(
 	}
 
 	selected := playerTransmissionDefaultFileIndex(snapshot.Files, settings.TransmissionDownloadVideoFormats)
-	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, selected, snapshot.Files); err != nil {
+	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, selected, snapshot, 0); err != nil {
 		return PlayerTransmissionBootstrapResult{}, err
 	}
 	s.playerTransmissionRememberSelectedFile(infoHash, selected)
@@ -172,7 +173,7 @@ func (s *service) PlayerTransmissionSelectFile(
 		return PlayerTransmissionSelectFileResult{}, ErrPlayerFileNotFound
 	}
 
-	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, input.FileIndex, snapshot.Files); err != nil {
+	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, input.FileIndex, snapshot, 0); err != nil {
 		return PlayerTransmissionSelectFileResult{}, err
 	}
 	s.playerTransmissionRememberSelectedFile(infoHash, input.FileIndex)
@@ -395,11 +396,14 @@ func (s *service) PlayerTransmissionResolveStream(
 	if err != nil {
 		return PlayerTransmissionResolveStreamResult{}, err
 	}
+	if current, fetchErr := s.playerTransmissionFetchTorrent(ctx, settings, infoHash, true); fetchErr == nil {
+		snapshot = current
+	}
 	if input.FileIndex >= len(snapshot.Files) {
 		return PlayerTransmissionResolveStreamResult{}, ErrPlayerFileNotFound
 	}
 
-	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, input.FileIndex, snapshot.Files); err != nil {
+	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, infoHash, input.FileIndex, snapshot, input.StartBytes); err != nil {
 		return PlayerTransmissionResolveStreamResult{}, err
 	}
 	s.playerTransmissionRememberSelectedFile(infoHash, input.FileIndex)
@@ -1039,8 +1043,13 @@ func (s *service) playerTransmissionSetOnlyWantedFile(
 	settings playerBootstrapSettings,
 	infoHash string,
 	fileIndex int,
-	files []playerTransmissionRPCFile,
+	snapshot *playerTransmissionRPCTorrent,
+	startBytes int64,
 ) error {
+	if snapshot == nil {
+		return ErrPlayerFileNotFound
+	}
+	files := snapshot.Files
 	fileCount := len(files)
 	if fileIndex < 0 || fileIndex >= fileCount {
 		return ErrPlayerFileNotFound
@@ -1071,17 +1080,24 @@ func (s *service) playerTransmissionSetOnlyWantedFile(
 		unwanted = append(unwanted, idx)
 	}
 
+	args := playerTransmissionRPCArguments{
+		IDs:            []any{infoHash},
+		FilesWanted:    wanted,
+		FilesUnwanted:  unwanted,
+		PriorityHigh:   []int{fileIndex},
+		PriorityNormal: priorityNormal,
+		PriorityLow:    []int{},
+		Sequential:     boolPtr(settings.TransmissionSequential),
+	}
+	if settings.TransmissionSequential {
+		if piece, ok := playerTransmissionSequentialStartPiece(snapshot, fileIndex, startBytes); ok {
+			args.SequentialFrom = &piece
+		}
+	}
+
 	payload, _ := json.Marshal(playerTransmissionRPCRequest{
-		Method: "torrent-set",
-		Arguments: playerTransmissionRPCArguments{
-			IDs:            []any{infoHash},
-			FilesWanted:    wanted,
-			FilesUnwanted:  unwanted,
-			PriorityHigh:   []int{fileIndex},
-			PriorityNormal: priorityNormal,
-			PriorityLow:    []int{},
-			Sequential:     boolPtr(settings.TransmissionSequential),
-		},
+		Method:    "torrent-set",
+		Arguments: args,
 	})
 
 	raw, err := callTransmissionRPC(
@@ -1146,6 +1162,35 @@ func (s *service) playerTransmissionTryStart(
 		lastErr = fmt.Errorf("transmission %s result=%q", method, strings.TrimSpace(response.Result))
 	}
 	return lastErr
+}
+
+func playerTransmissionSequentialStartPiece(
+	snapshot *playerTransmissionRPCTorrent,
+	fileIndex int,
+	startBytes int64,
+) (int, bool) {
+	if snapshot == nil || fileIndex < 0 || fileIndex >= len(snapshot.Files) || snapshot.PieceSize <= 0 {
+		return 0, false
+	}
+	fileLength := snapshot.Files[fileIndex].Length
+	if fileLength <= 0 {
+		return 0, false
+	}
+	if startBytes < 0 {
+		startBytes = 0
+	}
+	if startBytes >= fileLength {
+		startBytes = fileLength - 1
+	}
+	fileOffset := int64(0)
+	for idx := 0; idx < fileIndex; idx++ {
+		fileOffset += snapshot.Files[idx].Length
+	}
+	piece := int((fileOffset + startBytes) / snapshot.PieceSize)
+	if piece < 0 {
+		return 0, false
+	}
+	return piece, true
 }
 
 func (s *service) playerTransmissionAutoCleanup(
@@ -2111,10 +2156,9 @@ func playerTransmissionAvailableRanges(
 		return playerTransmissionMergeRanges(ranges)
 	}
 
-	const maxRanges = 1200
 	currentStart := -1
 	flush := func(runStart int, runEnd int) {
-		if runStart < 0 || runEnd < runStart || len(ranges) >= maxRanges {
+		if runStart < 0 || runEnd < runStart {
 			return
 		}
 		globalStart := int64(runStart) * snapshot.PieceSize
@@ -2151,11 +2195,8 @@ func playerTransmissionAvailableRanges(
 			flush(currentStart, piece-1)
 			currentStart = -1
 		}
-		if len(ranges) >= maxRanges {
-			break
-		}
 	}
-	if currentStart >= 0 && len(ranges) < maxRanges {
+	if currentStart >= 0 {
 		flush(currentStart, lastPiece)
 	}
 	return playerTransmissionMergeRanges(ranges)
@@ -2473,11 +2514,17 @@ func playerTransmissionResolveFilePath(downloadDir string, fileName string, loca
 		}
 		candidates := []string{
 			filepath.Join(baseDir, relative),
+			filepath.Join(baseDir, relative+".part"),
 			filepath.Join(baseDir, basename),
+			filepath.Join(baseDir, basename+".part"),
 			filepath.Join(baseDir, "complete", relative),
+			filepath.Join(baseDir, "complete", relative+".part"),
 			filepath.Join(baseDir, "complete", basename),
+			filepath.Join(baseDir, "complete", basename+".part"),
 			filepath.Join(baseDir, "incomplete", relative),
+			filepath.Join(baseDir, "incomplete", relative+".part"),
 			filepath.Join(baseDir, "incomplete", basename),
+			filepath.Join(baseDir, "incomplete", basename+".part"),
 		}
 		for _, candidate := range candidates {
 			relCheck, err := filepath.Rel(baseDir, candidate)

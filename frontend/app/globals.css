@@ -2996,6 +2996,7 @@ body {
 }
 
 .torrent-inline-seek-available-segment,
+.torrent-inline-seek-downloaded,
 .torrent-inline-seek-contiguous,
 .torrent-inline-seek-played {
   position: absolute;
@@ -3003,18 +3004,36 @@ body {
   bottom: 0;
 }
 
-.torrent-inline-seek-available-segment {
+.torrent-inline-seek-downloaded {
   left: 0;
+  z-index: 1;
+  border-radius: 999px;
   background: linear-gradient(
     90deg,
-    rgba(72, 84, 112, 0.68),
-    rgba(95, 109, 143, 0.72)
+    rgba(120, 120, 128, 0.28),
+    rgba(174, 174, 178, 0.36)
+  );
+  box-shadow: inset 0 0 0 1px rgba(245, 245, 247, 0.08);
+}
+
+.torrent-inline-seek-available-segment {
+  left: 0;
+  z-index: 2;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 204, 0, 0.78),
+    rgba(255, 149, 0, 0.82)
   );
   border-radius: 999px;
+  min-width: 2px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.13),
+    0 0 8px rgba(255, 159, 10, 0.2);
 }
 
 .torrent-inline-seek-contiguous {
   left: 0;
+  z-index: 3;
   border-radius: 999px;
   background: linear-gradient(
     90deg,
@@ -3033,6 +3052,7 @@ body {
 
 .torrent-inline-seek-played {
   left: 0;
+  z-index: 4;
   border-radius: 999px;
   background: linear-gradient(
     90deg,

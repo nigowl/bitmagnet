@@ -3,6 +3,8 @@ package media
 import (
 	"encoding/base64"
 	"math"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -122,6 +124,71 @@ func TestPlayerTransmissionAvailableRangesFallsBackToSequentialCompletedBytes(t 
 	const want = 2000.0 / 5000.0
 	if math.Abs(ranges[0].EndRatio-want) > 1e-9 {
 		t.Fatalf("unexpected fallback end ratio, got=%f want=%f", ranges[0].EndRatio, want)
+	}
+}
+
+func TestPlayerTransmissionAvailableRangesDoesNotTruncateFragmentedLargeFiles(t *testing.T) {
+	pieces := make([]int, 0, 1301)
+	for piece := 0; piece <= 2600; piece += 2 {
+		pieces = append(pieces, piece)
+	}
+	snapshot := &playerTransmissionRPCTorrent{
+		PieceSize:  1024,
+		Pieces:     buildPieceBits(pieces...),
+		Sequential: false,
+		Files:      []playerTransmissionRPCFile{{Length: 2602 * 1024}},
+		FileStats:  []playerTransmissionRPCFileStat{{BytesCompleted: int64(len(pieces) * 1024)}},
+	}
+
+	ranges := playerTransmissionAvailableRanges(snapshot, 0)
+	if len(ranges) != len(pieces) {
+		t.Fatalf("expected every completed run to be represented, got=%d want=%d", len(ranges), len(pieces))
+	}
+	availableRatio := 0.0
+	for _, item := range ranges {
+		availableRatio += item.EndRatio - item.StartRatio
+	}
+	want := float64(len(pieces)) / 2602.0
+	if math.Abs(availableRatio-want) > 1e-9 {
+		t.Fatalf("unexpected available ratio, got=%f want=%f", availableRatio, want)
+	}
+}
+
+func TestPlayerTransmissionResolveFilePathFindsIncompletePartFile(t *testing.T) {
+	dir := t.TempDir()
+	relative := filepath.Join("Movie Folder", "movie.mp4")
+	partPath := filepath.Join(dir, "incomplete", relative+".part")
+	if err := os.MkdirAll(filepath.Dir(partPath), 0o755); err != nil {
+		t.Fatalf("mkdir part dir: %v", err)
+	}
+	if err := os.WriteFile(partPath, []byte("partial"), 0o644); err != nil {
+		t.Fatalf("write part file: %v", err)
+	}
+
+	got, err := playerTransmissionResolveFilePath("/downloads", filepath.ToSlash(relative), dir)
+	if err != nil {
+		t.Fatalf("expected .part path to resolve: %v", err)
+	}
+	if got != partPath {
+		t.Fatalf("unexpected resolved path, got=%q want=%q", got, partPath)
+	}
+}
+
+func TestPlayerTransmissionSequentialStartPieceUsesSelectedFileOffset(t *testing.T) {
+	snapshot := &playerTransmissionRPCTorrent{
+		PieceSize: 1024,
+		Files: []playerTransmissionRPCFile{
+			{Length: 200},
+			{Length: 5000},
+		},
+	}
+
+	got, ok := playerTransmissionSequentialStartPiece(snapshot, 1, 1800)
+	if !ok {
+		t.Fatalf("expected sequential start piece")
+	}
+	if got != 1 {
+		t.Fatalf("unexpected start piece, got=%d want=1", got)
 	}
 }
 

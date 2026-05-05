@@ -64,28 +64,28 @@ const statusClientClosedRequest = 499
 const playerHLSSegmentSeconds = 2
 const playerHLSDefaultPrebufferSeconds = 60
 const playerHLSMaxPrebufferSeconds = 180
-const playerHLSBootstrapSeconds = playerHLSSegmentSeconds * 2
 const playerHLSWaitPollInterval = 250 * time.Millisecond
 const playerHLSCacheTTL = 6 * time.Hour
 const playerHLSIdleTranscodeTTL = 20 * time.Second
 const playerHLSPendingTranscodeTTL = 90 * time.Second
 const playerHLSIdleCheckInterval = 5 * time.Second
 const playerHLSHeartbeatTimeout = 10 * time.Second
+const playerHLSStoppedSegmentGrace = 90 * time.Second
 
 type playerHLSSession struct {
 	Key              string
 	GroupKey         string
 	Dir              string
 	PlaylistPath     string
-	StartedAt        time.Time
 	LastAccessedAt   time.Time
 	ReadyAt          time.Time
 	LastHeartbeatAt  time.Time
 	PlaybackActive   bool
-	StartSeconds     float64
 	PrebufferSeconds int
 	Cmd              *exec.Cmd
-	Done             chan error
+	Done             chan struct{}
+	DoneObserved     bool
+	ExitErr          error
 }
 
 func (b *builder) Key() string {
@@ -1140,12 +1140,17 @@ func (b *builder) playerHLSStartOrReuseSession(
 	b.hlsMu.Lock()
 	b.cleanupPlayerHLSSessionsLocked(time.Now())
 	if existing := b.hlsSessions[sessionKey]; existing != nil {
-		existing.LastAccessedAt = time.Now()
-		if prebufferSeconds > existing.PrebufferSeconds {
-			existing.PrebufferSeconds = prebufferSeconds
+		cachedSeconds, _ := playerHLSCachedSeconds(existing.PlaylistPath)
+		if existing.DoneObserved && existing.ExitErr != nil && cachedSeconds < float64(prebufferSeconds) {
+			b.stopPlayerHLSSessionLocked(sessionKey, existing, true)
+		} else {
+			existing.LastAccessedAt = time.Now()
+			if prebufferSeconds > existing.PrebufferSeconds {
+				existing.PrebufferSeconds = prebufferSeconds
+			}
+			b.hlsMu.Unlock()
+			return existing, nil
 		}
-		b.hlsMu.Unlock()
-		return existing, nil
 	}
 	for key, existing := range b.hlsSessions {
 		if existing == nil || existing.GroupKey != groupKey {
@@ -1172,9 +1177,7 @@ func (b *builder) playerHLSStartOrReuseSession(
 		resolveResult.StartSeconds,
 		resolveResult.AudioTrackIndex,
 		resolveResult.OutputResolution,
-		!resolveResult.Completed,
 		sessionDir,
-		prebufferSeconds,
 	)
 	cmd := exec.Command(binaryPath, args...)
 	stderrPath := filepath.Join(sessionDir, "ffmpeg.log")
@@ -1193,17 +1196,19 @@ func (b *builder) playerHLSStartOrReuseSession(
 		GroupKey:         groupKey,
 		Dir:              sessionDir,
 		PlaylistPath:     playlistPath,
-		StartedAt:        time.Now(),
 		LastAccessedAt:   time.Now(),
-		StartSeconds:     resolveResult.StartSeconds,
 		PrebufferSeconds: prebufferSeconds,
 		Cmd:              cmd,
-		Done:             make(chan error, 1),
+		Done:             make(chan struct{}),
 	}
 	go func() {
 		err := cmd.Wait()
 		_ = stderrFile.Close()
-		session.Done <- err
+		b.hlsMu.Lock()
+		session.ExitErr = err
+		session.DoneObserved = true
+		session.Cmd = nil
+		b.hlsMu.Unlock()
 		close(session.Done)
 	}()
 
@@ -1262,12 +1267,13 @@ func (b *builder) watchPlayerHLSSession(sessionKey string) {
 				return
 			}
 		}
-		select {
-		case <-session.Done:
-			b.stopPlayerHLSSessionLocked(sessionKey, session, true)
-			b.hlsMu.Unlock()
-			return
-		default:
+		if session.DoneObserved {
+			cachedSeconds, _ := playerHLSCachedSeconds(session.PlaylistPath)
+			if session.ExitErr != nil && cachedSeconds <= 0 {
+				b.stopPlayerHLSSessionLocked(sessionKey, session, true)
+				b.hlsMu.Unlock()
+				return
+			}
 		}
 		b.hlsMu.Unlock()
 	}
@@ -1324,20 +1330,29 @@ func (b *builder) stopPlayerHLSSessionLocked(sessionKey string, session *playerH
 	}
 	delete(b.hlsSessions, sessionKey)
 	if removeFiles {
-		go os.RemoveAll(session.Dir)
+		b.schedulePlayerHLSSessionDirRemoval(sessionKey, session.Dir)
 	}
 }
 
-func buildPlayerHLSCacheKey(resolveResult media.PlayerTransmissionResolveStreamResult, input media.PlayerTransmissionResolveStreamInput, prebufferSeconds int) string {
-	stat, _ := os.Stat(resolveResult.FilePath)
-	size := int64(0)
-	modUnix := int64(0)
-	if stat != nil {
-		size = stat.Size()
-		modUnix = stat.ModTime().UnixNano()
+func (b *builder) schedulePlayerHLSSessionDirRemoval(sessionKey string, dir string) {
+	if strings.TrimSpace(dir) == "" {
+		return
 	}
+	go func() {
+		time.Sleep(playerHLSStoppedSegmentGrace)
+		b.hlsMu.Lock()
+		current := b.hlsSessions[sessionKey]
+		b.hlsMu.Unlock()
+		if current != nil && current.Dir == dir {
+			return
+		}
+		_ = os.RemoveAll(dir)
+	}()
+}
+
+func buildPlayerHLSCacheKey(resolveResult media.PlayerTransmissionResolveStreamResult, input media.PlayerTransmissionResolveStreamInput, prebufferSeconds int) string {
 	payload := fmt.Sprintf(
-		"%s|%d|%.3f|%d|%d|%d|%d|%s|%d|%d",
+		"%s|%d|%.3f|%d|%d|%d|%d|%s",
 		strings.TrimSpace(strings.ToLower(input.InfoHash)),
 		input.FileIndex,
 		math.Max(0, input.StartSeconds),
@@ -1346,8 +1361,6 @@ func buildPlayerHLSCacheKey(resolveResult media.PlayerTransmissionResolveStreamR
 		input.OutputResolution,
 		prebufferSeconds,
 		resolveResult.FilePath,
-		size,
-		modUnix,
 	)
 	sum := sha1.Sum([]byte(payload))
 	return hex.EncodeToString(sum[:])
@@ -1373,10 +1386,6 @@ func waitForPlayerHLSPrebuffer(ctx context.Context, session *playerHLSSession, t
 	if requiredSeconds <= 0 {
 		requiredSeconds = 0.1
 	}
-	bootstrapSeconds := math.Min(float64(playerHLSBootstrapSeconds), requiredSeconds)
-	if bootstrapSeconds <= 0 {
-		bootstrapSeconds = 0.1
-	}
 	timeout := time.Duration(maxInt(20, targetSeconds*4)) * time.Second
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
@@ -1389,18 +1398,12 @@ func waitForPlayerHLSPrebuffer(ctx context.Context, session *playerHLSSession, t
 		if cachedSeconds >= requiredSeconds || (endList && cachedSeconds > 0) {
 			return cachedSeconds, true, nil
 		}
-		if cachedSeconds >= bootstrapSeconds {
-			return cachedSeconds, false, nil
-		}
 		select {
 		case <-ctx.Done():
 			return cachedSeconds, false, ctx.Err()
-		case err, ok := <-session.Done:
-			if !ok {
-				return cachedSeconds, false, fmt.Errorf("hls transcode stopped before prebuffer target")
-			}
-			if err != nil {
-				return cachedSeconds, false, fmt.Errorf("hls transcode failed before prebuffer target: %w", err)
+		case <-session.Done:
+			if session.ExitErr != nil {
+				return cachedSeconds, false, fmt.Errorf("hls transcode failed before prebuffer target: %w", session.ExitErr)
 			}
 			if cachedSeconds > 0 {
 				return cachedSeconds, true, nil
@@ -1594,9 +1597,7 @@ func buildPlayerHLSFFmpegArgs(
 	startSeconds float64,
 	audioTrackIndex int,
 	outputResolution int,
-	realTimeInput bool,
 	outputDir string,
-	prebufferSeconds int,
 ) []string {
 	preset := strings.TrimSpace(options.Preset)
 	if preset == "" {

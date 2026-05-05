@@ -36,7 +36,7 @@ func TestBuildPlayerHLSFFmpegArgsWritesSegmentedPlaylist(t *testing.T) {
 		AudioBitrateKbps: 128,
 	}
 
-	args := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 12.5, -1, 1080, false, "/tmp/hls-cache", 60)
+	args := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 12.5, -1, 1080, "/tmp/hls-cache")
 	joined := strings.Join(args, " ")
 	for _, expected := range []string{
 		"-f hls",
@@ -61,11 +61,6 @@ func TestBuildPlayerHLSFFmpegArgsWritesSegmentedPlaylist(t *testing.T) {
 	if containsArg(args, "-readrate") || containsArg(args, "-readrate_initial_burst") {
 		t.Fatalf("expected completed HLS input to transcode ahead without realtime throttling, args=%s", joined)
 	}
-
-	incompleteArgs := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 12.5, -1, 1080, true, "/tmp/hls-cache", 60)
-	if containsArg(incompleteArgs, "-re") || containsArg(incompleteArgs, "-readrate") {
-		t.Fatalf("expected incomplete HLS input to transcode cached segments ahead, args=%s", strings.Join(incompleteArgs, " "))
-	}
 }
 
 func TestRewritePlayerHLSPlaylist(t *testing.T) {
@@ -76,6 +71,36 @@ func TestRewritePlayerHLSPlaylist(t *testing.T) {
 	}
 	if !strings.Contains(rewritten, "#EXT-X-START:TIME-OFFSET=0,PRECISE=YES") {
 		t.Fatalf("expected explicit playlist start, got=%s", rewritten)
+	}
+}
+
+func TestBuildPlayerHLSCacheKeyIgnoresChangingLocalFileMetadata(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "video.mkv")
+	if err := os.WriteFile(path, []byte("first"), 0o644); err != nil {
+		t.Fatalf("write first file: %v", err)
+	}
+	input := media.PlayerTransmissionResolveStreamInput{
+		InfoHash:         "82f49b1a251198d221925f99a4865f114b5e7189",
+		FileIndex:        0,
+		StartSeconds:     18.828,
+		StartBytes:       44820519,
+		AudioTrackIndex:  -1,
+		OutputResolution: 0,
+	}
+	result := media.PlayerTransmissionResolveStreamResult{
+		FilePath:     path,
+		StartSeconds: input.StartSeconds,
+		StartBytes:   input.StartBytes,
+	}
+
+	first := buildPlayerHLSCacheKey(result, input, 60)
+	if err := os.WriteFile(path, []byte("second write changes size and mtime"), 0o644); err != nil {
+		t.Fatalf("write changed file: %v", err)
+	}
+	second := buildPlayerHLSCacheKey(result, input, 60)
+	if first != second {
+		t.Fatalf("expected HLS cache key to stay stable while a torrent file is being written, first=%s second=%s", first, second)
 	}
 }
 
@@ -105,7 +130,7 @@ func TestNormalizePlayerHLSPrebufferSeconds(t *testing.T) {
 	}
 }
 
-func TestWaitForPlayerHLSPrebufferReturnsBootstrapPlaylistBeforeTarget(t *testing.T) {
+func TestWaitForPlayerHLSPrebufferWaitsForTarget(t *testing.T) {
 	dir := t.TempDir()
 	playlistPath := filepath.Join(dir, "index.m3u8")
 	playlist := "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2.000000,\nsegment-000000.ts\n#EXTINF:2.000000,\nsegment-000001.ts\n"
@@ -113,23 +138,47 @@ func TestWaitForPlayerHLSPrebufferReturnsBootstrapPlaylistBeforeTarget(t *testin
 		t.Fatalf("write playlist: %v", err)
 	}
 	touched := false
-	cachedSeconds, ready, err := waitForPlayerHLSPrebuffer(context.Background(), &playerHLSSession{
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	cachedSeconds, ready, err := waitForPlayerHLSPrebuffer(ctx, &playerHLSSession{
 		PlaylistPath: playlistPath,
-		Done:         make(chan error),
+		Done:         make(chan struct{}),
 	}, 60, func() {
 		touched = true
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatalf("expected wait to continue until target is reached")
 	}
 	if ready {
-		t.Fatalf("expected bootstrap playlist to be returned before full prebuffer target")
+		t.Fatalf("expected partial playlist to stay not ready")
 	}
 	if cachedSeconds != 4 {
 		t.Fatalf("expected 4 cached seconds, got=%f", cachedSeconds)
 	}
 	if !touched {
 		t.Fatalf("expected wait loop to refresh session access")
+	}
+}
+
+func TestWaitForPlayerHLSPrebufferReturnsReadyWhenTargetReached(t *testing.T) {
+	dir := t.TempDir()
+	playlistPath := filepath.Join(dir, "index.m3u8")
+	playlist := "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2.000000,\nsegment-000000.ts\n#EXTINF:2.000000,\nsegment-000001.ts\n#EXTINF:2.000000,\nsegment-000002.ts\n"
+	if err := os.WriteFile(playlistPath, []byte(playlist), 0o644); err != nil {
+		t.Fatalf("write playlist: %v", err)
+	}
+	cachedSeconds, ready, err := waitForPlayerHLSPrebuffer(context.Background(), &playerHLSSession{
+		PlaylistPath: playlistPath,
+		Done:         make(chan struct{}),
+	}, 6, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ready {
+		t.Fatalf("expected target playlist to be ready")
+	}
+	if cachedSeconds != 6 {
+		t.Fatalf("expected 6 cached seconds, got=%f", cachedSeconds)
 	}
 }
 
