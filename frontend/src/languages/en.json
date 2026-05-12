@@ -922,7 +922,7 @@
     },
     "player": {
       "title": "Online Player",
-      "subtitle": "Transmission streaming with Plyr",
+      "subtitle": "Native Transmission streaming",
       "stepLoading": "Step 1 / 2",
       "stageBootstrapTitle": "Preparing playback pipeline",
       "stageBootstrapHint": "Waiting for Transmission metadata and file list…",
@@ -978,7 +978,7 @@
       "publishedAtLabel": "Published",
       "torrentSourcesLabel": "Torrent Sources",
       "torrentTagsLabel": "Tags",
-      "plyrModeHint": "Use settings for captions, speed, and fit mode.",
+      "playerModeHint": "Use settings for captions, speed, and fit mode.",
       "subtitleUpload": "Upload Caption",
       "subtitleUploadPlaceholder": "Supports .srt / .vtt / .ass / .ssa",
       "subtitleTrack": "Captions",

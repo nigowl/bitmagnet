@@ -26,9 +26,16 @@ import { useAuth } from "@/auth/provider";
 import { getAuthToken, graphqlRequest } from "@/lib/api";
 import { TORRENT_CONTENT_SEARCH_QUERY } from "@/lib/graphql";
 import { buildMediaEntryIdFromContentRef, resolveMediaCategory } from "@/lib/media";
+import {
+  isElementFullscreen,
+  pauseNativeVideo,
+  playNativeVideo,
+  setNativePlaybackRate,
+  toggleNativeFullscreen,
+  toggleNativePictureInPicture
+} from "@/lib/player/native-media";
 import { useI18n } from "@/languages/provider";
 import {
-  buildPlayerSubtitleContentURL,
   buildPlayerTransmissionHLSHeartbeatURL,
   buildPlayerTransmissionHLSPlaylistURL,
   buildPlayerTransmissionHLSStopURL,
@@ -142,26 +149,10 @@ type PlaybackFileOption = {
   length: number;
 };
 
-type PlyrLike = {
-  destroy: () => void;
-  on: (event: string, handler: (event?: Event) => void) => void;
-  toggleCaptions: (enabled?: boolean) => void;
-  play?: () => Promise<void>;
-  pause?: () => void;
-  paused?: boolean;
-  playing?: boolean;
-  speed?: number;
-  pip?: boolean;
-  fullscreen?: {
-    active: boolean;
-    toggle: () => void;
-  };
-  currentTrack: number;
-  media: HTMLVideoElement;
-  config: {
-    duration?: number | string;
-    invertTime?: boolean;
-  };
+type SubtitleCue = {
+  start: number;
+  end: number;
+  text: string;
 };
 
 type HlsLike = {
@@ -260,6 +251,9 @@ const PLAYER_STAGE_CLICK_DELAY_MS = 280;
 const PLAYBACK_RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 const TRANSCODE_PREBUFFER_OPTIONS = [10, 30, 45, 60, 90, 120] as const;
 const TRANSCODE_OUTPUT_RESOLUTION_OPTIONS = [0, 480, 720, 1080, 1440, 2160] as const;
+const SUBTITLE_SCALE_OPTIONS = [0.9, 1, 1.15, 1.3, 1.5, 1.7] as const;
+const SUBTITLE_RENDER_FONT_SIZE_OPTIONS = [14, 16, 18, 21, 24, 28] as const;
+const SUBTITLE_RENDER_LINE_HEIGHT_OPTIONS = [1.08, 1.1, 1.12, 1.16, 1.2, 1.24] as const;
 
 function firstNonEmpty(...values: Array<string | undefined | null>): string | null {
   for (const value of values) {
@@ -424,9 +418,22 @@ function normalizeVideoFitModePreference(raw: string | null | undefined): "conta
 
 function normalizeSubtitleScalePreference(raw: number): number {
   if (!Number.isFinite(raw)) return 1.15;
-  const options = [0.9, 1, 1.15, 1.3, 1.5, 1.7];
-  const matched = options.find((value) => Math.abs(value - raw) < 0.01);
+  const matched = SUBTITLE_SCALE_OPTIONS.find((value) => Math.abs(value - raw) < 0.01);
   return matched ?? 1.15;
+}
+
+function resolveRenderedSubtitleLineHeight(raw: number): number {
+  const normalized = normalizeSubtitleScalePreference(raw);
+  const index = SUBTITLE_SCALE_OPTIONS.findIndex((value) => Math.abs(value - normalized) < 0.01);
+  if (index < 0) return 1.3;
+  return SUBTITLE_RENDER_LINE_HEIGHT_OPTIONS[index] ?? 1.3;
+}
+
+function resolveRenderedSubtitleFontSize(raw: number): number {
+  const normalized = normalizeSubtitleScalePreference(raw);
+  const index = SUBTITLE_SCALE_OPTIONS.findIndex((value) => Math.abs(value - normalized) < 0.01);
+  if (index < 0) return 23;
+  return SUBTITLE_RENDER_FONT_SIZE_OPTIONS[index] ?? 23;
 }
 
 function normalizeSubtitleVerticalPercentPreference(raw: number): number {
@@ -700,6 +707,80 @@ function shiftWebVttByOffset(content: string, offsetSeconds: number): string {
   }
 
   return `${output.join("\n").replace(/\n{3,}/g, "\n\n").trim()}\n`;
+}
+
+function applyWebVttCueLine(content: string, verticalPercent: number): string {
+  const linePercent = Math.max(8, Math.min(92, 88 - normalizeSubtitleVerticalPercentPreference(verticalPercent)));
+  const normalized = ensureWebVtt(content).replace(/\r\n/g, "\n");
+  const lineSetting = `line:${linePercent}%`;
+
+  return `${normalized
+    .split("\n")
+    .map((line) => {
+      if (!line.includes("-->")) return line;
+      const match = line.match(/^(.*?-->\s*\S+)(.*)$/);
+      if (!match) return line;
+      const settings = (match[2] || "")
+        .trim()
+        .split(/\s+/)
+        .filter((token) => token && !token.startsWith("line:"));
+      return [match[1], ...settings, lineSetting].join(" ").trim();
+    })
+    .join("\n")
+    .trim()}\n`;
+}
+
+function decodeSubtitleText(text: string): string {
+  return text
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/g, "'")
+    .trim();
+}
+
+function parseWebVttCues(content: string): SubtitleCue[] {
+  const normalized = ensureWebVtt(content).replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  const cues: SubtitleCue[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    while (index < lines.length && !(lines[index] || "").trim()) {
+      index += 1;
+    }
+    if (index >= lines.length) break;
+
+    const blockStart = index;
+    while (index < lines.length && (lines[index] || "").trim()) {
+      index += 1;
+    }
+    const block = lines.slice(blockStart, index);
+    if (block.length === 0) continue;
+
+    let timingLine = block[0] || "";
+    let payloadStart = 1;
+    if (!timingLine.includes("-->") && block.length >= 2 && (block[1] || "").includes("-->")) {
+      timingLine = block[1] || "";
+      payloadStart = 2;
+    }
+    if (!timingLine.includes("-->")) continue;
+
+    const parts = timingLine.split("-->");
+    if (parts.length !== 2) continue;
+
+    const startSeconds = parseVttTimestamp((parts[0] || "").trim());
+    const endToken = ((parts[1] || "").trim().split(/\s+/)[0] || "").trim();
+    const endSeconds = parseVttTimestamp(endToken);
+    const text = decodeSubtitleText(block.slice(payloadStart).join("\n"));
+    if (startSeconds === null || endSeconds === null || endSeconds <= startSeconds || !text) continue;
+    cues.push({ start: startSeconds, end: endSeconds, text });
+  }
+
+  return cues.sort((a, b) => a.start - b.start || a.end - b.end);
 }
 
 function normalizeSubtitleOffsetValue(raw: number): number {
@@ -1215,13 +1296,11 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const playerStageRef = useRef<HTMLDivElement | null>(null);
   const inlineSettingsRef = useRef<HTMLDivElement | null>(null);
-  const plyrRef = useRef<PlyrLike | null>(null);
   const pollTimerRef = useRef<number | null>(null);
   const statusPollInFlightRef = useRef(false);
   const transcodeSeekInFlightRef = useRef(false);
   const pendingTranscodeSeekDisplayRef = useRef<{ target: number; at: number } | null>(null);
   const isSeekingDragRef = useRef(false);
-  const subtitleBlobUrlsRef = useRef<string[]>([]);
   const initializedInfoHashRef = useRef("");
   const subtitleLoadTokenRef = useRef(0);
   const audioTrackLoadTokenRef = useRef(0);
@@ -1244,7 +1323,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const releaseCurrentHLSRef = useRef<(reason: string, keepalive?: boolean) => void>(() => {});
   const controlsHideTimerRef = useRef<number | null>(null);
   const stageClickTimerRef = useRef<number | null>(null);
-  const streamApplyOptionsRef = useRef<{ resumeAt?: number; autoplay?: boolean; recovery?: boolean }>({});
+  const streamApplyOptionsRef = useRef<{ resumeAt?: number; autoplay?: boolean; recovery?: boolean; preload?: boolean }>({});
   const activePreferTranscodeRef = useRef(false);
   const statusSnapshotRef = useRef<PlayerTransmissionStatusResponse | null>(null);
   const totalDurationSecondsRef = useRef(0);
@@ -1301,7 +1380,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
   const [subtitleItems, setSubtitleItems] = useState<PlayerSubtitleItem[]>([]);
   const [subtitleSiteLinks, setSubtitleSiteLinks] = useState<PlayerSubtitleSiteLink[]>([]);
-  const [subtitleTrackSrcMap, setSubtitleTrackSrcMap] = useState<Record<number, string>>({});
+  const [subtitleCueMap, setSubtitleCueMap] = useState<Record<number, SubtitleCue[]>>({});
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<string>("none");
   const [audioTrackOptions, setAudioTrackOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [selectedAudioTrackId, setSelectedAudioTrackId] = useState("");
@@ -1400,12 +1479,6 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       }
       hlsRef.current?.destroy();
       hlsRef.current = null;
-      for (const entry of subtitleBlobUrlsRef.current) {
-        if (entry.startsWith("blob:")) {
-          URL.revokeObjectURL(entry);
-        }
-      }
-      subtitleBlobUrlsRef.current = [];
       initializedInfoHashRef.current = "";
       subtitleLoadTokenRef.current += 1;
       bootstrapRunTokenRef.current += 1;
@@ -1421,7 +1494,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     stallStartedAtRef.current = 0;
     lastPlaybackProgressRef.current = { at: 0, seconds: 0 };
     setSubtitleItems([]);
-    setSubtitleTrackSrcMap({});
+    setSubtitleCueMap({});
     setSelectedSubtitleId("none");
     setServerAudioTracks([]);
     setAudioTrackOptions([]);
@@ -1552,6 +1625,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       }))
     ],
     [subtitleItems, t]
+  );
+  const selectedSubtitleItem = useMemo(
+    () => selectedSubtitleId === "none"
+      ? null
+      : subtitleItems.find((item) => String(item.id) === selectedSubtitleId) || null,
+    [selectedSubtitleId, subtitleItems]
   );
 
   const playbackRateOptions = useMemo(() => [...PLAYBACK_RATE_OPTIONS], []);
@@ -1755,7 +1834,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     return meta;
   }, [detail?.runtimeSeconds, selectedFileIndex, statusSnapshot?.selectedFileDurationSeconds, statusSnapshot?.selectedFileIndex, videoDuration]);
 
-  const canInitializePlyr =
+  const canInitializePlayer =
     !bootstrapLoading &&
     bootstrapped &&
     fileOptions.length > 0 &&
@@ -1854,13 +1933,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     setPlaybackLoading(true);
     setPlayerStatus("buffering");
 
-    const player = plyrRef.current;
-    const playResult = player?.play ? player.play() : video.play();
+    const playResult = playNativeVideo(video);
     void Promise.resolve(playResult).catch((error) => {
       const errorName = error instanceof DOMException ? error.name : "";
       logInfo("playback", "waiting for playable data", { reason, targetSeconds: pendingTarget, errorName });
       if (errorName === "AbortError") {
-        if (video.paused) {
+        if (userPausedRef.current) {
           settlePausedPlayback();
         }
         return;
@@ -2078,48 +2156,32 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   }, [transcodeStartOffsetSeconds]);
 
   useEffect(() => {
-    const revokeAll = (list: string[]) => {
-      for (const entry of list) {
-        if (entry.startsWith("blob:")) {
-          URL.revokeObjectURL(entry);
-        }
-      }
-    };
-
     if (!infoHash || subtitleItems.length === 0) {
-      setSubtitleTrackSrcMap({});
-      if (subtitleBlobUrlsRef.current.length > 0) {
-        revokeAll(subtitleBlobUrlsRef.current);
-        subtitleBlobUrlsRef.current = [];
-      }
+      setSubtitleCueMap({});
       return;
     }
 
-    const transcodeOffsetSeconds = activePreferTranscode ? Math.max(0, transcodeStartOffsetSeconds) : 0;
     const effectiveOffsetBySubtitleID = new Map<number, number>(
       subtitleItems.map((item) => {
         const manualOffsetSeconds = Number.isFinite(item.offsetSeconds) ? item.offsetSeconds : 0;
-        return [item.id, transcodeOffsetSeconds - manualOffsetSeconds];
+        return [item.id, -manualOffsetSeconds];
       })
     );
     let cancelled = false;
     const buildTrackSources = async () => {
-      const next: Record<number, string> = {};
-      const nextBlobUrls: string[] = [];
+      const nextCues: Record<number, SubtitleCue[]> = {};
 
       for (const item of subtitleItems) {
-        const baseUrl = buildPlayerSubtitleContentURL(infoHash, item.id, item.updatedAt);
         const effectiveOffsetSeconds = effectiveOffsetBySubtitleID.get(item.id) || 0;
         try {
           const raw = await fetchPlayerSubtitleContent(infoHash, item.id);
           const shifted = Math.abs(effectiveOffsetSeconds) >= 0.1
             ? shiftWebVttByOffset(raw, effectiveOffsetSeconds)
             : ensureWebVtt(raw);
-          const blobUrl = URL.createObjectURL(new Blob([shifted], { type: "text/vtt" }));
-          next[item.id] = blobUrl;
-          nextBlobUrls.push(blobUrl);
+          const positioned = applyWebVttCueLine(shifted, subtitleStylePreset.verticalPercent);
+          nextCues[item.id] = parseWebVttCues(positioned);
         } catch (error) {
-          next[item.id] = baseUrl;
+          nextCues[item.id] = [];
           logWarn("subtitle", "failed to build subtitle track source", {
             subtitleId: item.id,
             offsetSeconds: effectiveOffsetSeconds,
@@ -2129,86 +2191,24 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       }
 
       if (cancelled) {
-        revokeAll(nextBlobUrls);
         return;
       }
-      const previous = subtitleBlobUrlsRef.current;
-      subtitleBlobUrlsRef.current = nextBlobUrls;
-      setSubtitleTrackSrcMap(next);
-      revokeAll(previous);
+      setSubtitleCueMap(nextCues);
     };
 
     void buildTrackSources();
     return () => {
       cancelled = true;
     };
-  }, [activePreferTranscode, infoHash, logWarn, subtitleItems, transcodeStartOffsetSeconds]);
+  }, [infoHash, logWarn, subtitleItems, subtitleStylePreset.verticalPercent]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !streamUrl) return;
 
-    const player = plyrRef.current;
-    const syntheticDuration = Number.isFinite(totalDurationSecondsRef.current)
-      ? Math.max(0, totalDurationSecondsRef.current)
-      : 0;
-
-    if (player) {
-      player.config.duration = syntheticDuration > 0 ? syntheticDuration : undefined;
-      const previousInvert = Boolean(player.config.invertTime);
-      player.config.invertTime = true;
-      player.media.dispatchEvent(new Event("durationchange"));
-      player.config.invertTime = previousInvert;
-      player.media.dispatchEvent(new Event("timeupdate"));
-      return;
-    }
-
     video.dispatchEvent(new Event("durationchange"));
     video.dispatchEvent(new Event("timeupdate"));
   }, [activePreferTranscode, streamUrl, totalDurationSeconds, transcodeStartOffsetSeconds]);
-
-  const syncSelectedSubtitleTrack = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || !video.textTracks) return;
-    const wasPaused = video.paused;
-    const player = plyrRef.current;
-    const selectedIndex =
-      selectedSubtitleId === "none" ? -1 : subtitleItems.findIndex((item) => String(item.id) === selectedSubtitleId);
-
-    const applyNativeTrackModes = () => {
-      for (let i = 0; i < video.textTracks.length; i += 1) {
-        const track = video.textTracks[i];
-        const shouldShow = selectedIndex >= 0 && i === selectedIndex;
-        track.mode = shouldShow ? "showing" : "disabled";
-      }
-    };
-
-    applyNativeTrackModes();
-
-    if (player) {
-      try {
-        if (selectedIndex >= 0 && selectedIndex < video.textTracks.length) {
-          player.currentTrack = selectedIndex;
-        }
-        player.toggleCaptions?.(selectedIndex >= 0);
-        applyNativeTrackModes();
-        if (!wasPaused && video.paused && !userPausedRef.current) {
-          void video.play().catch(() => {
-            // ignore autoplay rejection
-          });
-        }
-        return;
-      } catch {
-        // fallback to native text track toggling below
-      }
-    }
-
-    if (!wasPaused && video.paused && !userPausedRef.current) {
-      void video.play().catch(() => {
-        // ignore autoplay rejection
-      });
-    }
-  }, [selectedSubtitleId, subtitleItems]);
 
   const loadServerAudioTracks = useCallback(
     async (fileIndex: number) => {
@@ -2354,7 +2354,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     }
   }, [selectedAudioTrackId]);
 
-  const applyStreamUrl = useCallback((url: string, options?: { resumeAt?: number; autoplay?: boolean; recovery?: boolean }) => {
+  const applyStreamUrl = useCallback((url: string, options?: { resumeAt?: number; autoplay?: boolean; recovery?: boolean; preload?: boolean }) => {
     if (!options?.recovery && streamRetryTimerRef.current !== null) {
       window.clearTimeout(streamRetryTimerRef.current);
       streamRetryTimerRef.current = null;
@@ -2362,22 +2362,27 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     }
     const isHLS = url.includes("/api/media/player/transmission/hls/playlist");
     if (isHLS) {
-      hlsSuspendedRef.current = !options?.autoplay;
+      hlsSuspendedRef.current = !options?.autoplay && !options?.preload;
       if (options?.autoplay) {
         hlsReleasedForPauseRef.current = false;
       }
     }
     streamUrlRef.current = url;
     streamApplyOptionsRef.current = options || {};
+    if (options?.autoplay) {
+      const video = videoRef.current;
+      if (video) {
+        video.autoplay = true;
+      }
+    }
     if (!options?.autoplay) {
       autoResumeWhenPlayableRef.current = false;
       pendingResumeTargetRef.current = null;
       const video = videoRef.current;
       if (video) {
         video.autoplay = false;
-        video.pause();
+        pauseNativeVideo(video);
       }
-      plyrRef.current?.pause?.();
       setIsVideoPaused(true);
       setPlaybackLoading(false);
     }
@@ -2624,21 +2629,6 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const emitTimelineRefreshEvents = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-
-    const player = plyrRef.current;
-    const syntheticDuration = Number.isFinite(totalDurationSecondsRef.current)
-      ? Math.max(0, totalDurationSecondsRef.current)
-      : 0;
-
-    if (player) {
-      player.config.duration = syntheticDuration > 0 ? syntheticDuration : undefined;
-      const previousInvert = Boolean(player.config.invertTime);
-      player.config.invertTime = true;
-      player.media.dispatchEvent(new Event("durationchange"));
-      player.config.invertTime = previousInvert;
-      player.media.dispatchEvent(new Event("timeupdate"));
-      return;
-    }
 
     video.dispatchEvent(new Event("durationchange"));
     video.dispatchEvent(new Event("timeupdate"));
@@ -2964,7 +2954,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
           prebufferSeconds: transcodePrebufferSeconds,
           startSeconds: preferTranscode ? effectiveStartSeconds : 0
         });
-        applyStreamUrl(nextUrl, { autoplay: false });
+        applyStreamUrl(nextUrl, { autoplay: false, preload: preferTranscode });
 
         setBootstrapped(true);
         setPlayerStatus("ready");
@@ -3007,7 +2997,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const handleSelectFile = useCallback(
     async (
       nextIndex: number,
-      source: "panel" | "plyr",
+      source: "panel" | "native",
       options?: { resumeAt?: number; autoplay?: boolean }
     ) => {
       if (!infoHash || !Number.isInteger(nextIndex) || nextIndex < 0) return;
@@ -3334,6 +3324,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     activeStreamConfigKeyRef.current = nextConfigKey;
     applyStreamUrl(nextUrl, {
       autoplay: shouldAutoplay,
+      preload: preferTranscode && !shouldAutoplay,
       resumeAt: preferTranscode ? 0 : effectiveResumeAt
     });
 
@@ -3387,7 +3378,6 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       if (!applyOptions.recovery) {
         streamRetryRef.current = { key: "", attempts: 0 };
       }
-      syncSelectedSubtitleTrack();
       refreshAudioTracks();
       syncSelectedAudioTrack();
       if (autoplay && !userPausedRef.current) {
@@ -3398,7 +3388,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         attemptResumePlayback("stream_loadedmetadata", resumeAt > 0 ? resumeAt : undefined);
       } else {
         try {
-          video.pause();
+          pauseNativeVideo(video);
         } catch {
           // ignore pause failures from detached media elements
         }
@@ -3414,7 +3404,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     return () => {
       video.removeEventListener("loadedmetadata", onLoaded);
     };
-  }, [attemptResumePlayback, emitTimelineRefreshEvents, logInfo, refreshAudioTracks, settlePausedPlayback, streamUrl, syncSelectedAudioTrack, syncSelectedSubtitleTrack, transcodePrebufferSeconds]);
+  }, [attemptResumePlayback, emitTimelineRefreshEvents, logInfo, refreshAudioTracks, settlePausedPlayback, streamUrl, syncSelectedAudioTrack, transcodePrebufferSeconds]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -3690,8 +3680,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     const resumeIfPending = () => {
       if (userPausedRef.current) return;
       if (!autoResumeWhenPlayableRef.current) return;
-      const player = plyrRef.current;
-      const playResult = player?.play ? player.play() : video.play();
+      const playResult = playNativeVideo(video);
       void Promise.resolve(playResult).catch(() => {
         if (video.paused && video.readyState >= 2) {
           settlePausedPlayback();
@@ -3740,19 +3729,18 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
     const onPlaying = () => {
       if (userPausedRef.current) {
-        video.pause();
+        pauseNativeVideo(video);
         settlePausedPlayback();
         return;
       }
       if (activePreferTranscodeRef.current && (hlsSuspendedRef.current || hlsReleasedForPauseRef.current)) {
-        video.pause();
+        pauseNativeVideo(video);
         settlePausedPlayback();
         return;
       }
       autoResumeWhenPlayableRef.current = false;
       pendingResumeTargetRef.current = null;
       streamRetryRef.current = { key: "", attempts: 0 };
-      syncSelectedSubtitleTrack();
       syncSelectedAudioTrack();
       setPlaybackLoading(false);
       setPlayerStatus("playing");
@@ -3814,7 +3802,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       video.removeEventListener("pause", onPause);
       video.removeEventListener("error", onError);
     };
-  }, [resolveCachedAheadSeconds, resolveHLSNetworkCacheAheadSeconds, settlePausedPlayback, syncSelectedAudioTrack, syncSelectedSubtitleTrack]);
+  }, [resolveCachedAheadSeconds, resolveHLSNetworkCacheAheadSeconds, settlePausedPlayback, syncSelectedAudioTrack]);
 
   useEffect(() => {
     if (!statusSnapshot || !autoResumeWhenPlayableRef.current || userPausedRef.current) return;
@@ -3832,57 +3820,11 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
 
     const video = videoRef.current;
     if (!video) return;
-    const player = plyrRef.current;
-    const playResult = player?.play ? player.play() : video.play();
+    const playResult = playNativeVideo(video);
     void Promise.resolve(playResult).catch(() => {
       // continue waiting if browser still refuses playback
     });
   }, [statusSnapshot, videoDuration]);
-
-  useEffect(() => {
-    syncSelectedSubtitleTrack();
-  }, [syncSelectedSubtitleTrack]);
-
-  useEffect(() => {
-    syncSelectedSubtitleTrack();
-  }, [subtitleTrackSrcMap, syncSelectedSubtitleTrack]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    const tracks = video?.textTracks;
-    if (!video || !tracks) return;
-
-    const sync = () => {
-      window.requestAnimationFrame(() => {
-        syncSelectedSubtitleTrack();
-      });
-    };
-
-    tracks.addEventListener?.("change", sync);
-    tracks.addEventListener?.("addtrack", sync);
-    tracks.addEventListener?.("removetrack", sync);
-    for (let index = 0; index < video.children.length; index += 1) {
-      const child = video.children.item(index);
-      if (child instanceof HTMLTrackElement) {
-        child.addEventListener("load", sync);
-        child.addEventListener("error", sync);
-      }
-    }
-    sync();
-
-    return () => {
-      tracks.removeEventListener?.("change", sync);
-      tracks.removeEventListener?.("addtrack", sync);
-      tracks.removeEventListener?.("removetrack", sync);
-      for (let index = 0; index < video.children.length; index += 1) {
-        const child = video.children.item(index);
-        if (child instanceof HTMLTrackElement) {
-          child.removeEventListener("load", sync);
-          child.removeEventListener("error", sync);
-        }
-      }
-    };
-  }, [streamUrl, subtitleItems, subtitleTrackSrcMap, syncSelectedSubtitleTrack]);
 
   useEffect(() => {
     refreshAudioTracks();
@@ -3928,13 +3870,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         setIsFullscreenActive(false);
         return;
       }
-      const docAny = document as Document & {
-        webkitFullscreenElement?: Element | null;
-      };
-      const currentFullscreen = document.fullscreenElement || docAny.webkitFullscreenElement || null;
-      const plyrFullscreenActive = Boolean(plyrRef.current?.fullscreen?.active);
-      const active = plyrFullscreenActive || Boolean(currentFullscreen && stage.contains(currentFullscreen));
-      setIsFullscreenActive(active);
+      setIsFullscreenActive(isElementFullscreen(stage, document));
     };
 
     updateFullscreenState();
@@ -3995,131 +3931,6 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       }
     };
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    let localPlayer: PlyrLike | null = null;
-
-    if (!canInitializePlyr) {
-      return;
-    }
-
-    const mountPlyr = async () => {
-      const video = videoRef.current;
-      if (!video) return;
-
-      const plyrModule = await import("plyr");
-      if (cancelled || !videoRef.current) return;
-
-      plyrRef.current?.destroy();
-
-      const PlayerCtor = plyrModule.default as unknown as new (
-        target: HTMLVideoElement,
-        options: Record<string, unknown>
-      ) => PlyrLike;
-
-      localPlayer = new PlayerCtor(videoRef.current, {
-        controls: [],
-        settings: [],
-        duration: totalDurationSecondsRef.current > 0 ? totalDurationSecondsRef.current : undefined,
-        clickToPlay: false,
-        captions: {
-          active: true,
-          update: true,
-          language: "auto"
-        }
-      });
-
-      plyrRef.current = localPlayer;
-      emitTimelineRefreshEvents();
-
-      localPlayer.on("ready", () => {
-        if (cancelled) return;
-        setPlayerStatus("ready");
-        syncSelectedSubtitleTrack();
-        syncSelectedAudioTrack();
-        emitTimelineRefreshEvents();
-      });
-
-      localPlayer.on("playing", () => {
-        if (cancelled) return;
-        if (userPausedRef.current) {
-          localPlayer?.pause?.();
-          settlePausedPlayback();
-          return;
-        }
-        if (activePreferTranscodeRef.current && (hlsSuspendedRef.current || hlsReleasedForPauseRef.current)) {
-          plyrRef.current?.pause?.();
-          settlePausedPlayback();
-          return;
-        }
-        autoResumeWhenPlayableRef.current = false;
-        pendingResumeTargetRef.current = null;
-        streamRetryRef.current = { key: "", attempts: 0 };
-        syncSelectedSubtitleTrack();
-        syncSelectedAudioTrack();
-        setPlaybackLoading(false);
-        setPlayerStatus("playing");
-        setIsVideoPaused(false);
-      });
-
-      localPlayer.on("waiting", () => {
-        if (cancelled) return;
-        if (userPausedRef.current) {
-          settlePausedPlayback();
-          return;
-        }
-        if (activePreferTranscodeRef.current && (hlsSuspendedRef.current || hlsReleasedForPauseRef.current)) {
-          settlePausedPlayback();
-          return;
-        }
-        const media = localPlayer?.media;
-        if (media?.paused && !autoResumeWhenPlayableRef.current && !seekingSwitchingRef.current) {
-          return;
-        }
-        setPlaybackLoading(true);
-        setPlayerStatus("buffering");
-      });
-
-      localPlayer.on("error", () => {
-        if (cancelled) return;
-        transcodeSeekInFlightRef.current = false;
-        seekingSwitchingRef.current = false;
-        pendingTranscodeSeekDisplayRef.current = null;
-
-        if (userPausedRef.current) {
-          settlePausedPlayback();
-          return;
-        }
-        if (activePreferTranscodeRef.current && (hlsSuspendedRef.current || hlsReleasedForPauseRef.current)) {
-          settlePausedPlayback();
-          return;
-        }
-
-        if (retryCurrentStreamRef.current("plyr_error")) {
-          return;
-        }
-
-        autoResumeWhenPlayableRef.current = false;
-        pendingResumeTargetRef.current = null;
-        setPlaybackLoading(false);
-        setPlayerStatus("error");
-        setPlayerError(tRef.current("media.player.playbackError"));
-      });
-    };
-
-    if (videoRef.current) {
-      void mountPlyr();
-    }
-
-    return () => {
-      cancelled = true;
-      localPlayer?.destroy();
-      if (plyrRef.current === localPlayer) {
-        plyrRef.current = null;
-      }
-    };
-  }, [canInitializePlyr, emitTimelineRefreshEvents, settlePausedPlayback, syncSelectedAudioTrack, syncSelectedSubtitleTrack]);
 
   const handleUploadSubtitle = useCallback(
     async (file: File | null) => {
@@ -4207,7 +4018,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   );
 
   const handleSeekCommit = useCallback(
-    async (targetSecondsInput: number, source: "panel" | "plyr" = "panel") => {
+    async (targetSecondsInput: number, source: "panel" | "native" = "panel") => {
       const video = videoRef.current;
       if (!video || !infoHash || !selectedFileOption) return;
       if (!Number.isFinite(targetSecondsInput)) return;
@@ -4348,7 +4159,6 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   }, [diagnostics, t]);
 
   const handleTogglePlayback = useCallback(() => {
-    const player = plyrRef.current;
     const video = videoRef.current;
     if (!video) return;
     const isPaused = video.paused;
@@ -4407,16 +4217,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     autoResumeWhenPlayableRef.current = false;
     pendingResumeTargetRef.current = null;
     setPlaybackLoading(false);
-    if (player?.pause) {
-      setIsVideoPaused(true);
-      player.pause();
-      if (activePreferTranscode && !hlsReleasedForPauseRef.current) {
-        releaseCurrentHLSRef.current("manual_pause");
-      }
-      return;
-    }
     setIsVideoPaused(true);
-    video.pause();
+    pauseNativeVideo(video);
     if (activePreferTranscode && !hlsReleasedForPauseRef.current) {
       releaseCurrentHLSRef.current("manual_pause");
     }
@@ -4436,11 +4238,10 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const handleUserTogglePlayback = useCallback((source: "button" | "stage" | "keyboard") => {
     handleTogglePlayback();
     window.requestAnimationFrame(() => {
-      syncSelectedSubtitleTrack();
       syncSelectedAudioTrack();
       logInfo("playback", "toggle playback from unified control", { source });
     });
-  }, [handleTogglePlayback, logInfo, syncSelectedAudioTrack, syncSelectedSubtitleTrack]);
+  }, [handleTogglePlayback, logInfo, syncSelectedAudioTrack]);
 
   const handleStageClickTogglePlayback = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -4463,7 +4264,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   }, [handleUserTogglePlayback]);
 
   useEffect(() => {
-    if (!canInitializePlyr) return;
+    if (!canInitializePlayer) return;
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const tag = String(target?.tagName || "").toLowerCase();
@@ -4504,21 +4305,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         revealControlsTimerRef.current = null;
       }
     };
-  }, [canInitializePlyr, handleSeekCommit, handleUserTogglePlayback, isFullscreenActive, resolveAbsoluteCurrent]);
+  }, [canInitializePlayer, handleSeekCommit, handleUserTogglePlayback, isFullscreenActive, resolveAbsoluteCurrent]);
 
   const handleSetPlaybackRate = useCallback((rate: number) => {
-    const player = plyrRef.current;
     const video = videoRef.current;
     if (!video) return;
-    const next = Number.isFinite(rate) && rate > 0 ? rate : 1;
-    if (player) {
-      try {
-        player.speed = next;
-      } catch {
-        // fallback to native rate assignment below
-      }
-    }
-    video.playbackRate = next;
+    const next = setNativePlaybackRate(video, rate);
     setVideoPlaybackRate(next);
   }, []);
 
@@ -4527,98 +4319,25 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     if (!video) return;
     const nextRate = normalizePlaybackRatePreference(videoPlaybackRate);
     if (Math.abs(video.playbackRate - nextRate) >= 0.01) {
-      video.playbackRate = nextRate;
-    }
-    const player = plyrRef.current;
-    if (player) {
-      try {
-        player.speed = nextRate;
-      } catch {
-        // ignore speed sync fallback
-      }
+      setNativePlaybackRate(video, nextRate);
     }
   }, [streamUrl, videoPlaybackRate]);
 
   const handleTogglePip = useCallback(async () => {
-    const player = plyrRef.current;
-    if (player && typeof player.pip === "boolean") {
-      try {
-        player.pip = !player.pip;
-        return;
-      } catch {
-        // fallback to native PiP below
-      }
-    }
-
     const video = videoRef.current;
     if (!video) return;
-    const pipDocument = document as Document & {
-      pictureInPictureEnabled?: boolean;
-      pictureInPictureElement?: Element | null;
-      exitPictureInPicture?: () => Promise<void>;
-    };
-    if (!pipDocument.pictureInPictureEnabled || typeof (video as HTMLVideoElement & { requestPictureInPicture?: () => Promise<void> }).requestPictureInPicture !== "function") {
-      return;
-    }
     try {
-      if (pipDocument.pictureInPictureElement) {
-        if (typeof pipDocument.exitPictureInPicture === "function") {
-          await pipDocument.exitPictureInPicture();
-        }
-        return;
-      }
-      await (video as HTMLVideoElement & { requestPictureInPicture: () => Promise<void> }).requestPictureInPicture();
+      await toggleNativePictureInPicture(video, document);
     } catch {
       // no-op
     }
   }, []);
 
   const handleToggleFullscreen = useCallback(async () => {
-    const stage = playerStageRef.current;
-    const docAny = document as Document & {
-      webkitFullscreenElement?: Element | null;
-      webkitExitFullscreen?: () => Promise<void> | void;
-    };
-    const stageAny = stage as (HTMLDivElement & {
-      webkitRequestFullscreen?: () => Promise<void> | void;
-    }) | null;
-    const currentFullscreen = document.fullscreenElement || docAny.webkitFullscreenElement || null;
-
-    if (currentFullscreen) {
-      try {
-        if (document.exitFullscreen) {
-          await document.exitFullscreen();
-        } else if (docAny.webkitExitFullscreen) {
-          await docAny.webkitExitFullscreen();
-        }
-        return;
-      } catch {
-        // no-op
-      }
-    }
-
-    if (stage) {
-      try {
-        if (stage.requestFullscreen) {
-          await stage.requestFullscreen();
-          return;
-        }
-        if (stageAny?.webkitRequestFullscreen) {
-          await stageAny.webkitRequestFullscreen();
-          return;
-        }
-      } catch {
-        // fallback to native video fullscreen below
-      }
-    }
-
-    const videoAny = videoRef.current as HTMLVideoElement & { webkitEnterFullscreen?: () => void };
-    if (videoAny && typeof videoAny.webkitEnterFullscreen === "function") {
-      try {
-        videoAny.webkitEnterFullscreen();
-      } catch {
-        // no-op
-      }
+    try {
+      await toggleNativeFullscreen(playerStageRef.current, videoRef.current, document);
+    } catch {
+      // no-op
     }
   }, []);
 
@@ -4635,9 +4354,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       stageClickTimerRef.current = null;
     }
     setControlsActive(true);
-    syncSelectedSubtitleTrack();
     void handleToggleFullscreen();
-  }, [handleToggleFullscreen, syncSelectedSubtitleTrack]);
+  }, [handleToggleFullscreen]);
 
   const handleSettingsButtonClick = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -4676,6 +4394,14 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     0,
     Math.min(seekMax, isSeekingDrag ? (seekDraftSeconds ?? absoluteCurrentSeconds) : absoluteCurrentSeconds)
   );
+  const subtitleDisplaySeconds = activePreferTranscode
+    ? Math.max(0, displayedCurrentSeconds)
+    : displayedCurrentSeconds;
+  const activeSubtitleCue = selectedSubtitleItem
+    ? (subtitleCueMap[selectedSubtitleItem.id] || []).find((cue) =>
+        subtitleDisplaySeconds + 0.05 >= cue.start && subtitleDisplaySeconds < cue.end
+      ) || null
+    : null;
 
   useEffect(() => {
     if (isSeekingDrag) return;
@@ -4701,7 +4427,10 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const handleResumePromptContinue = useCallback(async () => {
     setResumePromptOpened(false);
     userPausedRef.current = false;
-    attemptResumePlayback("resume_prompt_click", resumePromptSeconds);
+    autoResumeWhenPlayableRef.current = true;
+    setPlaybackLoading(true);
+    setPlayerStatus("buffering");
+    setIsVideoPaused(false);
     if (resumePromptFileIndex >= 0 && resumePromptFileIndex !== selectedFileIndexRef.current) {
       await handleSelectFile(resumePromptFileIndex, "panel", {
         resumeAt: resumePromptSeconds,
@@ -4710,7 +4439,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       return;
     }
     await handleSeekCommit(resumePromptSeconds, "panel");
-  }, [attemptResumePlayback, handleSeekCommit, handleSelectFile, resumePromptFileIndex, resumePromptSeconds]);
+  }, [handleSeekCommit, handleSelectFile, resumePromptFileIndex, resumePromptSeconds]);
 
   const handleResumePromptRestart = useCallback(() => {
     setResumePromptOpened(false);
@@ -4723,7 +4452,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     } catch { }
   }, [infoHash, user?.id]);
 
-  const stageBootstrapLoading = !canInitializePlyr && !playerError;
+  const stageBootstrapLoading = !canInitializePlayer && !playerError;
   const downloadedRatio = Math.round((statusSnapshot?.selectedFileReadyRatio || 0) * 100);
   const contiguousRatio = Math.round((statusSnapshot?.selectedFileContiguousRatio || 0) * 100);
   const { playableRatio, availableRanges } = useMemo(() => {
@@ -4804,7 +4533,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     return deduped.join(" / ");
   }, [detail]);
   const playerStageStyle: CSSProperties = {
-    ["--torrent-subtitle-scale" as string]: String(subtitleStylePreset.scale),
+    ["--torrent-subtitle-font-size" as string]: `${resolveRenderedSubtitleFontSize(subtitleStylePreset.scale)}px`,
+    ["--torrent-subtitle-line-height" as string]: String(resolveRenderedSubtitleLineHeight(subtitleStylePreset.scale)),
     ["--torrent-subtitle-color" as string]: subtitleStylePreset.textColor,
     ["--torrent-subtitle-bg" as string]: subtitleStylePreset.backgroundColor,
     ["--torrent-subtitle-vertical-percent" as string]: `${subtitleStylePreset.verticalPercent}%`,
@@ -4812,6 +4542,13 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     ["--torrent-player-aspect-ratio" as string]: videoAspectRatioCss,
     ["--torrent-player-aspect-ratio-value" as string]: String(videoAspectRatioValue),
     ["--torrent-player-height-offset" as string]: isFullscreenActive ? "132px" : "340px"
+  };
+  const subtitleOverlayStyle: CSSProperties = {
+    fontSize: `${resolveRenderedSubtitleFontSize(subtitleStylePreset.scale)}px`,
+    lineHeight: resolveRenderedSubtitleLineHeight(subtitleStylePreset.scale),
+    color: subtitleStylePreset.textColor,
+    backgroundColor: subtitleStylePreset.backgroundColor,
+    bottom: `calc(54px + ${subtitleStylePreset.verticalPercent}%)`
   };
   const effectivePlaybackCacheAheadSeconds = activePreferTranscode ? networkCacheSeconds : playableCacheAheadSeconds;
   const showPlaybackBusyOverlay =
@@ -5005,14 +4742,10 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
             <div className="torrent-inline-settings-section">
               <div className="torrent-inline-settings-title">{t("media.player.subtitleStyleSize")}</div>
               <div className="torrent-inline-rate-grid torrent-inline-rate-grid-6">
-                {[
-                  { value: 0.9, label: "S" },
-                  { value: 1, label: "M" },
-                  { value: 1.15, label: "L" },
-                  { value: 1.3, label: "XL" },
-                  { value: 1.5, label: "XXL" },
-                  { value: 1.7, label: "XXXL" }
-                ].map((item) => (
+                {SUBTITLE_SCALE_OPTIONS.map((value, index) => ({
+                  value,
+                  label: ["S", "M", "L", "XL", "XXL", "XXXL"][index] || "L"
+                })).map((item) => (
                   <button
                     key={`ssm:${item.value}`}
                     type="button"
@@ -5180,7 +4913,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         </div>
       ) : null}
 
-      {canInitializePlyr ? (
+      {canInitializePlayer ? (
         <Card className="torrent-player-shell" withBorder>
           <div
             ref={playerStageRef}
@@ -5191,32 +4924,23 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
             onTouchStart={() => revealInlineControls(INLINE_CONTROLS_FULLSCREEN_HIDE_MS)}
           >
             <div
-              className="torrent-player-wrap torrent-player-plyr-wrap"
+              className="torrent-player-wrap torrent-player-native-wrap"
               style={playerStageStyle}
             >
               <video
                 ref={videoRef}
                 src={!activePreferTranscode ? streamUrl || undefined : undefined}
-                className="torrent-player-video torrent-plyr"
+                className="torrent-player-video torrent-native-video"
                 autoPlay={false}
                 playsInline
                 preload="auto"
                 crossOrigin="anonymous"
-              >
-                {subtitleItems.map((item) => {
-                  const trackSrc = subtitleTrackSrcMap[item.id] || buildPlayerSubtitleContentURL(infoHash, item.id, item.updatedAt);
-                  return (
-                    <track
-                      key={`${item.id}:${item.updatedAt}:${trackSrc}`}
-                      kind="subtitles"
-                      label={item.label || `Subtitle ${item.id}`}
-                      srcLang={normalizeSubtitleLanguage(item.language)}
-                      src={trackSrc}
-                      default={false}
-                    />
-                  );
-                })}
-              </video>
+              />
+              {activeSubtitleCue ? (
+                <div className="torrent-player-subtitle-overlay" style={subtitleOverlayStyle} aria-live="off">
+                  {activeSubtitleCue.text}
+                </div>
+              ) : null}
               <div
                 className="torrent-player-click-layer"
                 aria-hidden="true"
@@ -5649,6 +5373,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         onClose={() => setDiagnosticsOpened(false)}
         title={t("media.player.diagnosticsTitle")}
         size="lg"
+        classNames={{
+          content: "torrent-player-modal-content",
+          header: "torrent-player-modal-header",
+          title: "torrent-player-modal-title",
+          body: "torrent-player-modal-body"
+        }}
       >
         <Stack gap="sm">
           <Group justify="space-between" align="center">

@@ -922,7 +922,7 @@
     },
     "player": {
       "title": "在线播放器",
-      "subtitle": "Transmission 流式播放（Plyr）",
+      "subtitle": "Transmission 原生流式播放",
       "stepLoading": "步骤 1 / 2",
       "stageBootstrapTitle": "正在准备播放链路",
       "stageBootstrapHint": "正在等待 Transmission 元数据与文件列表…",
@@ -978,7 +978,7 @@
       "publishedAtLabel": "发布时间",
       "torrentSourcesLabel": "种子来源",
       "torrentTagsLabel": "标签",
-      "plyrModeHint": "设置里可切换字幕、倍速和画面模式。",
+      "playerModeHint": "设置里可切换字幕、倍速和画面模式。",
       "subtitleUpload": "上传字幕",
       "subtitleUploadPlaceholder": "支持 .srt / .vtt / .ass / .ssa",
       "subtitleTrack": "字幕",

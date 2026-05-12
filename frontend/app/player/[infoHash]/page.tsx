@@ -14,8 +14,8 @@ export async function generateMetadata({ params }: PlayerRouteProps): Promise<Me
 
   return buildMetadata({
     title: `在线播放 ${infoHash.slice(0, 10)}`,
-    description: "面向影视库的在线播放页面，使用 Plyr + Transmission + FFmpeg 进行流式播放。",
-    keywords: ["bitmagnet", "比特磁铁", "Plyr", "Transmission", "FFmpeg", "影视库", "在线播放"],
+    description: "面向影视库的在线播放页面，使用原生播放器 + Transmission + FFmpeg 进行流式播放。",
+    keywords: ["bitmagnet", "比特磁铁", "原生播放器", "Transmission", "FFmpeg", "影视库", "在线播放"],
     path: `/player/${infoHash}`,
     noIndex: true
   });
