@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Anchor, Button, Card, PasswordInput, Select, Stack, Text, TextInput, Title } from "@mantine/core";
@@ -18,6 +18,16 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [rememberFor, setRememberFor] = useState<RememberFor>("1w");
   const [loading, setLoading] = useState(false);
+  const notifiedReasonRef = useRef("");
+
+  useEffect(() => {
+    const reason = (searchParams.get("reason") || "").trim();
+    if (!reason || notifiedReasonRef.current === reason) return;
+    notifiedReasonRef.current = reason;
+    if (reason === "membershipRequired") {
+      notifications.show({ color: "yellow", message: t("auth.membershipRequired") });
+    }
+  }, [searchParams, t]);
 
   const submit = async () => {
     if (loading) return;

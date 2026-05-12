@@ -16,7 +16,6 @@ import {
   Title,
   Tooltip
 } from "@mantine/core";
-import { useDebouncedValue } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import { ChevronDown, ChevronUp, FilterX, HardDriveDownload, ListOrdered, RefreshCw, Search, Users } from "lucide-react";
 import { CoverImage } from "@/components/cover-image";
@@ -215,7 +214,6 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
     cache: false,
     sort: false
   });
-  const [debouncedSearch] = useDebouncedValue(searchInput, 250);
   const [items, setItems] = useState<MediaListItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [totalTorrentCount, setTotalTorrentCount] = useState(0);
@@ -269,13 +267,14 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
     [pathname, router, searchParams]
   );
 
-  useEffect(() => {
-    if (debouncedSearch === searchValue) return;
+  const commitSearch = useCallback(() => {
+    const nextSearch = searchInput.trim();
+    if (nextSearch === searchValue.trim()) return;
     updateQuery({
-      search: debouncedSearch.trim() || null,
+      search: nextSearch || null,
       page: null
     });
-  }, [debouncedSearch, searchValue, updateQuery]);
+  }, [searchInput, searchValue, updateQuery]);
 
   useLayoutEffect(() => {
     const element = mediaLayoutElement;
@@ -623,6 +622,14 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
                 placeholder={t("media.search")}
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.currentTarget.value)}
+                onBlur={commitSearch}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    commitSearch();
+                    event.currentTarget.blur();
+                  }
+                }}
                 className="media-toolbar-search"
               />
               <Group gap="xs">

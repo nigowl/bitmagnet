@@ -23,7 +23,6 @@ import {
   Title,
   Tooltip
 } from "@mantine/core";
-import { useDebouncedValue } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { Copy, ExternalLink, Eye, FilterX, RefreshCw, Search, Tags, Trash2, WandSparkles } from "lucide-react";
@@ -187,7 +186,6 @@ export function TorrentsPage() {
   const queryString = searchParams.get("q") || "";
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState(queryString);
-  const [debouncedSearch] = useDebouncedValue(search, 250);
   const [result, setResult] = useState<SearchResult | null>(null);
 
   const [detailOpen, setDetailOpen] = useState(false);
@@ -309,12 +307,11 @@ export function TorrentsPage() {
     setSearch(queryString);
   }, [queryString]);
 
-  useEffect(() => {
-    if (debouncedSearch.trim() === queryString.trim()) {
-      return;
-    }
-    updateQuery({ q: debouncedSearch.trim() || null, page: null });
-  }, [debouncedSearch, queryString, updateQuery]);
+  const commitSearch = useCallback(() => {
+    const nextSearch = search.trim();
+    if (nextSearch === queryString.trim()) return;
+    updateQuery({ q: nextSearch || null, page: null });
+  }, [queryString, search, updateQuery]);
 
   const renderContentType = useCallback(
     (type?: string | null) => {
@@ -388,10 +385,10 @@ export function TorrentsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const resolvedOrder = orderBy === "relevance" && !debouncedSearch ? "updated_at" : orderBy;
+      const resolvedOrder = orderBy === "relevance" && !queryString.trim() ? "updated_at" : orderBy;
       const data = await graphqlRequest<SearchResponse>(TORRENT_CONTENT_SEARCH_QUERY, {
         input: {
-          queryString: debouncedSearch || undefined,
+          queryString: queryString.trim() || undefined,
           limit,
           page,
           totalCount: true,
@@ -419,7 +416,7 @@ export function TorrentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [contentTypeFilters, debouncedSearch, descending, limit, orderBy, page, sourceFilters, tagFilters]);
+  }, [contentTypeFilters, descending, limit, orderBy, page, queryString, sourceFilters, tagFilters]);
 
   useEffect(() => {
     void load();
@@ -574,6 +571,14 @@ export function TorrentsPage() {
                     value={search}
                     onChange={(event) => {
                       setSearch(event.currentTarget.value);
+                    }}
+                    onBlur={commitSearch}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        commitSearch();
+                        event.currentTarget.blur();
+                      }
                     }}
                   />
                 </Stack>

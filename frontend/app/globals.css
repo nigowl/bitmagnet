@@ -2657,6 +2657,10 @@ body {
 
 .torrent-player-wrap {
   position: relative;
+  width: 100%;
+  height: clamp(260px, 56vw, calc(100vh - var(--torrent-player-height-offset, 340px)));
+  max-height: 780px;
+  aspect-ratio: var(--torrent-player-aspect-ratio, 16 / 9);
   border-radius: var(--radius-md);
   overflow: hidden;
   background: linear-gradient(180deg, rgba(3, 5, 10, 1), rgba(8, 12, 22, 0.98));
@@ -2690,9 +2694,24 @@ body {
   min-height: 0;
 }
 
-.torrent-player-shell .plyr__video-wrapper {
-  background: #000;
+.torrent-player-plyr-wrap > .plyr,
+.torrent-player-shell .plyr {
+  position: absolute;
+  inset: 0;
+  width: 100%;
   height: 100%;
+  min-height: 100%;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.torrent-player-shell .plyr__video-wrapper {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
   line-height: 0;
   padding-bottom: 0 !important;
 }
@@ -2726,6 +2745,8 @@ body {
 }
 
 .torrent-player-shell .plyr__captions {
+  z-index: 6;
+  pointer-events: none;
   padding-bottom: 0;
   bottom: calc(54px + var(--torrent-subtitle-vertical-percent, 0%));
   transition: bottom 140ms ease;

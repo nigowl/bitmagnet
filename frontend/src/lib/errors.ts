@@ -38,9 +38,10 @@ export function getLocalizedErrorMessage(error: unknown, t: Translate): string |
   }
   const normalized = message.trim().toLowerCase();
   const key = errorMessageKeys[normalized];
-  if (!key) {
+  const fallbackKey = key || Object.entries(errorMessageKeys).find(([needle]) => normalized.includes(needle))?.[1];
+  if (!fallbackKey) {
     return message;
   }
-  const translated = t(key);
-  return translated === key ? message : translated;
+  const translated = t(fallbackKey);
+  return translated === fallbackKey ? message : translated;
 }

@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
+import { getLocalizedErrorMessage } from "@/lib/errors";
 import { useI18n } from "@/languages/provider";
 import { SiteFooter } from "@/components/site-footer";
 
@@ -109,7 +110,7 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
     if (!accessSettings.membershipEnabled) return;
     if (user) return;
     if (isRouteActive(pathname, "/login") || isRouteActive(pathname, "/register")) return;
-    router.replace(`/login?redirect=${encodeURIComponent(pathname || "/")}`);
+    router.replace(`/login?redirect=${encodeURIComponent(pathname || "/")}&reason=membershipRequired`);
   }, [accessSettings.membershipEnabled, authLoading, pathname, router, user]);
 
   const submitPasswordChange = async () => {
@@ -127,7 +128,10 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
       setConfirmPassword("");
       closePasswordModal();
     } catch (error) {
-      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+      const message = getLocalizedErrorMessage(error, t);
+      if (message) {
+        notifications.show({ color: "red", message });
+      }
     } finally {
       setSavingPassword(false);
     }

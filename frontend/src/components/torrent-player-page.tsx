@@ -37,6 +37,7 @@ import {
   createPlayerSubtitle,
   deletePlayerSubtitle,
   fetchMediaDetail,
+  fetchPlayerSubtitleContent,
   fetchPlayerSubtitles,
   fetchPlayerTransmissionAudioTracks,
   fetchPlayerTransmissionBootstrap,
@@ -2101,22 +2102,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         return [item.id, transcodeOffsetSeconds - manualOffsetSeconds];
       })
     );
-    const shouldBuildShifted = Array.from(effectiveOffsetBySubtitleID.values()).some((offset) => Math.abs(offset) >= 0.1);
-    if (!shouldBuildShifted) {
-      const next: Record<number, string> = {};
-      for (const item of subtitleItems) {
-        next[item.id] = buildPlayerSubtitleContentURL(infoHash, item.id, item.updatedAt);
-      }
-      setSubtitleTrackSrcMap(next);
-      if (subtitleBlobUrlsRef.current.length > 0) {
-        revokeAll(subtitleBlobUrlsRef.current);
-        subtitleBlobUrlsRef.current = [];
-      }
-      return;
-    }
-
     let cancelled = false;
-    const buildShifted = async () => {
+    const buildTrackSources = async () => {
       const next: Record<number, string> = {};
       const nextBlobUrls: string[] = [];
 
@@ -2124,21 +2111,19 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         const baseUrl = buildPlayerSubtitleContentURL(infoHash, item.id, item.updatedAt);
         const effectiveOffsetSeconds = effectiveOffsetBySubtitleID.get(item.id) || 0;
         try {
-          const response = await fetch(baseUrl, { cache: "no-store" });
-          if (!response.ok) {
-            throw new Error(`subtitle http ${response.status}`);
-          }
-          const raw = await response.text();
-          const shifted = shiftWebVttByOffset(raw, effectiveOffsetSeconds);
+          const raw = await fetchPlayerSubtitleContent(infoHash, item.id);
+          const shifted = Math.abs(effectiveOffsetSeconds) >= 0.1
+            ? shiftWebVttByOffset(raw, effectiveOffsetSeconds)
+            : ensureWebVtt(raw);
           const blobUrl = URL.createObjectURL(new Blob([shifted], { type: "text/vtt" }));
           next[item.id] = blobUrl;
           nextBlobUrls.push(blobUrl);
         } catch (error) {
           next[item.id] = baseUrl;
-          logWarn("subtitle", "failed to build shifted subtitle source", {
+          logWarn("subtitle", "failed to build subtitle track source", {
             subtitleId: item.id,
             offsetSeconds: effectiveOffsetSeconds,
-            message: toErrorMessage(error, "shift subtitle failed")
+            message: toErrorMessage(error, "build subtitle failed")
           });
         }
       }
@@ -2153,7 +2138,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       revokeAll(previous);
     };
 
-    void buildShifted();
+    void buildTrackSources();
     return () => {
       cancelled = true;
     };
@@ -2190,18 +2175,23 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     const selectedIndex =
       selectedSubtitleId === "none" ? -1 : subtitleItems.findIndex((item) => String(item.id) === selectedSubtitleId);
 
-    for (let i = 0; i < video.textTracks.length; i += 1) {
-      const track = video.textTracks[i];
-      const shouldShow = selectedIndex >= 0 && i === selectedIndex;
-      track.mode = shouldShow ? "showing" : "disabled";
-    }
+    const applyNativeTrackModes = () => {
+      for (let i = 0; i < video.textTracks.length; i += 1) {
+        const track = video.textTracks[i];
+        const shouldShow = selectedIndex >= 0 && i === selectedIndex;
+        track.mode = shouldShow ? "showing" : "disabled";
+      }
+    };
+
+    applyNativeTrackModes();
 
     if (player) {
       try {
-        player.toggleCaptions?.(selectedIndex >= 0);
         if (selectedIndex >= 0 && selectedIndex < video.textTracks.length) {
           player.currentTrack = selectedIndex;
         }
+        player.toggleCaptions?.(selectedIndex >= 0);
+        applyNativeTrackModes();
         if (!wasPaused && video.paused && !userPausedRef.current) {
           void video.play().catch(() => {
             // ignore autoplay rejection
@@ -3856,6 +3846,43 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   useEffect(() => {
     syncSelectedSubtitleTrack();
   }, [subtitleTrackSrcMap, syncSelectedSubtitleTrack]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    const tracks = video?.textTracks;
+    if (!video || !tracks) return;
+
+    const sync = () => {
+      window.requestAnimationFrame(() => {
+        syncSelectedSubtitleTrack();
+      });
+    };
+
+    tracks.addEventListener?.("change", sync);
+    tracks.addEventListener?.("addtrack", sync);
+    tracks.addEventListener?.("removetrack", sync);
+    for (let index = 0; index < video.children.length; index += 1) {
+      const child = video.children.item(index);
+      if (child instanceof HTMLTrackElement) {
+        child.addEventListener("load", sync);
+        child.addEventListener("error", sync);
+      }
+    }
+    sync();
+
+    return () => {
+      tracks.removeEventListener?.("change", sync);
+      tracks.removeEventListener?.("addtrack", sync);
+      tracks.removeEventListener?.("removetrack", sync);
+      for (let index = 0; index < video.children.length; index += 1) {
+        const child = video.children.item(index);
+        if (child instanceof HTMLTrackElement) {
+          child.removeEventListener("load", sync);
+          child.removeEventListener("error", sync);
+        }
+      }
+    };
+  }, [streamUrl, subtitleItems, subtitleTrackSrcMap, syncSelectedSubtitleTrack]);
 
   useEffect(() => {
     refreshAudioTracks();
