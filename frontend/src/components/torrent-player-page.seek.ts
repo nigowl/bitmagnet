@@ -159,6 +159,8 @@ export function useTorrentPlayerSeek({
           );
           setTranscodeStartOffsetSeconds(effectiveSeekSeconds);
           transcodeStartOffsetRef.current = effectiveSeekSeconds;
+          pendingResumeTargetRef.current = effectiveSeekSeconds;
+          autoResumeWhenPlayableRef.current = true;
           applyStreamUrl(seekUrl, { autoplay: true, resumeAt: 0 });
           logInfo("seek", "seek via transcode restart", {
             source,

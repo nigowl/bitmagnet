@@ -327,14 +327,18 @@ func (s *service) PlayerTransmissionResolveStream(
 	}
 	maxRangeBytes := defaultPlayerStreamMaxRangeBytes
 	if input.PreferTranscode && input.PrebufferSeconds > 0 {
-		prebufferWindowBytes := playerTransmissionPrebufferWindowBytes(fileLength, input.DurationSeconds, input.PrebufferSeconds)
+		rangePrebufferSeconds := input.PrebufferSeconds
+		if input.StartupPrebufferSeconds > 0 && input.StartupPrebufferSeconds < rangePrebufferSeconds {
+			rangePrebufferSeconds = input.StartupPrebufferSeconds
+		}
+		prebufferWindowBytes := playerTransmissionPrebufferWindowBytes(fileLength, input.DurationSeconds, rangePrebufferSeconds)
 		maxRangeBytes = maxInt64(maxRangeBytes, prebufferWindowBytes)
 		input.RangeHeader = playerTransmissionPrebufferRangeHeader(
 			input.RangeHeader,
 			fileLength,
 			input.StartBytes,
 			input.DurationSeconds,
-			input.PrebufferSeconds,
+			rangePrebufferSeconds,
 		)
 	}
 	rangeStart, rangeEnd, partial, err := parsePlayerByteRangeWithMax(input.RangeHeader, fileLength, maxRangeBytes)

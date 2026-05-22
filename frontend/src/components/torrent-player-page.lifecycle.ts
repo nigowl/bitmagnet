@@ -67,6 +67,7 @@ type UseTorrentPlayerLifecycleArgs = {
   pendingTranscodeSeekDisplayRef: MutableRefObject<{ target: number; at: number } | null>;
   selectedAudioTrackQueryIndexRef: MutableRefObject<number>;
   selectedFileIndexRef: MutableRefObject<number>;
+  seekingSwitchingRef: MutableRefObject<boolean>;
   statusSnapshotRef: MutableRefObject<PlayerTransmissionStatusResponse | null>;
   totalDurationSecondsRef: MutableRefObject<number>;
   transcodeStartOffsetRef: MutableRefObject<number>;
@@ -109,6 +110,7 @@ export function useTorrentPlayerLifecycle({
   pendingTranscodeSeekDisplayRef,
   selectedAudioTrackQueryIndexRef,
   selectedFileIndexRef,
+  seekingSwitchingRef,
   statusSnapshotRef,
   totalDurationSecondsRef,
   transcodeStartOffsetRef,
@@ -153,6 +155,7 @@ export function useTorrentPlayerLifecycle({
 
   useEffect(() => {
     if (!bootstrapped || !infoHash || selectedFileIndex < 0 || fileOptions.length === 0) return;
+    if (seekingSwitchingRef.current) return;
     const selected = fileOptions.find((item) => item.index === selectedFileIndex);
     if (!selected) return;
 
@@ -260,6 +263,7 @@ export function useTorrentPlayerLifecycle({
     setPlaybackLoading,
     setPlayerStatus,
     setTranscodeStartOffsetSeconds,
+    seekingSwitchingRef,
     shouldAutoplayStreamChange,
     statusSnapshot,
     statusSnapshotRef,

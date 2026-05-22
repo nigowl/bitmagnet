@@ -565,6 +565,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     pendingTranscodeSeekDisplayRef,
     selectedAudioTrackQueryIndexRef,
     selectedFileIndexRef,
+    seekingSwitchingRef,
     statusSnapshotRef,
     totalDurationSecondsRef,
     transcodeStartOffsetRef,

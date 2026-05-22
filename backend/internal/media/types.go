@@ -379,7 +379,11 @@ type PlayerTransmissionResolveStreamInput struct {
 	StartSeconds     float64 `json:"startSeconds"`
 	StartBytes       int64   `json:"startBytes"`
 	PrebufferSeconds int     `json:"prebufferSeconds"`
-	DurationSeconds  float64 `json:"durationSeconds"`
+	// StartupPrebufferSeconds limits how much torrent data must be locally available
+	// before returning a stream. PrebufferSeconds can stay larger for background HLS
+	// cache growth without blocking initial playback or seek.
+	StartupPrebufferSeconds int     `json:"startupPrebufferSeconds"`
+	DurationSeconds         float64 `json:"durationSeconds"`
 }
 
 type PlayerTransmissionResolveStreamResult struct {

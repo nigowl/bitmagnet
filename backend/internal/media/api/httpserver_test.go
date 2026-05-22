@@ -130,6 +130,15 @@ func TestNormalizePlayerHLSPrebufferSeconds(t *testing.T) {
 	}
 }
 
+func TestNormalizePlayerHLSStartupPrebufferSeconds(t *testing.T) {
+	if got := normalizePlayerHLSStartupPrebufferSeconds(60); got != playerHLSSegmentSeconds {
+		t.Fatalf("expected normal startup target to stay small, got=%d", got)
+	}
+	if got := normalizePlayerHLSStartupPrebufferSeconds(playerHLSSegmentSeconds); got != playerHLSSegmentSeconds {
+		t.Fatalf("expected tiny explicit target to be honored, got=%d", got)
+	}
+}
+
 func TestWaitForPlayerHLSPrebufferWaitsForTarget(t *testing.T) {
 	dir := t.TempDir()
 	playlistPath := filepath.Join(dir, "index.m3u8")

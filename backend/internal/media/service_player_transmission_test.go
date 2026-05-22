@@ -37,6 +37,18 @@ func TestPlayerTransmissionPrebufferRangeHeaderBuildsClosedWindow(t *testing.T) 
 	}
 }
 
+func TestPlayerTransmissionStartupPrebufferWindowStaysSmall(t *testing.T) {
+	full := playerTransmissionPrebufferWindowBytes(20*1024*1024*1024, 10800, 60)
+	startup := playerTransmissionPrebufferWindowBytes(20*1024*1024*1024, 10800, 2)
+	if startup >= full {
+		t.Fatalf("expected startup window to be smaller than full prebuffer, startup=%d full=%d", startup, full)
+	}
+	const want int64 = 16777216
+	if startup != want {
+		t.Fatalf("expected startup window to stay at probe chunk floor, got=%d want=%d", startup, want)
+	}
+}
+
 func TestPlayerTransmissionContiguousBytesFromStartBoundaryPieceFallback(t *testing.T) {
 	snapshot := &playerTransmissionRPCTorrent{
 		PieceSize:   1024,

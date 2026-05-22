@@ -20,6 +20,7 @@ import (
 const playerHLSSegmentSeconds = 2
 const playerHLSDefaultPrebufferSeconds = 60
 const playerHLSMaxPrebufferSeconds = 180
+const playerHLSStartupPrebufferSeconds = playerHLSSegmentSeconds
 const playerHLSWaitPollInterval = 250 * time.Millisecond
 const playerHLSCacheTTL = 6 * time.Hour
 const playerHLSIdleTranscodeTTL = 20 * time.Second
@@ -42,6 +43,7 @@ func (b *builder) playerTransmissionHLSPlaylist(c *gin.Context) {
 	startSeconds := parseFloat(c.Query("start"), 0)
 	startBytes := parseInt64(c.Query("startBytes"), 0)
 	prebufferSeconds := normalizePlayerHLSPrebufferSeconds(parseInt(c.Query("prebuffer"), playerHLSDefaultPrebufferSeconds))
+	startupSeconds := normalizePlayerHLSStartupPrebufferSeconds(prebufferSeconds)
 	durationSeconds := parseFloat(c.Query("duration"), 0)
 
 	resolveRangeHeader := ""
@@ -49,16 +51,17 @@ func (b *builder) playerTransmissionHLSPlaylist(c *gin.Context) {
 		resolveRangeHeader = fmt.Sprintf("bytes=%d-", startBytes)
 	}
 	resolveResult, err := b.service.PlayerTransmissionResolveStream(c.Request.Context(), media.PlayerTransmissionResolveStreamInput{
-		InfoHash:         infoHash,
-		FileIndex:        fileIndex,
-		RangeHeader:      resolveRangeHeader,
-		PreferTranscode:  true,
-		AudioTrackIndex:  audioTrackIndex,
-		OutputResolution: outputResolution,
-		StartSeconds:     startSeconds,
-		StartBytes:       startBytes,
-		PrebufferSeconds: prebufferSeconds,
-		DurationSeconds:  durationSeconds,
+		InfoHash:                infoHash,
+		FileIndex:               fileIndex,
+		RangeHeader:             resolveRangeHeader,
+		PreferTranscode:         true,
+		AudioTrackIndex:         audioTrackIndex,
+		OutputResolution:        outputResolution,
+		StartSeconds:            startSeconds,
+		StartBytes:              startBytes,
+		PrebufferSeconds:        prebufferSeconds,
+		StartupPrebufferSeconds: startupSeconds,
+		DurationSeconds:         durationSeconds,
 	})
 	if err != nil {
 		switch {
@@ -102,7 +105,7 @@ func (b *builder) playerTransmissionHLSPlaylist(c *gin.Context) {
 		}
 		b.hlsMu.Unlock()
 	}
-	cachedSeconds, ready, waitErr := waitForPlayerHLSPrebuffer(c.Request.Context(), session, prebufferSeconds, touchSession)
+	cachedSeconds, ready, waitErr := waitForPlayerHLSPrebuffer(c.Request.Context(), session, startupSeconds, touchSession)
 	if waitErr != nil {
 		if errors.Is(waitErr, context.Canceled) || errors.Is(waitErr, context.DeadlineExceeded) {
 			return
@@ -129,6 +132,7 @@ func (b *builder) playerTransmissionHLSPlaylist(c *gin.Context) {
 	c.Header("X-Bitmagnet-HLS", "1")
 	c.Header("X-Bitmagnet-HLS-Session", session.Key)
 	c.Header("X-Bitmagnet-HLS-Prebuffer-Target", strconv.Itoa(prebufferSeconds))
+	c.Header("X-Bitmagnet-HLS-Startup-Prebuffer-Target", strconv.Itoa(startupSeconds))
 	c.Header("X-Bitmagnet-HLS-Prebuffer-Seconds", strconv.Itoa(int(math.Floor(cachedSeconds))))
 	c.Header("X-Bitmagnet-HLS-Prebuffer-Ready", strconv.FormatBool(ready))
 	c.String(http.StatusOK, playlist)
@@ -333,6 +337,17 @@ func normalizePlayerHLSPrebufferSeconds(raw int) int {
 		return playerHLSMaxPrebufferSeconds
 	}
 	return int(math.Ceil(float64(raw)/float64(playerHLSSegmentSeconds))) * playerHLSSegmentSeconds
+}
+
+func normalizePlayerHLSStartupPrebufferSeconds(prebufferSeconds int) int {
+	startupSeconds := playerHLSStartupPrebufferSeconds
+	if startupSeconds < playerHLSSegmentSeconds {
+		startupSeconds = playerHLSSegmentSeconds
+	}
+	if prebufferSeconds > 0 && prebufferSeconds < startupSeconds {
+		return prebufferSeconds
+	}
+	return startupSeconds
 }
 
 func isSafePlayerHLSName(value string) bool {
