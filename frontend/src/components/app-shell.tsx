@@ -21,7 +21,6 @@ import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import {
   CircleUserRound,
-  Clapperboard,
   Film,
   Gauge,
   Heart,
@@ -101,7 +100,6 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
     { href: "/", label: t("nav.home"), icon: Gauge },
     { href: buildMediaHref("movie"), label: t("contentTypes.movie"), icon: Film },
     { href: buildMediaHref("series"), label: t("contentTypes.tv_show"), icon: Tv },
-    { href: buildMediaHref("anime"), label: t("nav.anime"), icon: Clapperboard },
     { href: "/torrents", label: t("nav.torrents"), icon: ListOrdered }
   ];
 

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/nigowl/bitmagnet/internal/classifier"
-	"github.com/nigowl/bitmagnet/internal/model"
 	"github.com/nigowl/bitmagnet/internal/processor/batch"
 	"gorm.io/gorm"
 )
@@ -40,7 +39,7 @@ func (m manager) EnqueueReprocessTorrentsBatch(ctx context.Context, req EnqueueR
 
 	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if req.Purge {
-			if _, err := tx.WithContext(ctx).Raw("TRUNCATE TABLE " + model.TableNameQueueJob + ";").Rows(); err != nil {
+			if err := truncateQueueJobs(tx.WithContext(ctx)); err != nil {
 				return fmt.Errorf("error purging queue: %w", err)
 			}
 		}

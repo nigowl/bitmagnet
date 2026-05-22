@@ -92,7 +92,7 @@ func Exec(ctx context.Context, handler Handler, job model.QueueJob) (err error) 
 	defer cancel()
 
 	errCh := make(chan error, 1)
-	done := make(chan bool)
+	done := make(chan struct{})
 
 	go func(ctx context.Context) {
 		defer func() {
@@ -114,11 +114,11 @@ func Exec(ctx context.Context, handler Handler, job model.QueueJob) (err error) 
 				}
 			}
 
-			done <- true
+			close(done)
 		}()
 
 		errCh <- handler.Handle(ctx, job)
-	}(ctx)
+	}(timeoutCtx)
 
 	select {
 	case <-done:

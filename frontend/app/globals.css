@@ -863,6 +863,94 @@ body {
   line-height: 1.65;
 }
 
+.media-episode-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+  max-height: min(320px, 42vh);
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.media-episode-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.media-episode-tile {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+  padding: 0;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--surface-strong) 86%, transparent);
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+
+.media-episode-tile:hover {
+  border-color: var(--brand-orange);
+  background: var(--brand-muted);
+  transform: translateY(-1px);
+}
+
+.media-episode-tile span {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.media-episode-tile small {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--muted-text);
+}
+
+.media-episode-modal-content {
+  height: min(84vh, 780px);
+  max-height: min(84vh, 780px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.media-episode-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.media-episode-modal-stack {
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+}
+
+.media-episode-modal-table-scroll {
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.media-episode-modal-table-scroll .mantine-ScrollArea-viewport {
+  height: 100%;
+}
+
 .media-facts-inline {
   display: grid;
   gap: 10px;
@@ -1924,6 +2012,10 @@ body {
     text-align: left;
   }
 
+  .media-episode-panel {
+    max-height: 220px;
+  }
+
   .media-title-language-switch {
     justify-items: start;
   }
@@ -2240,54 +2332,6 @@ body {
 
 .settings-sections-accordion .mantine-Accordion-content {
   background: transparent;
-}
-
-.player-download-mapping-card {
-  border-color: color-mix(
-    in srgb,
-    var(--brand-orange) 28%,
-    var(--card-border)
-  ) !important;
-  background:
-    radial-gradient(
-      circle at 10% 0%,
-      color-mix(in srgb, var(--brand-muted) 60%, transparent),
-      transparent 42%
-    ),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--card-bg) 92%, var(--brand-muted)),
-      color-mix(in srgb, var(--card-bg) 84%, var(--muted-surface))
-    );
-  box-shadow: inset 0 1px 0
-    color-mix(in srgb, var(--brand-muted) 46%, transparent);
-}
-
-.player-download-mapping-tabs .mantine-Tabs-list {
-  border: 1px solid
-    color-mix(in srgb, var(--brand-orange) 20%, var(--card-border));
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--card-bg) 84%, var(--muted-surface));
-  padding: 4px;
-  gap: 6px;
-}
-
-.player-download-mapping-tabs .mantine-Tabs-tab {
-  border-radius: var(--radius-xs);
-  color: var(--muted-text);
-  font-weight: 700;
-}
-
-.player-download-mapping-tabs .mantine-Tabs-tab:hover {
-  background: color-mix(in srgb, var(--brand-muted) 44%, transparent);
-  color: var(--page-text);
-}
-
-.player-download-mapping-tabs .mantine-Tabs-tab[data-active="true"] {
-  background: color-mix(in srgb, var(--brand-muted) 72%, var(--card-bg));
-  color: var(--brand-orange-deep);
-  border: 1px solid
-    color-mix(in srgb, var(--brand-orange) 30%, var(--card-border));
 }
 
 .torrent-player-stage {
@@ -2726,12 +2770,20 @@ body {
   transition:
     opacity 180ms ease,
     transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
-  background: linear-gradient(
-    180deg,
-    rgba(7, 11, 18, 0),
-    rgba(6, 10, 18, 0.72) 28%,
-    rgba(5, 9, 17, 0.96)
-  );
+  background:
+    linear-gradient(180deg, rgba(4, 8, 15, 0), rgba(4, 8, 15, 0.52) 34%, rgba(4, 8, 15, 0.9) 100%),
+    radial-gradient(70% 110% at 50% 100%, rgba(4, 8, 15, 0.82), transparent 72%);
+}
+
+.torrent-inline-controls::before {
+  content: "";
+  position: absolute;
+  inset: -46px 0 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(4, 8, 15, 0), rgba(4, 8, 15, 0.5) 58%, rgba(4, 8, 15, 0.84));
+  filter: blur(10px);
+  opacity: 0.78;
 }
 
 .torrent-player-buffering-overlay {
@@ -3241,11 +3293,11 @@ body {
 .torrent-player-subtitle-panel {
   right: 12px;
   bottom: 72px;
-  width: min(480px, calc(100% - 24px));
+  width: min(520px, calc(100% - 24px));
   max-height: min(72vh, calc(100% - 96px));
-  overflow: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(184, 199, 220, 0.36) transparent;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .torrent-player-panel-header {
@@ -3255,8 +3307,17 @@ body {
   gap: 10px;
   min-height: 28px;
   margin-bottom: 12px;
+  flex: 0 0 auto;
   padding-bottom: 10px;
   border-bottom: 1px solid rgba(188, 207, 246, 0.13);
+}
+
+.torrent-player-panel-scroll {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(184, 199, 220, 0.36) transparent;
 }
 
 .torrent-player-panel-title {
@@ -3294,6 +3355,32 @@ body {
   color: var(--player-control-accent);
   background: var(--player-popup-control-active);
   border-color: var(--player-popup-border-strong);
+}
+
+.torrent-player-subtitle-panel .mantine-ActionIcon-root,
+.torrent-player-subtitle-panel .mantine-Button-root {
+  color: var(--player-control-text);
+  border-color: rgba(188, 207, 246, 0.16);
+  background: var(--player-popup-control);
+}
+
+.torrent-player-subtitle-panel .mantine-ActionIcon-root:hover,
+.torrent-player-subtitle-panel .mantine-Button-root:hover {
+  color: var(--player-control-accent);
+  background: var(--player-popup-control-hover);
+}
+
+.torrent-player-subtitle-manager-actions {
+  min-width: 0;
+}
+
+.torrent-player-subtitle-manager-actions .mantine-Text-root {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.torrent-player-subtitle-manager-actions .mantine-ActionIcon-root {
+  flex: 0 0 auto;
 }
 
 .torrent-player-center-layer {

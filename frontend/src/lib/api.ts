@@ -76,14 +76,18 @@ export function clearAuthToken() {
   clearTokenCookie();
 }
 
-export async function graphqlRequest<T>(query: string, variables?: Record<string, unknown>) {
+export function getAuthHeaders(): Record<string, string> | undefined {
   const token = getAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : undefined;
+}
+
+export async function graphqlRequest<T>(query: string, variables?: Record<string, unknown>) {
   const response = await axios.post<GraphQLResponse<T>>(
     `${apiBaseURL}/graphql`,
     { query, variables },
     {
       timeout: 30000,
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined
+      headers: getAuthHeaders()
     }
   );
 
@@ -99,14 +103,13 @@ export async function graphqlRequest<T>(query: string, variables?: Record<string
 }
 
 export async function apiRequest<T>(path: string, options?: { method?: "GET" | "POST" | "PUT" | "DELETE"; data?: unknown }) {
-  const token = getAuthToken();
   try {
     const response = await axios.request<T | APIEnvelope<T>>({
       url: `${apiBaseURL}${path}`,
       method: options?.method || "GET",
       data: options?.data,
       timeout: 30000,
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined
+      headers: getAuthHeaders()
     });
     return unwrapAPIResponse<T>(response.data);
   } catch (error) {

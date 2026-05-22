@@ -2,14 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { ActionIcon, Badge, Button, Card, Group, Loader, ScrollArea, SimpleGrid, Stack, Table, Text, Title, Tooltip } from "@mantine/core";
+import { ActionIcon, Button, Card, Group, Loader, SimpleGrid, Stack, Text, Title, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { Activity, LogIn, RefreshCw } from "lucide-react";
+import { LogIn, RefreshCw } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { graphqlRequest } from "@/lib/api";
 import { HEALTH_QUERY, QUEUE_METRICS_QUERY, TORRENT_METRICS_QUERY, VERSION_QUERY } from "@/lib/graphql";
 import { useI18n } from "@/languages/provider";
+import {
+  MonitorHealthChecksCard,
+  MonitorQueueStatusCard,
+  MonitorTorrentSourcesCard,
+  MonitorWorkersCard
+} from "./monitor-page.tables";
 
 const ECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 const CHART_TEXT_COLOR = "#a9b9d2";
@@ -421,138 +427,30 @@ export function MonitorPage() {
       </SimpleGrid>
 
       <SimpleGrid cols={{ base: 1, lg: 2 }}>
-        <Card className="glass-card" withBorder>
-          <Group justify="space-between" mb="sm" wrap="wrap">
-            <Text fw={600}>{t("monitor.statusBreakdown")}</Text>
-            <Text c="dimmed" size="sm">{t("monitor.activeQueues")}: {queueSummary.activeQueues} · {t("monitor.latencyBuckets")}: {queueSummary.latencyBuckets}</Text>
-          </Group>
-          <ScrollArea offsetScrollbars>
-            <Table striped withTableBorder miw={420}>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>{t("monitor.table.status")}</Table.Th>
-                  <Table.Th>{t("common.total")}</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {queueSummary.statusRows.length > 0 ? queueSummary.statusRows.map((row) => (
-                  <Table.Tr key={row.status}>
-                    <Table.Td>
-                      <Badge color={queueStatusColor(row.status)}>{row.status}</Badge>
-                    </Table.Td>
-                    <Table.Td>{row.count}</Table.Td>
-                  </Table.Tr>
-                )) : (
-                  <Table.Tr>
-                    <Table.Td colSpan={2}>
-                      <Text c="dimmed" size="sm">{t("monitor.empty")}</Text>
-                    </Table.Td>
-                  </Table.Tr>
-                )}
-              </Table.Tbody>
-            </Table>
-          </ScrollArea>
-        </Card>
-
-        <Card className="glass-card" withBorder>
-          <Group justify="space-between" mb="sm" wrap="wrap">
-            <Text fw={600}>{t("monitor.sourcesBreakdown")}</Text>
-            <Text c="dimmed" size="sm">{t("monitor.activeSources")}: {torrentSummary.activeSources}</Text>
-          </Group>
-          <ScrollArea offsetScrollbars>
-            <Table striped withTableBorder miw={420}>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>{t("monitor.table.source")}</Table.Th>
-                  <Table.Th>{t("common.total")}</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {torrentSummary.sourceRows.length > 0 ? torrentSummary.sourceRows.slice(0, 12).map((row) => (
-                  <Table.Tr key={row.source}>
-                    <Table.Td>{row.name}</Table.Td>
-                    <Table.Td>{row.count}</Table.Td>
-                  </Table.Tr>
-                )) : (
-                  <Table.Tr>
-                    <Table.Td colSpan={2}>
-                      <Text c="dimmed" size="sm">{t("monitor.empty")}</Text>
-                    </Table.Td>
-                  </Table.Tr>
-                )}
-              </Table.Tbody>
-            </Table>
-          </ScrollArea>
-        </Card>
+        <MonitorQueueStatusCard
+          t={t}
+          activeQueues={queueSummary.activeQueues}
+          latencyBuckets={queueSummary.latencyBuckets}
+          rows={queueSummary.statusRows}
+          queueStatusColor={queueStatusColor}
+        />
+        <MonitorTorrentSourcesCard
+          t={t}
+          activeSources={torrentSummary.activeSources}
+          rows={torrentSummary.sourceRows}
+        />
       </SimpleGrid>
 
       <SimpleGrid cols={{ base: 1, lg: 2 }}>
-        <Card className="glass-card" withBorder>
-          <Text fw={600} mb="sm">{t("monitor.checks")}</Text>
-          <ScrollArea offsetScrollbars>
-            <Table striped withTableBorder miw={620}>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>{t("monitor.table.key")}</Table.Th>
-                  <Table.Th>{t("monitor.table.status")}</Table.Th>
-                  <Table.Th>{t("monitor.table.timestamp")}</Table.Th>
-                  <Table.Th>{t("monitor.table.info")}</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {(health?.checks || []).map((check) => (
-                  <Table.Tr key={check.key}>
-                    <Table.Td>{check.key}</Table.Td>
-                    <Table.Td>
-                      <Badge color={healthStatusColor(check.status)}>
-                        {renderHealthStatus(check.status)}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>{new Date(check.timestamp).toLocaleString()}</Table.Td>
-                    <Table.Td>
-                      <Text c={healthCheckInfoColor(check)} size="sm">{healthCheckInfo(check)}</Text>
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </ScrollArea>
-        </Card>
-
-        <Card className="glass-card" withBorder>
-          <Group gap={6} mb="sm">
-            <Activity size={16} />
-            <Text fw={600}>{t("monitor.workers")}</Text>
-          </Group>
-          <ScrollArea offsetScrollbars>
-            <Table striped withTableBorder miw={520}>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>{t("monitor.table.key")}</Table.Th>
-                  <Table.Th>{t("monitor.table.enabled")}</Table.Th>
-                  <Table.Th>{t("monitor.table.started")}</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {workers.map((worker) => (
-                  <Table.Tr key={worker.key}>
-                    <Table.Td>{worker.key}</Table.Td>
-                    <Table.Td>
-                      <Badge color={worker.enabled ? "blue" : "slate"}>
-                        {worker.enabled ? t("common.yes") : t("common.no")}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>
-                      <Badge color={worker.started ? "green" : "slate"}>
-                        {worker.started ? t("common.yes") : t("common.no")}
-                      </Badge>
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </ScrollArea>
-        </Card>
+        <MonitorHealthChecksCard
+          t={t}
+          checks={health?.checks || []}
+          healthStatusColor={healthStatusColor}
+          renderHealthStatus={renderHealthStatus}
+          healthCheckInfo={healthCheckInfo}
+          healthCheckInfoColor={healthCheckInfoColor}
+        />
+        <MonitorWorkersCard t={t} workers={workers} />
       </SimpleGrid>
     </Stack>
   );

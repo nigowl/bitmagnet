@@ -4,12 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"sync"
 	"time"
 
-	"github.com/nigowl/bitmagnet/internal/lazy"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/nigowl/bitmagnet/internal/lazy"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -22,60 +21,62 @@ type Params struct {
 
 type Result struct {
 	fx.Out
-	PgxPool     lazy.Lazy[*pgxpool.Pool]
-	SQLDB       lazy.Lazy[*sql.DB]
-	PgxPoolWait *sync.WaitGroup `name:"pgx_pool_wait"`
-	AppHook     fx.Hook         `group:"app_hooks"`
+	SQLDB   lazy.Lazy[*sql.DB]
+	AppHook fx.Hook `group:"app_hooks"`
 }
 
 func New(p Params) (Result, error) {
-	stopped := make(chan struct{})
-	waitGroup := &sync.WaitGroup{}
-	lazyPool := lazy.New(func() (*pgxpool.Pool, error) {
+	var db *sql.DB
+	lazyDB := lazy.New(func() (*sql.DB, error) {
 		ctx, cancel := context.WithCancel(context.Background())
-		pl, plErr := pgxpool.New(ctx, p.Config.CreateDSN())
+		defer cancel()
 
-		if plErr != nil {
-			cancel()
-			return nil, plErr
+		connConfig, configErr := pgx.ParseConfig(p.Config.CreateConnectionDSN())
+		if configErr != nil {
+			return nil, configErr
 		}
 
-		if pingErr := waitForPing(ctx, p.Logger, pl); pingErr != nil {
-			cancel()
+		db = stdlib.OpenDB(*connConfig)
+		applyPoolConfig(db, p.Config)
+
+		if pingErr := waitForPing(ctx, p.Logger, db); pingErr != nil {
+			_ = db.Close()
+			db = nil
 			return nil, pingErr
 		}
 
-		go func() {
-			<-stopped
-			// wait for services to be finished with the pool before closing
-			waitGroup.Wait()
-			cancel()
-			pl.Close()
-		}()
-
-		return pl, nil
+		return db, nil
 	})
 
 	return Result{
-		PgxPool: lazyPool,
-		SQLDB: lazy.New(func() (*sql.DB, error) {
-			pool, err := lazyPool.Get()
-			if err != nil {
-				return nil, err
-			}
-			return stdlib.OpenDBFromPool(pool), nil
-		}),
-		PgxPoolWait: waitGroup,
+		SQLDB: lazyDB,
 		AppHook: fx.Hook{
 			OnStop: func(context.Context) error {
-				close(stopped)
-				return nil
+				if db == nil {
+					return nil
+				}
+				return db.Close()
 			},
 		},
 	}, nil
 }
 
-func waitForPing(ctx context.Context, logger *zap.SugaredLogger, pool *pgxpool.Pool) error {
+func applyPoolConfig(db *sql.DB, cfg Config) {
+	if cfg.PoolMaxConns > 0 {
+		db.SetMaxOpenConns(int(cfg.PoolMaxConns))
+	}
+	if cfg.PoolMinConns > 0 {
+		db.SetMaxIdleConns(int(cfg.PoolMinConns))
+	}
+	if cfg.PoolMaxConnLifetimeSeconds > 0 {
+		db.SetConnMaxLifetime(time.Duration(cfg.PoolMaxConnLifetimeSeconds) * time.Second)
+	}
+	if cfg.PoolMaxConnIdleTimeSeconds > 0 {
+		db.SetConnMaxIdleTime(time.Duration(cfg.PoolMaxConnIdleTimeSeconds) * time.Second)
+	}
+}
+
+func waitForPing(ctx context.Context, logger *zap.SugaredLogger, db *sql.DB) error {
 	i := 0
 
 	var err error
@@ -86,7 +87,7 @@ func waitForPing(ctx context.Context, logger *zap.SugaredLogger, pool *pgxpool.P
 			break
 		}
 
-		err = pool.Ping(ctx)
+		err = db.PingContext(ctx)
 		if err == nil {
 			return nil
 		}

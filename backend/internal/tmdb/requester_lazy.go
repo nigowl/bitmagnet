@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nigowl/bitmagnet/internal/concurrency"
 	"github.com/go-resty/resty/v2"
+	"github.com/nigowl/bitmagnet/internal/concurrency"
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
 	"golang.org/x/time/rate"
@@ -17,7 +17,7 @@ import (
 // requesterLazy defers instantiation of the requester (and possible failure) until the first request is made,
 // avoiding failure when the TMDB client is not needed.
 type requesterLazy struct {
-	once      sync.Once
+	mutex     sync.Mutex
 	config    Config
 	logger    *zap.SugaredLogger
 	err       error
@@ -30,20 +30,47 @@ func (r *requesterLazy) Request(
 	queryParams map[string]string,
 	result interface{},
 ) (*resty.Response, error) {
-	r.once.Do(func() {
-		r.requester, r.err = newRequester(ctx, r.config, r.logger)
-	})
+	requester, err := r.getRequester(ctx)
+	if err != nil {
+		return nil, err
+	}
 
+	return requester.Request(ctx, path, queryParams, result)
+}
+
+func (r *requesterLazy) getRequester(ctx context.Context) (Requester, error) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	if r.requester != nil {
+		return r.requester, nil
+	}
 	if r.err != nil {
 		return nil, r.err
 	}
 
-	return r.requester.Request(ctx, path, queryParams, result)
+	requester, err := newRequester(ctx, r.config, r.logger)
+	if err != nil {
+		if isPermanentRequesterInitError(err) {
+			r.err = err
+		}
+		return nil, err
+	}
+
+	r.requester = requester
+
+	return requester, nil
+}
+
+var errTmdbDisabled = errors.New("TMDB is disabled")
+
+func isPermanentRequesterInitError(err error) bool {
+	return errors.Is(err, errTmdbDisabled) || errors.Is(err, ErrUnauthorized)
 }
 
 func newRequester(ctx context.Context, config Config, logger *zap.SugaredLogger) (Requester, error) {
 	if !config.Enabled {
-		return nil, errors.New("TMDB is disabled")
+		return nil, errTmdbDisabled
 	}
 
 	if config.APIKey == defaultTmdbAPIKey {

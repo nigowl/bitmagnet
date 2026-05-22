@@ -5,9 +5,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 )
+
+const mediaSearchPrimaryFieldMaxRunes = 2
 
 func normalizeListFilter(value string) string {
 	value = strings.TrimSpace(strings.ToLower(value))
@@ -34,6 +37,65 @@ func normalizeScoreBound(value *float64) (float64, bool) {
 	return math.Min(10, math.Max(0, *value)), true
 }
 
+func applyMediaSearchFilter(db *gorm.DB, search string) *gorm.DB {
+	if usePrimaryMediaSearchFields(search) {
+		return applyMediaSearchPrimaryFieldsFilter(db, search)
+	}
+	return applyMediaSearchTextFilter(db, search)
+}
+
+func usePrimaryMediaSearchFields(search string) bool {
+	return utf8.RuneCountInString(strings.TrimSpace(search)) <= mediaSearchPrimaryFieldMaxRunes
+}
+
+func applyMediaSearchPrimaryFieldsFilter(db *gorm.DB, search string) *gorm.DB {
+	like := "%" + strings.TrimSpace(search) + "%"
+	return db.Where(
+		`(
+			me.title ILIKE ?
+			OR me.name_original ILIKE ?
+			OR me.name_en ILIKE ?
+			OR me.name_zh ILIKE ?
+			OR CAST(me.title_aliases AS text) ILIKE ?
+		)`,
+		like,
+		like,
+		like,
+		like,
+		like,
+	)
+}
+
+func applyMediaSearchTextFilter(db *gorm.DB, search string) *gorm.DB {
+	like := "%" + strings.TrimSpace(search) + "%"
+	return db.Where("("+mediaSearchTextExpression("me")+") ILIKE ?", like)
+}
+
+func mediaSearchTextExpression(tableAlias string) string {
+	prefix := strings.TrimSpace(tableAlias)
+	if prefix != "" {
+		prefix += "."
+	}
+
+	return `
+		COALESCE(` + prefix + `title, '') || E'\n' ||
+		COALESCE(` + prefix + `name_original, '') || E'\n' ||
+		COALESCE(` + prefix + `name_en, '') || E'\n' ||
+		COALESCE(` + prefix + `name_zh, '') || E'\n' ||
+		COALESCE(` + prefix + `overview_original, '') || E'\n' ||
+		COALESCE(` + prefix + `overview_en, '') || E'\n' ||
+		COALESCE(` + prefix + `overview_zh, '') || E'\n' ||
+		COALESCE(` + prefix + `tagline, '') || E'\n' ||
+		COALESCE(CAST(` + prefix + `title_aliases AS text), '') || E'\n' ||
+		COALESCE(CAST(` + prefix + `cast_members AS text), '') || E'\n' ||
+		COALESCE(CAST(` + prefix + `director_names AS text), '') || E'\n' ||
+		COALESCE(CAST(` + prefix + `writer_names AS text), '') || E'\n' ||
+		COALESCE(CAST(` + prefix + `creator_names AS text), '') || E'\n' ||
+		COALESCE(CAST(` + prefix + `release_year AS text), '') || E'\n' ||
+		COALESCE(CAST(` + prefix + `attributes AS text), '')
+	`
+}
+
 func applyQualityFilter(db *gorm.DB, quality string) *gorm.DB {
 	switch quality {
 	case "3d":
@@ -46,7 +108,7 @@ func applyQualityFilter(db *gorm.DB, quality string) *gorm.DB {
 		)
 	case "dolby_vision":
 		return db.Where(
-			"me.attributes::text ILIKE ? OR me.title ILIKE ? OR me.name_original ILIKE ?",
+			"(me.attributes::text ILIKE ? OR me.title ILIKE ? OR me.name_original ILIKE ?)",
 			"%dolby vision%",
 			"%dolby vision%",
 			"%dolby vision%",
@@ -120,11 +182,13 @@ func applyLanguageFilter(db *gorm.DB, language string) *gorm.DB {
 	}
 
 	return db.Where(
-		`EXISTS (
-			SELECT 1
-			FROM jsonb_array_elements_text(coalesce(me.languages, '[]'::jsonb)) AS language_item(value)
-			WHERE lower(language_item.value) IN ?
-		) OR lower(CAST(me.original_language AS text)) IN ?`,
+		`(
+			EXISTS (
+				SELECT 1
+				FROM jsonb_array_elements_text(coalesce(me.languages, '[]'::jsonb)) AS language_item(value)
+				WHERE lower(language_item.value) IN ?
+			) OR lower(CAST(me.original_language AS text)) IN ?
+		)`,
 		patterns,
 		patterns,
 	)

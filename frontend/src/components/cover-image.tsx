@@ -2,6 +2,7 @@
 
 import { Image, type ImageProps } from "@mantine/core";
 import { useEffect, useMemo, useState } from "react";
+import { getAuthHeaders } from "@/lib/api";
 
 const COVER_RETRY_INTERVAL_MS = 1000;
 
@@ -38,7 +39,9 @@ export function CoverImage({ src, autoRetry = true, alt = "", ...rest }: CoverIm
       try {
         const response = await fetch(withQueryValue(source, "__cover_probe", String(Date.now())), {
           method: "HEAD",
-          cache: "no-store"
+          cache: "no-store",
+          credentials: "include",
+          headers: getAuthHeaders()
         });
         if (!active) return;
 

@@ -16,8 +16,7 @@ import (
 
 type Params struct {
 	fx.In
-	Query lazy.Lazy[*dao.Query]
-	// PgxPool  lazy.Lazy[*pgxpool.Pool]
+	Query    lazy.Lazy[*dao.Query]
 	Handlers []lazy.Lazy[handler.Handler] `group:"queue_handlers"`
 	Logger   *zap.SugaredLogger
 }
@@ -58,10 +57,6 @@ func New(p Params) Result {
 					startedAt := time.Now()
 					logger.Named("queue").Infow("starting queue server worker")
 
-					// pool, err := p.PgxPool.Get()
-					// if err != nil {
-					// 	return err
-					// }
 					query, err := p.Query.Get()
 					if err != nil {
 						stateMu.Lock()
@@ -88,9 +83,8 @@ func New(p Params) Result {
 						handlers = append(handlers, h)
 					}
 					srv := server{
-						stopped: localStopped,
-						query:   query,
-						// pool:       pool,
+						stopped:                    localStopped,
+						query:                      query,
 						handlers:                   handlers,
 						cleanupHour:                2,
 						cleanupCompletedMaxRecords: perf.CleanupCompletedMaxRecords,

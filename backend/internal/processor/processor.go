@@ -87,16 +87,16 @@ func (c *processor) Process(ctx context.Context, params MessageParams) error {
 		return tcErr
 	}
 
+	torrentIndexByInfoHash := make(map[protocol.ID]int, len(searchResult.Torrents))
+	for i, t := range searchResult.Torrents {
+		torrentIndexByInfoHash[t.InfoHash] = i
+	}
 	for _, tc := range tcResult.Items {
-		for ti, t := range searchResult.Torrents {
-			if t.InfoHash == tc.InfoHash {
-				searchResult.Torrents[ti].Contents = append(
-					searchResult.Torrents[ti].Contents,
-					tc.TorrentContent,
-				)
-
-				break
-			}
+		if ti, ok := torrentIndexByInfoHash[tc.InfoHash]; ok {
+			searchResult.Torrents[ti].Contents = append(
+				searchResult.Torrents[ti].Contents,
+				tc.TorrentContent,
+			)
 		}
 	}
 

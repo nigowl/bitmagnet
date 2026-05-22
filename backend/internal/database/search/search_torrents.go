@@ -57,21 +57,27 @@ func (s search) TorrentsWithMissingInfoHashes(
 		return TorrentsWithMissingInfoHashesResult{}, searchErr
 	}
 
-	torrents := make([]model.Torrent, 0, len(searchResult.Items))
-	missingInfoHashes := make([]protocol.ID, 0, len(infoHashes)-len(searchResult.Items))
-	foundInfoHashes := make(map[protocol.ID]struct{}, len(searchResult.Items))
-nextInfoHash:
-	for _, h := range infoHashes {
-		for _, t := range searchResult.Items {
-			if t.InfoHash == h {
-				if _, ok := foundInfoHashes[h]; ok {
-					continue nextInfoHash
-				}
-				foundInfoHashes[h] = struct{}{}
-				torrents = append(torrents, t)
-				continue nextInfoHash
-			}
+	torrentsByInfoHash := make(map[protocol.ID]model.Torrent, len(searchResult.Items))
+	for _, t := range searchResult.Items {
+		if _, ok := torrentsByInfoHash[t.InfoHash]; !ok {
+			torrentsByInfoHash[t.InfoHash] = t
 		}
+	}
+
+	torrents := make([]model.Torrent, 0, len(torrentsByInfoHash))
+	missingInfoHashes := make([]protocol.ID, 0, max(0, len(infoHashes)-len(torrentsByInfoHash)))
+	seenInfoHashes := make(map[protocol.ID]struct{}, len(infoHashes))
+	for _, h := range infoHashes {
+		if _, ok := seenInfoHashes[h]; ok {
+			continue
+		}
+		seenInfoHashes[h] = struct{}{}
+
+		if t, ok := torrentsByInfoHash[h]; ok {
+			torrents = append(torrents, t)
+			continue
+		}
+
 		missingInfoHashes = append(missingInfoHashes, h)
 	}
 

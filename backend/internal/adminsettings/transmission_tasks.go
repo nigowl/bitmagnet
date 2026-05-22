@@ -2,59 +2,11 @@ package adminsettings
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 )
-
-type transmissionTorrentRequest struct {
-	Method    string                         `json:"method"`
-	Arguments transmissionTorrentRequestArgs `json:"arguments,omitempty"`
-}
-
-type transmissionTorrentRequestArgs struct {
-	Fields          []string `json:"fields,omitempty"`
-	IDs             []int64  `json:"ids,omitempty"`
-	DeleteLocalData *bool    `json:"delete-local-data,omitempty"`
-}
-
-type transmissionTorrentResponse struct {
-	Result    string                             `json:"result"`
-	Arguments transmissionTorrentResponsePayload `json:"arguments"`
-}
-
-type transmissionTorrentResponsePayload struct {
-	Torrents []transmissionTorrentItem `json:"torrents"`
-}
-
-type transmissionTorrentItem struct {
-	ID            int64   `json:"id"`
-	HashString    string  `json:"hashString"`
-	Name          string  `json:"name"`
-	Status        int     `json:"status"`
-	Error         int     `json:"error"`
-	PercentDone   float64 `json:"percentDone"`
-	RateDownload  int64   `json:"rateDownload"`
-	RateUpload    int64   `json:"rateUpload"`
-	LeftUntilDone int64   `json:"leftUntilDone"`
-	SizeWhenDone  int64   `json:"sizeWhenDone"`
-	AddedDate     int64   `json:"addedDate"`
-	ActivityDate  int64   `json:"activityDate"`
-	IsFinished    bool    `json:"isFinished"`
-	DownloadDir   string  `json:"downloadDir"`
-	ErrorString   string  `json:"errorString"`
-}
-
-type transmissionSessionResponse struct {
-	Result    string                             `json:"result"`
-	Arguments transmissionSessionResponsePayload `json:"arguments"`
-}
-
-type transmissionSessionResponsePayload struct {
-	DownloadDirFreeSpace int64 `json:"download-dir-free-space"`
-}
 
 func (s *service) ListPlayerTransmissionTasks(ctx context.Context) ([]TransmissionTask, error) {
 	cfg, err := s.loadTransmissionSettings(ctx)
@@ -343,118 +295,6 @@ func (s *service) runTransmissionCleanup(
 	result.RemovedCount = len(ids)
 	result.EstimatedFreeGain = estimatedGain
 	return result, nil
-}
-
-func (s *service) loadTransmissionTaskItems(
-	ctx context.Context,
-	cfg TransmissionSettings,
-) ([]transmissionTorrentItem, error) {
-	payload, _ := json.Marshal(transmissionTorrentRequest{
-		Method: "torrent-get",
-		Arguments: transmissionTorrentRequestArgs{
-			Fields: []string{
-				"id",
-				"hashString",
-				"name",
-				"status",
-				"error",
-				"percentDone",
-				"rateDownload",
-				"rateUpload",
-				"leftUntilDone",
-				"sizeWhenDone",
-				"addedDate",
-				"activityDate",
-				"isFinished",
-				"downloadDir",
-				"errorString",
-			},
-		},
-	})
-	responseBytes, err := callTransmissionRPCWithSession(
-		ctx,
-		cfg.URL,
-		cfg.Username,
-		cfg.Password,
-		cfg.InsecureTLS,
-		cfg.TimeoutSeconds,
-		payload,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	var response transmissionTorrentResponse
-	if err := json.Unmarshal(responseBytes, &response); err != nil {
-		return nil, err
-	}
-	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
-		return nil, fmt.Errorf("transmission torrent-get result=%q", strings.TrimSpace(response.Result))
-	}
-	return response.Arguments.Torrents, nil
-}
-
-func (s *service) loadTransmissionFreeSpace(ctx context.Context, cfg TransmissionSettings) (int64, error) {
-	payload, _ := json.Marshal(transmissionTorrentRequest{
-		Method: "session-get",
-	})
-	responseBytes, err := callTransmissionRPCWithSession(
-		ctx,
-		cfg.URL,
-		cfg.Username,
-		cfg.Password,
-		cfg.InsecureTLS,
-		cfg.TimeoutSeconds,
-		payload,
-	)
-	if err != nil {
-		return 0, err
-	}
-	var response transmissionSessionResponse
-	if err := json.Unmarshal(responseBytes, &response); err != nil {
-		return 0, err
-	}
-	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
-		return 0, fmt.Errorf("transmission session-get result=%q", strings.TrimSpace(response.Result))
-	}
-	return response.Arguments.DownloadDirFreeSpace, nil
-}
-
-func (s *service) removeTransmissionTasks(
-	ctx context.Context,
-	cfg TransmissionSettings,
-	ids []int64,
-) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	payload, _ := json.Marshal(transmissionTorrentRequest{
-		Method: "torrent-remove",
-		Arguments: transmissionTorrentRequestArgs{
-			IDs:             ids,
-			DeleteLocalData: boolPtr(true),
-		},
-	})
-	responseBytes, err := callTransmissionRPCWithSession(
-		ctx,
-		cfg.URL,
-		cfg.Username,
-		cfg.Password,
-		cfg.InsecureTLS,
-		cfg.TimeoutSeconds,
-		payload,
-	)
-	if err != nil {
-		return err
-	}
-	var response transmissionTorrentResponse
-	if err := json.Unmarshal(responseBytes, &response); err != nil {
-		return err
-	}
-	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
-		return fmt.Errorf("transmission torrent-remove result=%q", strings.TrimSpace(response.Result))
-	}
-	return nil
 }
 
 func (s *service) loadTransmissionSettings(ctx context.Context) (TransmissionSettings, error) {

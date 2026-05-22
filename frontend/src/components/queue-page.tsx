@@ -1,109 +1,52 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActionIcon,
-  Badge,
   Button,
   Card,
-  Checkbox,
   Group,
   Loader,
   MultiSelect,
-  NumberInput,
   Pagination,
-  ScrollArea,
   Select,
   SimpleGrid,
   Stack,
-  Table,
   Text,
   Tooltip,
   Title
 } from "@mantine/core";
-import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { CalendarSync, DatabaseBackup, Filter, LogIn, RotateCcw, Settings2, Trash2 } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
-import { apiRequest, graphqlRequest } from "@/lib/api";
+import { graphqlRequest } from "@/lib/api";
 import {
-  QUEUE_ENQUEUE_REPROCESS_BATCH_MUTATION,
   QUEUE_JOBS_QUERY,
-  QUEUE_METRICS_QUERY,
-  QUEUE_PURGE_JOBS_MUTATION
+  QUEUE_METRICS_QUERY
 } from "@/lib/graphql";
-import { contentTypes, queueOrderFields, queueStatuses } from "@/lib/domain";
+import { queueOrderFields, queueStatuses } from "@/lib/domain";
 import { useI18n } from "@/languages/provider";
+import {
+  ALL_FILTER_OPTION,
+  CHART_LINE_COLOR,
+  CHART_TEXT_COLOR,
+  CHART_TOOLTIP_BACKGROUND,
+  KNOWN_QUEUE_NAMES,
+  METRICS_CHART_PALETTE,
+  type QueueJobsResponse,
+  type QueueMetricsResponse,
+  normalizeFilterSelection
+} from "./queue-page.helpers";
+import {
+  openQueueCleanupSettingsModal,
+  openQueueEnqueueModal,
+  openQueuePurgeModal
+} from "./queue-page.modals";
+import { QueueJobsTable } from "./queue-page.table";
 
 const ECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
-const allFilterOption = "__all__";
-const CHART_TEXT_COLOR = "#a9b9d2";
-const CHART_LINE_COLOR = "rgba(169,185,210,0.2)";
-const CHART_TOOLTIP_BACKGROUND = "rgba(23,29,39,0.96)";
-const METRICS_CHART_PALETTE = ["#6cb6ff", "#59c9a5", "#f2cc60", "#ff9233", "#ff7b72"];
-
-const knownQueueNames = [
-  "process_torrent",
-  "process_torrent_batch",
-  "refresh_media_metadata",
-  "backfill_cover_cache"
-] as const;
-
-type QueueJob = {
-  id: string;
-  queue: string;
-  status: string;
-  payload: string;
-  priority: number;
-  retries: number;
-  maxRetries: number;
-  runAfter: string;
-  ranAt?: string | null;
-  error?: string | null;
-  createdAt: string;
-};
-
-type QueueJobsResponse = {
-  queue: {
-    jobs: {
-      totalCount: number;
-      hasNextPage?: boolean | null;
-      items: QueueJob[];
-      aggregations: {
-        queue: Array<{ value: string; label: string; count: number }>;
-        status: Array<{ value: string; label: string; count: number }>;
-      };
-    };
-  };
-};
-
-type QueueMetricsResponse = {
-  queue: {
-    metrics: {
-      buckets: Array<{
-        queue: string;
-        status: string;
-        createdAtBucket: string;
-        count: number;
-      }>;
-    };
-  };
-};
-
-type AdminQueueSettings = {
-  cleanupCompletedMaxRecords: number;
-  cleanupCompletedMaxAgeDays: number;
-};
-
-type AdminSettingsResponse = {
-  settings: {
-    performance: {
-      queue: AdminQueueSettings;
-    };
-  };
-};
 
 export function QueuePage() {
   const { user, isAdmin, loading: authLoading } = useAuth();
@@ -113,8 +56,8 @@ export function QueuePage() {
   const [limit, setLimit] = useState(20);
   const [orderBy, setOrderBy] = useState<(typeof queueOrderFields)[number]>("ran_at");
   const [descending, setDescending] = useState(true);
-  const [queues, setQueues] = useState<string[]>([allFilterOption]);
-  const [statuses, setStatuses] = useState<string[]>([allFilterOption]);
+  const [queues, setQueues] = useState<string[]>([ALL_FILTER_OPTION]);
+  const [statuses, setStatuses] = useState<string[]>([ALL_FILTER_OPTION]);
   const [result, setResult] = useState<QueueJobsResponse["queue"]["jobs"] | null>(null);
   const [metricsBuckets, setMetricsBuckets] = useState<QueueMetricsResponse["queue"]["metrics"]["buckets"]>([]);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
@@ -171,11 +114,11 @@ export function QueuePage() {
   }, [limit, result?.totalCount]);
 
   const activeQueueFilter = useMemo(
-    () => (queues.includes(allFilterOption) ? [] : queues),
+    () => (queues.includes(ALL_FILTER_OPTION) ? [] : queues),
     [queues]
   );
   const activeStatusFilter = useMemo(
-    () => (statuses.includes(allFilterOption) ? [] : statuses),
+    () => (statuses.includes(ALL_FILTER_OPTION) ? [] : statuses),
     [statuses]
   );
 
@@ -192,7 +135,7 @@ export function QueuePage() {
       label: normalizeQueueLabel(item.value, item.label),
       count: item.count
     }));
-    const knownMissing = knownQueueNames
+    const knownMissing = KNOWN_QUEUE_NAMES
       .filter((name) => !aggregated.some((item) => item.value === name))
       .map((name) => ({
         value: name,
@@ -329,250 +272,9 @@ export function QueuePage() {
     );
   }
 
-  const openPurgeModal = () => {
-    const PurgeForm = () => {
-      const [taskQueue, setTaskQueue] = useState<string>(allFilterOption);
-      const [submitting, setSubmitting] = useState(false);
-      const queueOptions = [
-        { value: allFilterOption, label: t("queue.purgeAllTypes") },
-        ...queueAggregationItems.map((item) => ({ value: item.value, label: item.label }))
-      ];
-
-      const submit = async () => {
-        setSubmitting(true);
-        try {
-          await graphqlRequest(QUEUE_PURGE_JOBS_MUTATION, {
-            input: {
-              queues: taskQueue === allFilterOption ? undefined : [taskQueue]
-            }
-          });
-          notifications.show({ color: "green", message: t("queue.purgeDone") });
-          modals.closeAll();
-          void load();
-        } catch (error) {
-          notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
-        } finally {
-          setSubmitting(false);
-        }
-      };
-
-      return (
-        <Stack>
-          <Text size="sm">{t("queue.purgeHint")}</Text>
-          <Select
-            label={t("queue.form.taskType")}
-            allowDeselect={false}
-            value={taskQueue}
-            data={queueOptions}
-            onChange={(value) => setTaskQueue(value || allFilterOption)}
-          />
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => modals.closeAll()}>
-              {t("common.cancel")}
-            </Button>
-            <Button color="red" onClick={() => void submit()} loading={submitting}>
-              {t("queue.purge")}
-            </Button>
-          </Group>
-        </Stack>
-      );
-    };
-
-    modals.open({
-      title: t("queue.purgeTitle"),
-      children: <PurgeForm />,
-      size: 560
-    });
-  };
-
-  const openCleanupSettingsModal = () => {
-    const CleanupSettingsForm = () => {
-      const [loadingSettings, setLoadingSettings] = useState(true);
-      const [savingSettings, setSavingSettings] = useState(false);
-      const [maxRecords, setMaxRecords] = useState<number | "">(5000);
-      const [maxAgeDays, setMaxAgeDays] = useState<number | "">(7);
-
-      useEffect(() => {
-        let mounted = true;
-        const loadSettings = async () => {
-          setLoadingSettings(true);
-          try {
-            const data = await apiRequest<AdminSettingsResponse>("/api/admin/settings");
-            if (!mounted) return;
-            setMaxRecords(data.settings.performance.queue.cleanupCompletedMaxRecords || 5000);
-            setMaxAgeDays(data.settings.performance.queue.cleanupCompletedMaxAgeDays || 7);
-          } catch (error) {
-            if (!mounted) return;
-            notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
-          } finally {
-            if (mounted) setLoadingSettings(false);
-          }
-        };
-        void loadSettings();
-        return () => {
-          mounted = false;
-        };
-      }, []);
-
-      const submit = async () => {
-        if (typeof maxRecords !== "number" || typeof maxAgeDays !== "number") {
-          notifications.show({ color: "red", message: t("queue.cleanupSettings.invalidInput") });
-          return;
-        }
-        setSavingSettings(true);
-        try {
-          await apiRequest<AdminSettingsResponse>("/api/admin/settings", {
-            method: "PUT",
-            data: {
-              performance: {
-                queue: {
-                  cleanupCompletedMaxRecords: maxRecords,
-                  cleanupCompletedMaxAgeDays: maxAgeDays
-                }
-              }
-            }
-          });
-          notifications.show({ color: "green", message: t("queue.cleanupSettings.saved") });
-          modals.closeAll();
-        } catch (error) {
-          notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
-        } finally {
-          setSavingSettings(false);
-        }
-      };
-
-      return (
-        <Stack>
-          <Text c="dimmed" size="sm">
-            {t("queue.cleanupSettings.hint")}
-          </Text>
-          {loadingSettings ? (
-            <Group justify="center" py="md">
-              <Loader size="sm" />
-            </Group>
-          ) : (
-            <SimpleGrid cols={{ base: 1, md: 2 }}>
-              <NumberInput
-                label={t("queue.cleanupSettings.maxRecords")}
-                min={100}
-                max={1000000}
-                value={maxRecords}
-                onChange={(value) => setMaxRecords(value === "" ? "" : Number(value))}
-              />
-              <NumberInput
-                label={t("queue.cleanupSettings.maxAgeDays")}
-                min={1}
-                max={3650}
-                value={maxAgeDays}
-                onChange={(value) => setMaxAgeDays(value === "" ? "" : Number(value))}
-              />
-            </SimpleGrid>
-          )}
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => modals.closeAll()}>
-              {t("common.cancel")}
-            </Button>
-            <Button onClick={() => void submit()} loading={savingSettings} disabled={loadingSettings}>
-              {t("settings.save")}
-            </Button>
-          </Group>
-        </Stack>
-      );
-    };
-
-    modals.open({
-      title: t("queue.cleanupSettings.title"),
-      children: <CleanupSettingsForm />,
-      size: 560
-    });
-  };
-
-  const openEnqueueModal = () => {
-    const EnqueueForm = () => {
-      const [purge, setPurge] = useState(true);
-      const [classifierRematch, setClassifierRematch] = useState(false);
-      const [apisDisabled, setApisDisabled] = useState(true);
-      const [localSearchDisabled, setLocalSearchDisabled] = useState(true);
-      const [orphans, setOrphans] = useState(false);
-      const [batchSize, setBatchSize] = useState<number | "">("");
-      const [chunkSize, setChunkSize] = useState<number | "">("");
-      const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-
-      const submit = async () => {
-        try {
-          await graphqlRequest(QUEUE_ENQUEUE_REPROCESS_BATCH_MUTATION, {
-            input: {
-              purge,
-              classifierRematch,
-              apisDisabled,
-              localSearchDisabled,
-              orphans: orphans || undefined,
-              batchSize: typeof batchSize === "number" ? batchSize : undefined,
-              chunkSize: typeof chunkSize === "number" ? chunkSize : undefined,
-              contentTypes: selectedTypes.length ? selectedTypes : undefined
-            }
-          });
-          modals.closeAll();
-          notifications.show({ color: "green", message: t("queue.enqueueDone") });
-          void load();
-        } catch (error) {
-          notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
-        }
-      };
-
-      return (
-        <Stack>
-          <Text c="dimmed" size="sm">
-            {t("queue.form.taskDescriptions.reprocessBatch")}
-          </Text>
-
-          <Checkbox label={t("queue.form.purge")} checked={purge} onChange={(e) => setPurge(e.currentTarget.checked)} />
-
-          <SimpleGrid cols={{ base: 1, md: 2 }}>
-            <Checkbox label={t("queue.form.classifierRematch")} checked={classifierRematch} onChange={(e) => setClassifierRematch(e.currentTarget.checked)} />
-            <Checkbox label={t("queue.form.apisDisabled")} checked={apisDisabled} onChange={(e) => setApisDisabled(e.currentTarget.checked)} />
-            <Checkbox label={t("queue.form.localSearchDisabled")} checked={localSearchDisabled} onChange={(e) => setLocalSearchDisabled(e.currentTarget.checked)} />
-            <Checkbox label={t("queue.form.orphans")} checked={orphans} onChange={(e) => setOrphans(e.currentTarget.checked)} />
-          </SimpleGrid>
-          <SimpleGrid cols={{ base: 1, md: 2 }}>
-            <NumberInput label={t("queue.form.batchSize")} min={1} value={batchSize} onChange={(value) => setBatchSize(value === "" ? "" : Number(value))} />
-            <NumberInput label={t("queue.form.chunkSize")} min={1} value={chunkSize} onChange={(value) => setChunkSize(value === "" ? "" : Number(value))} />
-          </SimpleGrid>
-          <MultiSelect
-            label={t("queue.form.contentTypes")}
-            data={contentTypes.map((item) => ({ value: item, label: t(`contentTypes.${item}`) }))}
-            value={selectedTypes}
-            onChange={setSelectedTypes}
-          />
-          <Group justify="flex-end" className="modal-footer">
-            <Button onClick={() => modals.closeAll()} variant="default">
-              {t("common.cancel")}
-            </Button>
-            <Button onClick={() => void submit()}>{t("queue.enqueue")}</Button>
-          </Group>
-        </Stack>
-      );
-    };
-
-    modals.open({
-      title: t("queue.enqueueTitle"),
-      children: <EnqueueForm />,
-      size: 680
-    });
-  };
-
-  const normalizeFilterSelection = (values: string[]): string[] => {
-    if (values.length === 0) {
-      return [allFilterOption];
-    }
-    if (values.includes(allFilterOption) && values.length > 1) {
-      return values.filter((value) => value !== allFilterOption);
-    }
-    if (values.length === 1 && values[0] === allFilterOption) {
-      return [allFilterOption];
-    }
-    return values;
-  };
+  const openPurgeModal = () => openQueuePurgeModal({ t, reload: load, queueAggregationItems });
+  const openCleanupSettingsModal = () => openQueueCleanupSettingsModal(t);
+  const openEnqueueModal = () => openQueueEnqueueModal({ t, reload: load });
 
   return (
     <Stack gap="md">
@@ -650,7 +352,7 @@ export function QueuePage() {
           <MultiSelect
             label={t("queue.queueFilter")}
             data={[
-              { value: allFilterOption, label: `${t("queue.all")} (${result?.totalCount ?? 0})` },
+              { value: ALL_FILTER_OPTION, label: `${t("queue.all")} (${result?.totalCount ?? 0})` },
               ...queueAggregationItems.map((item) => ({
                 value: item.value,
                 label: `${item.label} (${item.count})`
@@ -667,7 +369,7 @@ export function QueuePage() {
           <MultiSelect
             label={t("queue.statusFilter")}
             data={[
-              { value: allFilterOption, label: `${t("queue.all")} (${result?.totalCount ?? 0})` },
+              { value: ALL_FILTER_OPTION, label: `${t("queue.all")} (${result?.totalCount ?? 0})` },
               ...queueStatuses.map((status) => ({
                 value: status,
                 label: `${t(`queue.statusValues.${status}`)} (${statusCountMap.get(status) ?? 0})`
@@ -734,103 +436,18 @@ export function QueuePage() {
           </Group>
         </Group>
 
-        <ScrollArea>
-          <Table striped highlightOnHover withTableBorder>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>{t("queue.table.id")}</Table.Th>
-                <Table.Th>{t("queue.table.queue")}</Table.Th>
-                <Table.Th>{t("queue.table.status")}</Table.Th>
-                <Table.Th>{t("queue.table.priority")}</Table.Th>
-                <Table.Th>{t("queue.table.retries")}</Table.Th>
-                <Table.Th>{t("queue.table.created")}</Table.Th>
-                <Table.Th>{t("queue.table.ran")}</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {loading ? (
-                <Table.Tr>
-                  <Table.Td colSpan={7}>
-                    <Group justify="center" py="md">
-                      <Loader size="sm" />
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
-              ) : (result?.items.length || 0) === 0 ? (
-                <Table.Tr>
-                  <Table.Td colSpan={7}>
-                    <Text c="dimmed" ta="center" py="md">
-                      {t("queue.noJobs")}
-                    </Text>
-                  </Table.Td>
-                </Table.Tr>
-              ) : (
-                (result?.items || []).map((job) => (
-                  <Fragment key={job.id}>
-                    <Table.Tr
-                      style={{ cursor: "pointer" }}
-                      onClick={() => {
-                        setExpandedJobId((current) => (current === job.id ? null : job.id));
-                      }}
-                    >
-                      <Table.Td>{job.id}</Table.Td>
-                      <Table.Td>
-                        <Stack gap={2}>
-                          <Text size="sm">{normalizeQueueLabel(job.queue)}</Text>
-                          <Text size="xs" c="dimmed">{job.queue}</Text>
-                        </Stack>
-                      </Table.Td>
-                      <Table.Td>
-                        <Badge color={job.status === "failed" ? "red" : job.status === "processed" ? "green" : "yellow"}>
-                          {renderStatusLabel(job.status)}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td>{job.priority}</Table.Td>
-                      <Table.Td>
-                        {job.retries}/{job.maxRetries}
-                      </Table.Td>
-                      <Table.Td>{new Date(job.createdAt).toLocaleString()}</Table.Td>
-                      <Table.Td>{job.ranAt ? new Date(job.ranAt).toLocaleString() : "-"}</Table.Td>
-                    </Table.Tr>
-                    {expandedJobId === job.id ? (
-                      <Table.Tr>
-                        <Table.Td colSpan={7}>
-                          <Card className="queue-detail-panel" radius="md" p="sm">
-                            <Stack gap="sm">
-                              <Text fw={600}>{t("queue.details.title")}</Text>
-                              <SimpleGrid cols={{ base: 1, md: 2 }}>
-                                <div>
-                                  <Text c="dimmed" size="xs">{t("queue.details.queueRaw")}</Text>
-                                  <Text size="sm">{job.queue}</Text>
-                                </div>
-                                <div>
-                                  <Text c="dimmed" size="xs">{t("queue.details.nextRun")}</Text>
-                                  <Text size="sm">{new Date(job.runAfter).toLocaleString()}</Text>
-                                </div>
-                              </SimpleGrid>
-                              <div>
-                                <Text c="dimmed" size="xs">{t("queue.details.payload")}</Text>
-                                <ScrollArea.Autosize mah={180} type="auto">
-                                  <Text ff="monospace" size="xs">{formatPayload(job.payload)}</Text>
-                                </ScrollArea.Autosize>
-                              </div>
-                              <div>
-                                <Text c="dimmed" size="xs">{t("queue.details.error")}</Text>
-                                <ScrollArea.Autosize mah={140} type="auto">
-                                  <Text ff="monospace" size="xs">{job.error || "-"}</Text>
-                                </ScrollArea.Autosize>
-                              </div>
-                            </Stack>
-                          </Card>
-                        </Table.Td>
-                      </Table.Tr>
-                    ) : null}
-                  </Fragment>
-                ))
-              )}
-            </Table.Tbody>
-          </Table>
-        </ScrollArea>
+        <QueueJobsTable
+          t={t}
+          loading={loading}
+          jobs={result?.items || []}
+          expandedJobId={expandedJobId}
+          formatPayload={formatPayload}
+          normalizeQueueLabel={normalizeQueueLabel}
+          renderStatusLabel={renderStatusLabel}
+          onToggleExpandedJob={(jobId) => {
+            setExpandedJobId((current) => (current === jobId ? null : jobId));
+          }}
+        />
       </Card>
 
       <Group justify="space-between">

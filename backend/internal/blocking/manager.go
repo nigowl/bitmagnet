@@ -1,8 +1,8 @@
 package blocking
 
 import (
+	"bytes"
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"maps"
@@ -13,8 +13,8 @@ import (
 	"github.com/nigowl/bitmagnet/internal/bloom"
 	"github.com/nigowl/bitmagnet/internal/model"
 	"github.com/nigowl/bitmagnet/internal/protocol"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type Manager interface {
@@ -25,7 +25,7 @@ type Manager interface {
 
 type manager struct {
 	mutex         sync.Mutex
-	pool          *pgxpool.Pool
+	db            *gorm.DB
 	buffer        map[protocol.ID]struct{}
 	filter        *bloom.StableBloomFilter
 	maxBufferSize int
@@ -93,107 +93,118 @@ const blockedTorrentsBloomFilterKey = "blocked_torrents"
 func (m *manager) flush(ctx context.Context) error {
 	hashes := slices.Collect(maps.Keys(m.buffer))
 
-	tx, err := m.pool.BeginTx(ctx, pgx.TxOptions{
-		AccessMode: pgx.ReadWrite,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	defer func() {
-		_ = tx.Rollback(ctx)
-	}()
-
-	if len(hashes) > 0 {
-		_, err = tx.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE info_hash = any($1)", model.TableNameTorrent), hashes)
-		if err != nil {
-			return fmt.Errorf("failed to delete from torrents table: %w", err)
-		}
-	}
-
 	bf := bloom.NewDefaultStableBloomFilter()
-
-	lobs := tx.LargeObjects()
-
-	found := false
-
-	var oid uint32
-
-	var nullOid sql.NullInt32
-
-	err = tx.QueryRow(ctx, fmt.Sprintf("SELECT oid FROM %s WHERE key = $1", model.TableNameBloomFilter), blockedTorrentsBloomFilterKey).
-		Scan(&nullOid)
-	if err == nil {
-		found = true
-
-		if nullOid.Valid {
-			oid = uint32(nullOid.Int32)
-
-			obj, err := lobs.Open(ctx, oid, pgx.LargeObjectModeRead)
-			if err != nil {
-				return fmt.Errorf("failed to open large object for reading: %w", err)
-			}
-
-			_, err = bf.ReadFrom(obj)
-			obj.Close()
-
-			if err != nil {
-				return fmt.Errorf("failed to read current bloom filter: %w", err)
-			}
-		}
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("failed to get bloom filter object ID: %w", err)
-	}
-
-	if oid == 0 {
-		// Create a new Large Object.
-		// We pass 0, so the DB can pick an available oid for us.
-		oid, err = lobs.Create(ctx, 0)
-		if err != nil {
-			return fmt.Errorf("failed to create large object: %w", err)
-		}
-	}
-
-	for _, hash := range hashes {
-		bf.Add(hash[:])
-	}
-
-	obj, err := lobs.Open(ctx, oid, pgx.LargeObjectModeWrite)
-	if err != nil {
-		return fmt.Errorf("failed to open large object for writing: %w", err)
-	}
-
-	_, err = bf.WriteTo(obj)
-	if err != nil {
-		return fmt.Errorf("failed to write to large object: %w", err)
-	}
-
 	now := time.Now()
-	if !found {
-		_, err = tx.Exec(ctx,
-			fmt.Sprintf("INSERT INTO %s (key, oid, created_at, updated_at) VALUES ($1, $2, $3, $4)", model.TableNameBloomFilter),
-			blockedTorrentsBloomFilterKey, oid, now, now)
-		if err != nil {
-			return fmt.Errorf("failed to save new bloom filter record: %w", err)
+
+	if err := m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if len(hashes) > 0 {
+			if err := tx.Where("info_hash IN ?", hashes).Delete(&model.Torrent{}).Error; err != nil {
+				return fmt.Errorf("failed to delete from torrents table: %w", err)
+			}
 		}
-	} else if !nullOid.Valid {
-		_, err = tx.Exec(ctx,
-			fmt.Sprintf("UPDATE %s SET oid = $1, updated_at = $2 WHERE key = $3", model.TableNameBloomFilter),
-			oid, now, blockedTorrentsBloomFilterKey)
+
+		record, found, err := m.findBloomFilter(ctx, tx)
 		if err != nil {
+			return err
+		}
+
+		if record.Oid.Valid {
+			data, readErr := m.readLargeObject(ctx, tx, record.Oid.Int32)
+			if readErr != nil {
+				return readErr
+			}
+			if _, readErr = bf.ReadFrom(bytes.NewReader(data)); readErr != nil {
+				return fmt.Errorf("failed to read current bloom filter: %w", readErr)
+			}
+		}
+
+		for _, hash := range hashes {
+			bf.Add(hash[:])
+		}
+
+		if !record.Oid.Valid {
+			oid, createErr := m.createLargeObject(ctx, tx)
+			if createErr != nil {
+				return createErr
+			}
+			record.Oid.Int32 = oid
+			record.Oid.Valid = true
+		}
+
+		var encoded bytes.Buffer
+		if _, writeErr := bf.WriteTo(&encoded); writeErr != nil {
+			return fmt.Errorf("failed to serialize bloom filter: %w", writeErr)
+		}
+
+		if writeErr := m.writeLargeObject(ctx, tx, record.Oid.Int32, encoded.Bytes()); writeErr != nil {
+			return writeErr
+		}
+
+		record.UpdatedAt = now
+		if !found {
+			record.Key = blockedTorrentsBloomFilterKey
+			record.CreatedAt = now
+			if err := tx.Create(&record).Error; err != nil {
+				return fmt.Errorf("failed to save new bloom filter record: %w", err)
+			}
+			return nil
+		}
+
+		if err := tx.Save(&record).Error; err != nil {
 			return fmt.Errorf("failed to update bloom filter record: %w", err)
 		}
-	}
 
-	err = tx.Commit(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	m.buffer = make(map[protocol.ID]struct{})
 	m.filter = bf
 	m.lastFlushedAt = now
 
+	return nil
+}
+
+func (m *manager) findBloomFilter(
+	ctx context.Context,
+	tx *gorm.DB,
+) (record model.BloomFilter, found bool, err error) {
+	err = tx.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("key = ?", blockedTorrentsBloomFilterKey).
+		First(&record).
+		Error
+	if err == nil {
+		return record, true, nil
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return model.BloomFilter{}, false, nil
+	}
+
+	return model.BloomFilter{}, false, fmt.Errorf("failed to get bloom filter object ID: %w", err)
+}
+
+func (m *manager) createLargeObject(ctx context.Context, tx *gorm.DB) (int32, error) {
+	var oid int32
+	if err := tx.WithContext(ctx).Raw("SELECT lo_create(0)").Row().Scan(&oid); err != nil {
+		return 0, fmt.Errorf("failed to create large object: %w", err)
+	}
+	return oid, nil
+}
+
+func (m *manager) readLargeObject(ctx context.Context, tx *gorm.DB, oid int32) ([]byte, error) {
+	var data []byte
+	if err := tx.WithContext(ctx).Raw("SELECT lo_get(?)", oid).Row().Scan(&data); err != nil {
+		return nil, fmt.Errorf("failed to read large object: %w", err)
+	}
+	return data, nil
+}
+
+func (m *manager) writeLargeObject(ctx context.Context, tx *gorm.DB, oid int32, data []byte) error {
+	if err := tx.WithContext(ctx).Exec("SELECT lo_put(?, 0, ?)", oid, data).Error; err != nil {
+		return fmt.Errorf("failed to write large object: %w", err)
+	}
 	return nil
 }
 

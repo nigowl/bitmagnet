@@ -2,7 +2,6 @@ package importer
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"sync"
 	"time"
@@ -263,13 +262,10 @@ func createTorrentModel(info Info, item Item) model.Torrent {
 		FilesStatus: model.FilesStatusNoInfo,
 		Sources: []model.TorrentsTorrentSource{
 			{
-				InfoHash: item.InfoHash,
-				Source:   item.Source,
-				ImportID: model.NewNullString(info.ID),
-				PublishedAt: sql.NullTime{
-					Time:  item.PublishedAt,
-					Valid: !item.PublishedAt.IsZero(),
-				},
+				InfoHash:    item.InfoHash,
+				Source:      item.Source,
+				ImportID:    model.NewNullString(info.ID),
+				PublishedAt: model.NewNullTime(item.PublishedAt),
 			},
 		},
 	}

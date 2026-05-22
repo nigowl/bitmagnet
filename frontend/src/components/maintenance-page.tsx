@@ -10,106 +10,33 @@ import {
   Loader,
   NumberInput,
   Progress,
-  ScrollArea,
   Select,
   Stack,
-  Table,
   Tabs,
   Text,
   Tooltip,
   Title
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { LogIn, PlayCircle, RefreshCw, Trash2 } from "lucide-react";
+import { LogIn, PlayCircle, RefreshCw } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { apiRequest } from "@/lib/api";
 import { useTabsUnderline } from "@/lib/use-tabs-underline";
 import { useI18n } from "@/languages/provider";
-
-type MaintenanceTaskType = "fix_localized_metadata" | "fix_cover_cache";
-type MaintenanceTaskStatus = "pending" | "running" | "success" | "failed";
-
-type MaintenanceTask = {
-  id: string;
-  type: MaintenanceTaskType;
-  limit: number;
-  status: MaintenanceTaskStatus;
-  requested: number;
-  processed: number;
-  updated: number;
-  remaining: number;
-  failed: number;
-  message?: string;
-  error?: string;
-  logs?: string[];
-  createdAt: string;
-  startedAt?: string;
-  finishedAt?: string;
-  durationMs?: number;
-};
-
-type StartMaintenanceResponse = {
-  task: MaintenanceTask;
-};
-
-type TaskStatusResponse = {
-  task: MaintenanceTask;
-};
-
-type MaintenanceStatsResponse = {
-  stats: {
-    type: MaintenanceTaskType;
-    pending: number;
-  };
-};
-
-type TransmissionTaskItem = {
-  id: number;
-  hashString: string;
-  name: string;
-  status: number;
-  percentDone: number;
-  rateDownload: number;
-  rateUpload: number;
-  leftUntilDone: number;
-  sizeWhenDone: number;
-  addedAtUnix: number;
-  activityAtUnix: number;
-  isFinished: boolean;
-  downloadDir: string;
-  errorString: string;
-};
-
-type TransmissionTasksResponse = {
-  tasks: TransmissionTaskItem[];
-};
-
-type TransmissionCleanupResponse = {
-  result: {
-    success: boolean;
-    totalBefore: number;
-    removedCount: number;
-    removedIds: number[];
-    reasons: string[];
-    estimatedFreeGain: number;
-  };
-};
-
-type TransmissionDeleteTaskResponse = {
-  result: {
-    success: boolean;
-    id: number;
-  };
-};
-
-type AdminSettingsResponse = {
-  settings?: {
-    player?: {
-      enabled?: boolean;
-    };
-  };
-};
+import { MaintenanceTransmissionPanel } from "./maintenance-page.transmission";
+import type {
+  AdminSettingsResponse,
+  MaintenanceStatsResponse,
+  MaintenanceTask,
+  MaintenanceTaskType,
+  StartMaintenanceResponse,
+  TaskStatusResponse,
+  TransmissionCleanupResponse,
+  TransmissionDeleteTaskResponse,
+  TransmissionTaskItem,
+  TransmissionTasksResponse
+} from "./maintenance-page.types";
 
 export function MaintenancePage() {
   const { t } = useI18n();
@@ -510,133 +437,20 @@ export function MaintenancePage() {
 
           {playerEnabled ? (
             <Tabs.Panel value="transmission" pt="md">
-              <Stack gap="sm">
-                <Group justify="space-between" align="center" wrap="wrap">
-                  <Text size="sm" c="dimmed">{t("settings.playerTransmissionTasksHint")}</Text>
-                  <Group gap="xs">
-                    <Button
-                      size="xs"
-                      variant="default"
-                      loading={transmissionTasksLoading}
-                      onClick={() => void loadTransmissionTasks()}
-                    >
-                      {t("common.refresh")}
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="light"
-                      loading={transmissionCleanupRunning}
-                      onClick={() => void cleanupTransmissionTasks()}
-                    >
-                      {t("settings.playerTransmissionRunCleanup")}
-                    </Button>
-                  </Group>
-                </Group>
-
-                {transmissionTasksLoading ? (
-                  <Group justify="center" py="md">
-                    <Loader size="sm" />
-                  </Group>
-                ) : transmissionTasks.length === 0 ? (
-                  <Text size="sm" c="dimmed">{t("settings.playerTransmissionTasksEmpty")}</Text>
-                ) : (
-                  <ScrollArea type="auto" scrollbarSize={8}>
-                    <Table striped withTableBorder highlightOnHover miw={980}>
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th>{t("settings.playerTransmissionTaskId")}</Table.Th>
-                          <Table.Th>{t("settings.playerTransmissionTaskName")}</Table.Th>
-                          <Table.Th>{t("settings.playerTransmissionTaskStatus")}</Table.Th>
-                          <Table.Th>{t("settings.playerTransmissionTaskProgress")}</Table.Th>
-                          <Table.Th>{t("settings.playerTransmissionTaskSpeed")}</Table.Th>
-                          <Table.Th>{t("settings.playerTransmissionTaskUpdatedAt")}</Table.Th>
-                          <Table.Th>{t("settings.playerTransmissionTaskActions")}</Table.Th>
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
-                        {transmissionTasks.map((item) => (
-                          <Table.Tr key={item.id}>
-                            <Table.Td>{item.id}</Table.Td>
-                            <Table.Td>
-                              <Stack gap={2}>
-                                <Text size="sm" lineClamp={1} title={item.name}>{item.name || "-"}</Text>
-                                <Text size="xs" c="dimmed" ff="monospace" lineClamp={1} title={item.hashString}>{item.hashString || "-"}</Text>
-                              </Stack>
-                            </Table.Td>
-                            <Table.Td>{transmissionStatusLabel(item.status, t)}</Table.Td>
-                            <Table.Td>{(Math.max(0, Math.min(1, item.percentDone || 0)) * 100).toFixed(1)}%</Table.Td>
-                            <Table.Td>{formatRateCompact(item.rateDownload || 0)}</Table.Td>
-                            <Table.Td>{formatUnixDateTime(item.activityAtUnix || item.addedAtUnix)}</Table.Td>
-                            <Table.Td>
-                              <Tooltip label={t("settings.playerTransmissionTaskDelete")} withArrow>
-                                <ActionIcon
-                                  className="app-icon-btn"
-                                  variant="light"
-                                  color="red"
-                                  loading={Boolean(transmissionTaskDeleting[item.id])}
-                                  onClick={() => void deleteTransmissionTask(item.id)}
-                                  aria-label={t("settings.playerTransmissionTaskDelete")}
-                                >
-                                  <Trash2 size={14} />
-                                </ActionIcon>
-                              </Tooltip>
-                            </Table.Td>
-                          </Table.Tr>
-                        ))}
-                      </Table.Tbody>
-                    </Table>
-                  </ScrollArea>
-                )}
-              </Stack>
+              <MaintenanceTransmissionPanel
+                t={t}
+                tasks={transmissionTasks}
+                loading={transmissionTasksLoading}
+                cleanupRunning={transmissionCleanupRunning}
+                deleting={transmissionTaskDeleting}
+                onRefresh={() => void loadTransmissionTasks()}
+                onCleanup={() => void cleanupTransmissionTasks()}
+                onDelete={(taskId) => void deleteTransmissionTask(taskId)}
+              />
             </Tabs.Panel>
           ) : null}
         </Tabs>
       </Card>
     </Stack>
   );
-}
-
-function formatUnixDateTime(unixSeconds: number): string {
-  if (!Number.isFinite(unixSeconds) || unixSeconds <= 0) return "-";
-  const parsed = new Date(unixSeconds * 1000);
-  if (Number.isNaN(parsed.getTime())) return "-";
-  return parsed.toLocaleString();
-}
-
-function formatBytesCompact(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let size = value;
-  let unit = 0;
-  while (size >= 1024 && unit < units.length - 1) {
-    size /= 1024;
-    unit += 1;
-  }
-  const fixed = size >= 10 ? size.toFixed(0) : size.toFixed(1);
-  return `${fixed} ${units[unit]}`;
-}
-
-function formatRateCompact(value: number): string {
-  return `${formatBytesCompact(value)}/s`;
-}
-
-function transmissionStatusLabel(status: number, t: (key: string, ...args: unknown[]) => string): string {
-  switch (status) {
-    case 0:
-      return t("settings.playerTransmissionStatusStopped");
-    case 1:
-      return t("settings.playerTransmissionStatusCheckWait");
-    case 2:
-      return t("settings.playerTransmissionStatusChecking");
-    case 3:
-      return t("settings.playerTransmissionStatusDownloadWait");
-    case 4:
-      return t("settings.playerTransmissionStatusDownloading");
-    case 5:
-      return t("settings.playerTransmissionStatusSeedWait");
-    case 6:
-      return t("settings.playerTransmissionStatusSeeding");
-    default:
-      return `${t("settings.playerTransmissionStatusUnknown")} (${status})`;
-  }
 }

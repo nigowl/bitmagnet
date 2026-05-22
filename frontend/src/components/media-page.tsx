@@ -1,196 +1,29 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
-  ActionIcon,
   Badge,
   Card,
   Group,
-  Loader,
-  Pagination,
   Stack,
   Text,
-  TextInput,
   Title,
-  Tooltip
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { ChevronDown, ChevronUp, FilterX, HardDriveDownload, ListOrdered, RefreshCw, Search, Users } from "lucide-react";
-import { CoverImage } from "@/components/cover-image";
 import { useI18n } from "@/languages/provider";
 import { fetchMediaList, type MediaListItem } from "@/lib/media-api";
-import { buildMediaDetailHref, extractMediaFacts, getDisplayTitle, getPosterUrl, pickBestQualityTag } from "@/lib/media";
-
-type MediaCategory = "movie" | "series" | "anime";
-type FilterRowKey = "quality" | "cache" | "year" | "genre" | "language" | "country" | "network" | "studio" | "awards" | "sort";
-const MEDIA_LIST_TARGET_COUNT = 40;
-const MEDIA_LIST_MIN_CARD_WIDTH = 188;
-const MEDIA_LIST_GRID_GAP = 16;
-const MEDIA_FILTER_KEYS_BY_CATEGORY: Record<MediaCategory, FilterRowKey[]> = {
-  movie: ["quality", "cache", "year", "genre", "language", "country", "studio", "awards", "sort"],
-  series: ["quality", "cache", "year", "genre", "language", "country", "network", "sort"],
-  anime: ["quality", "cache", "year", "genre", "language", "studio", "sort"]
-};
-
-type FilterOption = {
-  value: string;
-  label: string;
-};
-
-function normalizeSimpleValue(value: string | null, fallback: string): string {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : fallback;
-}
-
-function normalizeMediaToken(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/['’.]/g, "")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
-
-function localizeGenreLabel(value: string, t: (key: string) => string): string {
-  const normalized = normalizeMediaToken(value);
-  const aliases: Record<string, string> = {
-    sciencefiction: "science_fiction",
-    sci_fi: "sci_fi",
-    sci_fi_and_fantasy: "science_fiction",
-    action_and_adventure: "action_adventure",
-    war_and_politics: "war_politics"
-  };
-  const key = aliases[normalized] || normalized;
-  const translationKey = `media.genres.${key}`;
-  const translated = t(translationKey);
-  return translated === translationKey ? value : translated;
-}
-
-function resolveAdaptiveMediaListCount(containerWidth: number, targetCount: number = MEDIA_LIST_TARGET_COUNT): number {
-  if (!Number.isFinite(containerWidth) || containerWidth <= 0) {
-    return targetCount;
-  }
-  const columns = Math.max(1, Math.floor((containerWidth + MEDIA_LIST_GRID_GAP) / (MEDIA_LIST_MIN_CARD_WIDTH + MEDIA_LIST_GRID_GAP)));
-  const lower = Math.max(columns, Math.floor(targetCount / columns) * columns);
-  const upper = Math.max(columns, Math.ceil(targetCount / columns) * columns);
-  if (Math.abs(targetCount - lower) <= Math.abs(upper - targetCount)) {
-    return lower;
-  }
-  return upper;
-}
-
-function FilterRow({
-  label,
-  currentValue,
-  options,
-  expanded,
-  onToggleExpand,
-  onSelect
-}: {
-  label: string;
-  currentValue: string;
-  options: FilterOption[];
-  expanded: boolean;
-  onToggleExpand?: () => void;
-  onSelect: (value: string) => void;
-}) {
-  const optionsRef = useRef<HTMLDivElement | null>(null);
-  const [canExpand, setCanExpand] = useState(false);
-  const [collapsedHeight, setCollapsedHeight] = useState(52);
-  const isExpanded = expanded && canExpand;
-
-  useLayoutEffect(() => {
-    const element = optionsRef.current;
-    if (!element) return;
-    let frameId: number | null = null;
-
-    const updateLayout = () => {
-      const children = Array.from(element.children).filter((child): child is HTMLElement => child instanceof HTMLElement);
-      if (children.length === 0) {
-        setCanExpand(false);
-        setCollapsedHeight(52);
-        return;
-      }
-
-      const firstRowTop = children[0].offsetTop;
-      const firstRowItems = children.filter((child) => child.offsetTop === firstRowTop);
-      const firstRowBottom = Math.max(...firstRowItems.map((child) => child.offsetTop + child.offsetHeight));
-      const hasOverflow = children.some((child) => child.offsetTop > firstRowTop);
-
-      setCanExpand(hasOverflow);
-      setCollapsedHeight(firstRowBottom);
-    };
-
-    const scheduleUpdate = () => {
-      if (frameId !== null) {
-        window.cancelAnimationFrame(frameId);
-      }
-      frameId = window.requestAnimationFrame(() => {
-        frameId = null;
-        updateLayout();
-      });
-    };
-
-    scheduleUpdate();
-
-    let observer: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== "undefined") {
-      observer = new ResizeObserver(scheduleUpdate);
-      observer.observe(element);
-    } else {
-      window.addEventListener("resize", scheduleUpdate, { passive: true });
-    }
-
-    return () => {
-      if (frameId !== null) {
-        window.cancelAnimationFrame(frameId);
-      }
-      observer?.disconnect();
-      if (!observer) {
-        window.removeEventListener("resize", scheduleUpdate);
-      }
-    };
-  }, [options]);
-
-  return (
-    <div
-      className="media-filter-row"
-      data-expandable={canExpand ? "true" : "false"}
-      data-expanded={isExpanded ? "true" : "false"}
-    >
-      <div className="media-filter-label">{label}</div>
-      <div
-        ref={optionsRef}
-        className={isExpanded ? "media-filter-options media-filter-options-expanded" : "media-filter-options media-filter-options-collapsed"}
-        style={isExpanded ? undefined : { maxHeight: `${collapsedHeight}px` }}
-      >
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className={currentValue === option.value ? "media-filter-pill media-filter-pill-active" : "media-filter-pill"}
-            onClick={() => onSelect(option.value)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-      {canExpand ? (
-        <button
-          type="button"
-          className="media-filter-expand"
-          onClick={onToggleExpand}
-          aria-label={isExpanded ? `Collapse ${label}` : `Expand ${label}`}
-        >
-          {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-        </button>
-      ) : null}
-    </div>
-  );
-}
+import {
+  MEDIA_FILTER_KEYS_BY_CATEGORY,
+  MEDIA_LIST_TARGET_COUNT,
+  type FilterOption,
+  type FilterRowKey,
+  type MediaCategory,
+  normalizeSimpleValue,
+  resolveAdaptiveMediaListCount
+} from "./media-page.helpers";
+import { MediaResultsSection } from "./media-page.results";
+import { MediaToolbar } from "./media-page.toolbar";
 
 export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
   const { t, locale } = useI18n();
@@ -211,7 +44,6 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
     network: false,
     studio: false,
     awards: false,
-    cache: false,
     sort: false
   });
   const [items, setItems] = useState<MediaListItem[]>([]);
@@ -415,17 +247,10 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
     [t]
   );
 
-  const cacheOptions = useMemo<FilterOption[]>(
-    () => [
-      { value: "all", label: t("media.all") },
-      { value: "cached", label: t("media.cacheBadge") }
-    ],
-    [t]
-  );
-
   const genreOptions = useMemo<FilterOption[]>(() => {
     const categoryGenres: Record<MediaCategory, string[]> = {
       movie: [
+        "animation",
         "action",
         "adventure",
         "science_fiction",
@@ -436,7 +261,6 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
         "romance",
         "horror",
         "fantasy",
-        "animation",
         "family",
         "documentary",
         "history",
@@ -445,6 +269,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
         "western"
       ],
       series: [
+        "animation",
         "drama",
         "comedy",
         "crime",
@@ -615,294 +440,48 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
             </Group>
           </Group>
 
-          <Card className="glass-card media-toolbar media-toolbar-rich" withBorder>
-            <div className="media-toolbar-actions">
-              <TextInput
-                leftSection={<Search size={16} />}
-                placeholder={t("media.search")}
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.currentTarget.value)}
-                onBlur={commitSearch}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    commitSearch();
-                    event.currentTarget.blur();
-                  }
-                }}
-                className="media-toolbar-search"
-              />
-              <Group gap="xs">
-                <Tooltip label={t("media.cacheBadge")} withArrow>
-                  <ActionIcon
-                    className="app-icon-btn"
-                    variant="default"
-                    size={36}
-                    onClick={() => updateQuery({ cache: cache === "cached" ? null : "cached", page: null })}
-                    aria-label={t("media.cacheBadge")}
-                    title={t("media.cacheBadge")}
-                  >
-                    <HardDriveDownload size={16} />
-                  </ActionIcon>
-                </Tooltip>
-                <Tooltip label={t("media.clearFilters")} withArrow>
-                  <ActionIcon
-                    className="app-icon-btn"
-                    variant="default"
-                    size={36}
-                    onClick={clearFilters}
-                    aria-label={t("media.clearFilters")}
-                    title={t("media.clearFilters")}
-                  >
-                    <FilterX size={16} />
-                  </ActionIcon>
-                </Tooltip>
-                <Tooltip label={t("common.refresh")} withArrow>
-                  <ActionIcon
-                    className="app-icon-btn"
-                    variant="default"
-                    size={36}
-                    onClick={() => void load()}
-                    aria-label={t("common.refresh")}
-                    title={t("common.refresh")}
-                  >
-                    <RefreshCw size={16} />
-                  </ActionIcon>
-                </Tooltip>
-                <ActionIcon
-                  className="app-icon-btn media-advanced-toggle"
-                  data-expanded={showAdvancedFilters ? "true" : "false"}
-                  variant="default"
-                  size={36}
-                  onClick={() => setShowAdvancedFilters((value) => !value)}
-                  aria-label={showAdvancedFilters ? t("media.collapseFilters") : t("media.expandFilters")}
-                >
-                  <ChevronDown size={16} />
-                </ActionIcon>
-              </Group>
-            </div>
-
-            {showAdvancedFilters ? (
-              <div className="media-advanced-filters media-advanced-filters-open">
-                <div className="media-advanced-filters-inner">
-                <FilterRow
-                  label={t("media.filters.quality")}
-                  currentValue={quality}
-                  options={qualityOptions}
-                  expanded={expandedRows.quality}
-                  onToggleExpand={() => setExpanded("quality")}
-                  onSelect={(value) => updateQuery({ quality: value, page: null })}
-                />
-
-                <FilterRow
-                  label={t("media.filters.cache")}
-                  currentValue={cache}
-                  options={cacheOptions}
-                  expanded={expandedRows.cache}
-                  onToggleExpand={() => setExpanded("cache")}
-                  onSelect={(value) => updateQuery({ cache: value, page: null })}
-                />
-
-                <FilterRow
-                  label={t("media.filters.year")}
-                  currentValue={year}
-                  options={yearOptions}
-                  expanded={expandedRows.year}
-                  onToggleExpand={() => setExpanded("year")}
-                  onSelect={(value) => updateQuery({ year: value, page: null })}
-                />
-
-                <FilterRow
-                  label={t("media.filters.genre")}
-                  currentValue={genre}
-                  options={genreOptions}
-                  expanded={expandedRows.genre}
-                  onToggleExpand={() => setExpanded("genre")}
-                  onSelect={(value) => updateQuery({ genre: value, page: null })}
-                />
-
-                <FilterRow
-                  label={t("media.filters.language")}
-                  currentValue={language}
-                  options={languageOptions}
-                  expanded={expandedRows.language}
-                  onToggleExpand={() => setExpanded("language")}
-                  onSelect={(value) => updateQuery({ language: value, page: null })}
-                />
-
-                {enabledFilterKeys.has("country") ? (
-                  <FilterRow
-                    label={t("media.filters.country")}
-                    currentValue={country}
-                    options={countryOptions}
-                    expanded={expandedRows.country}
-                    onToggleExpand={() => setExpanded("country")}
-                    onSelect={(value) => updateQuery({ country: value, page: null })}
-                  />
-                ) : null}
-
-                {enabledFilterKeys.has("network") ? (
-                  <FilterRow
-                    label={t("media.filters.network")}
-                    currentValue={network}
-                    options={networkOptions}
-                    expanded={expandedRows.network}
-                    onToggleExpand={() => setExpanded("network")}
-                    onSelect={(value) => updateQuery({ network: value, page: null })}
-                  />
-                ) : null}
-
-                {enabledFilterKeys.has("studio") ? (
-                  <FilterRow
-                    label={t("media.filters.studio")}
-                    currentValue={studio}
-                    options={studioOptions}
-                    expanded={expandedRows.studio}
-                    onToggleExpand={() => setExpanded("studio")}
-                    onSelect={(value) => updateQuery({ studio: value, page: null })}
-                  />
-                ) : null}
-
-                {enabledFilterKeys.has("awards") ? (
-                  <FilterRow
-                    label={t("media.filters.awards")}
-                    currentValue={awards}
-                    options={awardsOptions}
-                    expanded={expandedRows.awards}
-                    onToggleExpand={() => setExpanded("awards")}
-                    onSelect={(value) => updateQuery({ awards: value, page: null })}
-                  />
-                ) : null}
-
-                <FilterRow
-                  label={t("media.filters.sort")}
-                  currentValue={sort}
-                  options={sortOptions}
-                  expanded={expandedRows.sort}
-                  onToggleExpand={() => setExpanded("sort")}
-                  onSelect={(value) => updateQuery({ sort: value, page: null })}
-                />
-              </div>
-              </div>
-            ) : null}
-          </Card>
+          <MediaToolbar
+            t={t}
+            searchInput={searchInput}
+            cache={cache}
+            showAdvancedFilters={showAdvancedFilters}
+            expandedRows={expandedRows}
+            enabledFilterKeys={enabledFilterKeys}
+            values={{ quality, year, genre, language, country, network, studio, awards, sort }}
+            options={{
+              quality: qualityOptions,
+              year: yearOptions,
+              genre: genreOptions,
+              language: languageOptions,
+              country: countryOptions,
+              network: networkOptions,
+              studio: studioOptions,
+              awards: awardsOptions,
+              sort: sortOptions
+            }}
+            onSearchChange={setSearchInput}
+            onCommitSearch={commitSearch}
+            onToggleCache={() => updateQuery({ cache: cache === "cached" ? null : "cached", page: null })}
+            onClearFilters={clearFilters}
+            onRefresh={() => void load()}
+            onToggleAdvancedFilters={() => setShowAdvancedFilters((value) => !value)}
+            onToggleExpanded={setExpanded}
+            onSelectFilter={(key, value) => updateQuery({ [key]: value, page: null })}
+          />
         </Stack>
       </Card>
 
-      {loading ? (
-        <Card className="glass-card" withBorder>
-          <Group justify="center" py="xl">
-            <Loader />
-          </Group>
-        </Card>
-      ) : items.length === 0 ? (
-        <Card className="glass-card" withBorder>
-          <Text c="dimmed">{t("media.noResults")}</Text>
-        </Card>
-      ) : (
-        <>
-          <div className="media-wall">
-            {items.map((item) => {
-              const poster = getPosterUrl(item, "md");
-              const titleText = getDisplayTitle(item, titleLanguage);
-              const originalTitleText = getDisplayTitle(item, "original");
-              const qualityTags = Array.from(new Set((item.qualityTags ?? []).map((tag) => tag.trim()).filter(Boolean)));
-              const genreTags = Array.from(new Set((item.genres ?? []).filter(Boolean)));
-              const primaryQuality = pickBestQualityTag(qualityTags);
-              const primaryGenre = genreTags[0] || null;
-              const primaryGenreLabel = primaryGenre ? localizeGenreLabel(primaryGenre, t) : null;
-              const originalTitle = originalTitleText.trim().toLowerCase() !== titleText.trim().toLowerCase()
-                ? originalTitleText
-                : null;
-              const categoryLabel = item.isAnime
-                ? t("nav.anime")
-                : (item.contentType ? t(`contentTypes.${item.contentType}`) : null);
-              const factGroups = extractMediaFacts({
-                collections: item.collections ?? [],
-                attributes: item.attributes ?? []
-              });
-              const factMap = new Map(factGroups.map((group) => [group.key, group.values]));
-              const mediaMeta = [
-                { label: t("media.filters.awards"), values: factMap.get("awards") ?? [] }
-              ]
-                .filter((entry) => entry.values.length > 0)
-                .map((entry) => `${entry.label}: ${entry.values.slice(0, 2).join(" / ")}`);
-              const infoLine = [item.releaseYear ? String(item.releaseYear) : null, primaryGenreLabel].filter(Boolean);
-              const maxSeedersText = item.maxSeeders != null ? String(item.maxSeeders) : "-";
-
-              return (
-                <div key={item.id} className="media-wall-item">
-                  <Link href={buildMediaDetailHref(item, currentListHref)} className="unstyled-link">
-                    <article className="media-wall-card">
-                      {item.hasCache ? (
-                        <div className="media-cache-corner" aria-label={t("media.cacheBadge")}>
-                          <span>{t("media.cacheBadge")}</span>
-                        </div>
-                      ) : null}
-                      <div className="media-wall-poster-shell">
-                        {poster ? (
-                          <CoverImage className="media-wall-poster" src={poster} alt={titleText} />
-                        ) : (
-                          <div className="media-wall-poster media-wall-poster-fallback">
-                            <Text c="dimmed" size="sm">{t("media.noPoster")}</Text>
-                          </div>
-                        )}
-                        <div className="media-wall-overlay media-wall-overlay-top">
-                          <div className="media-wall-overlay-group">
-                            {categoryLabel ? <span className="media-poster-chip media-poster-chip-type">{categoryLabel}</span> : null}
-                          </div>
-                          {primaryQuality ? <span className="media-poster-chip media-poster-chip-highlight">{primaryQuality}</span> : null}
-                        </div>
-                        <div className="media-wall-overlay media-wall-overlay-bottom">
-                          <div className="media-wall-overlay-group">
-                            <span className="media-poster-chip">
-                              <ListOrdered size={12} />
-                              {item.torrentCount}
-                            </span>
-                            {item.maxSeeders != null ? (
-                              <span className="media-poster-chip">
-                                <Users size={12} />
-                                {maxSeedersText}
-                              </span>
-                            ) : null}
-                          </div>
-                          {item.voteAverage ? <span className="media-rating-pill">★ {item.voteAverage.toFixed(1)}</span> : null}
-                        </div>
-                      </div>
-
-                      <div className="media-wall-content">
-                        {originalTitle ? <div className="media-wall-subtitle">{originalTitle}</div> : null}
-                        <div className="media-wall-title">{titleText}</div>
-                        {infoLine.length > 0 ? <div className="media-wall-facts">{infoLine.join(" · ")}</div> : null}
-                        {mediaMeta.length > 0 ? (
-                          <div className="media-wall-meta">
-                            {mediaMeta.map((meta) => (
-                              <span key={`${item.id}:${meta}`} className="media-mini-chip">{meta}</span>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    </article>
-                  </Link>
-                </div>
-              );
-            })}
-          </div>
-
-          <Card className="glass-card media-toolbar-pagination" withBorder>
-            <Group justify="space-between" wrap="wrap">
-              <Text c="dimmed" size="sm">{t("media.results")}: {totalCount} / Page {page}</Text>
-              <Pagination
-                total={totalPages}
-                value={page}
-                onChange={(value) => updateQuery({ page: String(value) })}
-                siblings={1}
-                boundaries={1}
-              />
-            </Group>
-          </Card>
-        </>
-      )}
+      <MediaResultsSection
+        t={t}
+        loading={loading}
+        items={items}
+        titleLanguage={titleLanguage}
+        currentListHref={currentListHref}
+        totalCount={totalCount}
+        page={page}
+        totalPages={totalPages}
+        onChangePage={(value) => updateQuery({ page: String(value) })}
+      />
     </div>
   );
 }

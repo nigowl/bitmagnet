@@ -2,19 +2,17 @@ package blocking
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/nigowl/bitmagnet/internal/lazy"
 	"github.com/nigowl/bitmagnet/internal/protocol"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/fx"
+	"gorm.io/gorm"
 )
 
 type Params struct {
 	fx.In
-	Pool        lazy.Lazy[*pgxpool.Pool]
-	PgxPoolWait *sync.WaitGroup `name:"pgx_pool_wait"`
+	GormDB lazy.Lazy[*gorm.DB]
 }
 
 type Result struct {
@@ -25,15 +23,13 @@ type Result struct {
 
 func New(params Params) Result {
 	lazyManager := lazy.New[Manager](func() (Manager, error) {
-		pool, err := params.Pool.Get()
+		db, err := params.GormDB.Get()
 		if err != nil {
 			return nil, err
 		}
 
-		params.PgxPoolWait.Add(1)
-
 		return &manager{
-			pool:          pool,
+			db:            db,
 			buffer:        make(map[protocol.ID]struct{}, 1000),
 			maxBufferSize: 1000,
 			maxFlushWait:  time.Minute * 5,
@@ -45,7 +41,6 @@ func New(params Params) Result {
 		AppHook: fx.Hook{
 			OnStop: func(ctx context.Context) error {
 				return lazyManager.IfInitialized(func(m Manager) error {
-					defer params.PgxPoolWait.Done()
 					return m.Flush(ctx)
 				})
 			},

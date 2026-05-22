@@ -1,15 +1,10 @@
 package manager
 
-import (
-	"context"
-
-	"github.com/nigowl/bitmagnet/internal/model"
-)
+import "context"
 
 func (m manager) PurgeJobs(ctx context.Context, req PurgeJobsRequest) error {
 	if len(req.Queues) == 0 && len(req.Statuses) == 0 {
-		_, err := m.db.WithContext(ctx).Raw("TRUNCATE TABLE " + model.TableNameQueueJob + ";").Rows()
-		return err
+		return truncateQueueJobs(m.db.WithContext(ctx))
 	}
 
 	q := m.dao.QueueJob.WithContext(ctx)

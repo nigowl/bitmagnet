@@ -43,7 +43,7 @@ func (m manager) EnqueueMaintenanceTask(ctx context.Context, req EnqueueMaintena
 
 	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if req.Purge {
-			if _, err := tx.WithContext(ctx).Raw("TRUNCATE TABLE " + model.TableNameQueueJob + ";").Rows(); err != nil {
+			if err := truncateQueueJobs(tx.WithContext(ctx)); err != nil {
 				return fmt.Errorf("error purging queue: %w", err)
 			}
 		}
