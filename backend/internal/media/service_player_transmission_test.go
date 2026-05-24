@@ -39,7 +39,7 @@ func TestPlayerTransmissionPrebufferRangeHeaderBuildsClosedWindow(t *testing.T) 
 
 func TestPlayerTransmissionStartupPrebufferWindowStaysSmall(t *testing.T) {
 	full := playerTransmissionPrebufferWindowBytes(20*1024*1024*1024, 10800, 60)
-	startup := playerTransmissionPrebufferWindowBytes(20*1024*1024*1024, 10800, 2)
+	startup := playerTransmissionPrebufferWindowBytes(20*1024*1024*1024, 10800, 4)
 	if startup >= full {
 		t.Fatalf("expected startup window to be smaller than full prebuffer, startup=%d full=%d", startup, full)
 	}

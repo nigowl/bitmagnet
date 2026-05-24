@@ -20,7 +20,7 @@ import (
 const playerHLSSegmentSeconds = 2
 const playerHLSDefaultPrebufferSeconds = 60
 const playerHLSMaxPrebufferSeconds = 180
-const playerHLSStartupPrebufferSeconds = playerHLSSegmentSeconds
+const playerHLSStartupPrebufferSeconds = 4
 const playerHLSWaitPollInterval = 250 * time.Millisecond
 const playerHLSCacheTTL = 6 * time.Hour
 const playerHLSIdleTranscodeTTL = 20 * time.Second

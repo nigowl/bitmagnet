@@ -211,10 +211,12 @@ export function useTorrentPlayerLifecycle({
         })
       )
       : buildPlayerTransmissionStreamURL(infoHash, selectedFileIndex, `${selectedFileIndex}-${mode}-direct`);
-    if (activeStreamConfigKeyRef.current === nextConfigKey) {
+    const currentConfigKey = activeStreamConfigKeyRef.current;
+    const currentMatchesBaseConfig = currentConfigKey === baseConfigKey || currentConfigKey.startsWith(`${baseConfigKey}:`);
+    if (currentConfigKey === nextConfigKey) {
       return;
     }
-    if (!canRetargetIdleStart && activeStreamConfigKeyRef.current === baseConfigKey) {
+    if (!canRetargetIdleStart && currentMatchesBaseConfig) {
       return;
     }
 

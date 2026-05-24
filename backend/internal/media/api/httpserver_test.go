@@ -131,10 +131,10 @@ func TestNormalizePlayerHLSPrebufferSeconds(t *testing.T) {
 }
 
 func TestNormalizePlayerHLSStartupPrebufferSeconds(t *testing.T) {
-	if got := normalizePlayerHLSStartupPrebufferSeconds(60); got != playerHLSSegmentSeconds {
+	if got := normalizePlayerHLSStartupPrebufferSeconds(60); got != 4 {
 		t.Fatalf("expected normal startup target to stay small, got=%d", got)
 	}
-	if got := normalizePlayerHLSStartupPrebufferSeconds(playerHLSSegmentSeconds); got != playerHLSSegmentSeconds {
+	if got := normalizePlayerHLSStartupPrebufferSeconds(2); got != 2 {
 		t.Fatalf("expected tiny explicit target to be honored, got=%d", got)
 	}
 }
