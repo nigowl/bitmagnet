@@ -72,6 +72,9 @@ export type SystemSettings = {
       insecureTls: boolean;
       timeoutSeconds: number;
       sequentialDownload: boolean;
+      cacheQueueEnabled: boolean;
+      cacheQueueMaxActive: number;
+      cacheQueueCheckIntervalSeconds: number;
       autoCleanupEnabled: boolean;
       autoCleanupSlowTaskEnabled: boolean;
       autoCleanupStorageEnabled: boolean;

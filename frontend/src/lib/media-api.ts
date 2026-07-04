@@ -208,42 +208,27 @@ export async function fetchMediaList(params: {
   page?: number;
 }) {
   const query = new URLSearchParams();
+  const setTrimmedParam = (key: string, value: string | undefined, skipValue?: string) => {
+    const normalized = value?.trim();
+    if (normalized && normalized !== skipValue) {
+      query.set(key, normalized);
+    }
+  };
+
   if (params.category && params.category !== "all") {
     query.set("category", params.category);
   }
-  if (params.search?.trim()) {
-    query.set("search", params.search.trim());
-  }
-  if (params.quality?.trim() && params.quality !== "all") {
-    query.set("quality", params.quality.trim());
-  }
-  if (params.year?.trim() && params.year !== "all") {
-    query.set("year", params.year.trim());
-  }
-  if (params.genre?.trim() && params.genre !== "all") {
-    query.set("genre", params.genre.trim());
-  }
-  if (params.language?.trim() && params.language !== "all") {
-    query.set("language", params.language.trim());
-  }
-  if (params.country?.trim() && params.country !== "all") {
-    query.set("country", params.country.trim());
-  }
-  if (params.network?.trim() && params.network !== "all") {
-    query.set("network", params.network.trim());
-  }
-  if (params.studio?.trim() && params.studio !== "all") {
-    query.set("studio", params.studio.trim());
-  }
-  if (params.awards?.trim() && params.awards !== "all") {
-    query.set("awards", params.awards.trim());
-  }
-  if (params.cache?.trim() && params.cache !== "all") {
-    query.set("cache", params.cache.trim());
-  }
-  if (params.sort?.trim() && params.sort !== "latest") {
-    query.set("sort", params.sort.trim());
-  }
+  setTrimmedParam("search", params.search);
+  setTrimmedParam("quality", params.quality, "all");
+  setTrimmedParam("year", params.year, "all");
+  setTrimmedParam("genre", params.genre, "all");
+  setTrimmedParam("language", params.language, "all");
+  setTrimmedParam("country", params.country, "all");
+  setTrimmedParam("network", params.network, "all");
+  setTrimmedParam("studio", params.studio, "all");
+  setTrimmedParam("awards", params.awards, "all");
+  setTrimmedParam("cache", params.cache, "all");
+  setTrimmedParam("sort", params.sort, "latest");
   if (typeof params.heatDays === "number" && Number.isFinite(params.heatDays) && params.heatDays > 0) {
     query.set("heatDays", String(Math.round(params.heatDays)));
   }

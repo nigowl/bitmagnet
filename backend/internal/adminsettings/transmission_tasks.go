@@ -176,15 +176,7 @@ func (s *service) runTransmissionCleanup(
 			currentTotal := totalSizeHint - estimatedGain
 			if currentTotal > thresholdBytes {
 				needTrim := currentTotal - thresholdBytes
-				ordered := append([]transmissionTorrentItem(nil), items...)
-				sort.Slice(ordered, func(i, j int) bool {
-					left := maxInt64(ordered[i].ActivityDate, ordered[i].AddedDate)
-					right := maxInt64(ordered[j].ActivityDate, ordered[j].AddedDate)
-					if left == right {
-						return ordered[i].ID < ordered[j].ID
-					}
-					return left < right
-				})
+				ordered := orderedTransmissionTaskItems(items, false)
 				collected := int64(0)
 				for _, item := range ordered {
 					if collected >= needTrim {
@@ -209,15 +201,7 @@ func (s *service) runTransmissionCleanup(
 	if storageCleanupEnabled && cfg.AutoCleanupMaxTasks > 0 {
 		remainingCount := len(items) - len(removeSet)
 		if remainingCount > cfg.AutoCleanupMaxTasks {
-			ordered := append([]transmissionTorrentItem(nil), items...)
-			sort.Slice(ordered, func(i, j int) bool {
-				left := maxInt64(ordered[i].ActivityDate, ordered[i].AddedDate)
-				right := maxInt64(ordered[j].ActivityDate, ordered[j].AddedDate)
-				if left == right {
-					return ordered[i].ID < ordered[j].ID
-				}
-				return left < right
-			})
+			ordered := orderedTransmissionTaskItems(items, false)
 			need := remainingCount - cfg.AutoCleanupMaxTasks
 			for _, item := range ordered {
 				if need <= 0 {
@@ -243,20 +227,7 @@ func (s *service) runTransmissionCleanup(
 			thresholdBytes := int64(cfg.AutoCleanupMinFreeSpaceGB) * 1024 * 1024 * 1024
 			if freeBytes < thresholdBytes {
 				needGain := thresholdBytes - freeBytes
-				ordered := append([]transmissionTorrentItem(nil), items...)
-				sort.Slice(ordered, func(i, j int) bool {
-					iFinished := ordered[i].IsFinished || ordered[i].LeftUntilDone <= 0
-					jFinished := ordered[j].IsFinished || ordered[j].LeftUntilDone <= 0
-					if iFinished != jFinished {
-						return iFinished
-					}
-					left := maxInt64(ordered[i].ActivityDate, ordered[i].AddedDate)
-					right := maxInt64(ordered[j].ActivityDate, ordered[j].AddedDate)
-					if left == right {
-						return ordered[i].ID < ordered[j].ID
-					}
-					return left < right
-				})
+				ordered := orderedTransmissionTaskItems(items, true)
 				collected := int64(0)
 				for _, item := range ordered {
 					if collected >= needGain {
@@ -303,10 +274,9 @@ func (s *service) loadTransmissionSettings(ctx context.Context) (TransmissionSet
 		return TransmissionSettings{}, err
 	}
 	cfg := settings.Player.Transmission
-	if strings.TrimSpace(cfg.URL) == "" {
-		cfg.URL = strings.TrimSpace(s.defaults.Player.Transmission.URL)
-	}
-	if cfg.TimeoutSeconds < 2 || cfg.TimeoutSeconds > 60 {
+	cfg.URL = firstNonEmptyTrimmed(cfg.URL, s.defaults.Player.Transmission.URL)
+	cfg.TimeoutSeconds = normalizeTransmissionTimeoutSeconds(cfg.TimeoutSeconds, s.defaults.Player.Transmission.TimeoutSeconds)
+	if !validTransmissionTimeoutSeconds(cfg.TimeoutSeconds) {
 		cfg.TimeoutSeconds = s.defaults.Player.Transmission.TimeoutSeconds
 	}
 	return cfg, nil
@@ -329,6 +299,26 @@ func mapTransmissionTask(item transmissionTorrentItem) TransmissionTask {
 		DownloadDir:    strings.TrimSpace(item.DownloadDir),
 		ErrorString:    strings.TrimSpace(item.ErrorString),
 	}
+}
+
+func orderedTransmissionTaskItems(items []transmissionTorrentItem, finishedFirst bool) []transmissionTorrentItem {
+	ordered := append([]transmissionTorrentItem(nil), items...)
+	sort.Slice(ordered, func(i, j int) bool {
+		if finishedFirst {
+			iFinished := ordered[i].IsFinished || ordered[i].LeftUntilDone <= 0
+			jFinished := ordered[j].IsFinished || ordered[j].LeftUntilDone <= 0
+			if iFinished != jFinished {
+				return iFinished
+			}
+		}
+		left := maxInt64(ordered[i].ActivityDate, ordered[i].AddedDate)
+		right := maxInt64(ordered[j].ActivityDate, ordered[j].AddedDate)
+		if left == right {
+			return ordered[i].ID < ordered[j].ID
+		}
+		return left < right
+	})
+	return ordered
 }
 
 func maxTransmissionSizeHint(sizeWhenDone int64, leftUntilDone int64) int64 {

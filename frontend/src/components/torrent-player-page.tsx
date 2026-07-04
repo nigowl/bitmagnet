@@ -41,7 +41,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const { t, locale } = useI18n();
   const { user } = useAuth();
   const searchParams = useSearchParams();
-  const infoHash = routeInfoHash.trim().toLowerCase();
+  const infoHash = player.normalizeInfoHash(routeInfoHash);
   const requestedFileIndex = useMemo(() => {
     const raw = searchParams.get("fileIndex");
     if (!raw) return -1;

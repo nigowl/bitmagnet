@@ -38,6 +38,14 @@ import type {
   TransmissionTasksResponse
 } from "./maintenance-page.types";
 
+function normalizeMaintenanceLimit(value: string | number): number {
+  return Math.max(1, Math.min(2000, Number(value) || 10));
+}
+
+function normalizeMaintenanceBatchSize(value: string | number, limit: number, fallback = limit): number {
+  return Math.max(1, Math.min(limit, Number(value) || fallback));
+}
+
 export function MaintenancePage() {
   const { t } = useI18n();
   const tabsRef = useTabsUnderline();
@@ -202,8 +210,8 @@ export function MaintenancePage() {
   }, [activeTab, playerEnabled]);
 
   const startTask = async () => {
-    const normalizedLimit = Math.max(1, Math.min(2000, Number(limit) || 10));
-    const normalizedBatchSize = Math.max(1, Math.min(normalizedLimit, Number(batchSize) || normalizedLimit));
+    const normalizedLimit = normalizeMaintenanceLimit(limit);
+    const normalizedBatchSize = normalizeMaintenanceBatchSize(batchSize, normalizedLimit);
     const queuedJobs = Math.max(1, Math.ceil(normalizedLimit / normalizedBatchSize));
 
     setStarting(true);
@@ -232,11 +240,11 @@ export function MaintenancePage() {
   };
 
   const normalizedLimitPreview = useMemo(
-    () => Math.max(1, Math.min(2000, Number(limit) || 10)),
+    () => normalizeMaintenanceLimit(limit),
     [limit]
   );
   const normalizedBatchPreview = useMemo(
-    () => Math.max(1, Math.min(normalizedLimitPreview, Number(batchSize) || normalizedLimitPreview)),
+    () => normalizeMaintenanceBatchSize(batchSize, normalizedLimitPreview),
     [batchSize, normalizedLimitPreview]
   );
   const queuedJobsPreview = useMemo(
@@ -359,7 +367,7 @@ export function MaintenancePage() {
                     min={1}
                     max={2000}
                     step={1}
-                    onChange={(value) => setLimit(Number(value) || 10)}
+                    onChange={(value) => setLimit(normalizeMaintenanceLimit(value))}
                   />
 
                   <NumberInput
@@ -368,7 +376,7 @@ export function MaintenancePage() {
                     min={1}
                     max={2000}
                     step={1}
-                    onChange={(value) => setBatchSize(Number(value) || 20)}
+                    onChange={(value) => setBatchSize(normalizeMaintenanceBatchSize(value, 2000, 20))}
                   />
 
                   <Text size="sm" c="dimmed">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, type CSSProperties } from "react";
+import { formatDateTimeOrRaw } from "@/lib/datetime";
 import type { PlayerTransmissionStatusResponse } from "@/lib/media-api";
 import * as player from "./torrent-player/torrent-player-helpers";
 
@@ -130,12 +131,7 @@ export function useTorrentPlayerViewModel({
   const playbackPositionLabel = `${formatClock(displayedCurrentSeconds)} / ${
     hasKnownPlaybackDuration ? formatClock(knownTimelineSeconds) : "--:--"
   }`;
-  const detailPublishedLabel = detail?.publishedAt
-    ? (() => {
-        const parsed = new Date(detail.publishedAt || "");
-        return Number.isNaN(parsed.getTime()) ? detail.publishedAt || "" : parsed.toLocaleString();
-      })()
-    : "";
+  const detailPublishedLabel = detail?.publishedAt ? formatDateTimeOrRaw(detail.publishedAt) : "";
   const detailTagPreview = (detail?.tagNames || []).slice(0, 8);
   const detailSourceLabel = (detail?.sourceNames || []).join(" · ");
   const mediaTitleDisplay = useMemo(() => {

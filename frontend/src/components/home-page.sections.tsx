@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionIcon, Card, Group, Loader, Skeleton, Stack, Text } from "@mantine/core";
-import { ChevronLeft, ChevronRight, ListOrdered, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ListOrdered, Star } from "lucide-react";
 import { CoverImage } from "@/components/cover-image";
-import { buildMediaDetailHref, extractMediaFacts, getDisplayTitle, getPosterUrl, pickBestQualityTag } from "@/lib/media";
+import { buildMediaDetailHref, extractMediaFacts, getDisplayTitle, getOriginalTitleIfDifferent, getPosterUrl, pickBestQualityTag, uniqueMediaTags } from "@/lib/media";
 import type { MediaListItem } from "@/lib/media-api";
 
 const DAILY_CAROUSEL_INTERVAL_MS = 5600;
@@ -26,8 +26,7 @@ function MediaWallCard({
 }) {
   const poster = getPosterUrl(item, "md");
   const titleText = getDisplayTitle(item, titleLanguage);
-  const originalTitleText = getDisplayTitle(item, "original");
-  const qualityTags = Array.from(new Set((item.qualityTags ?? []).map((tag) => tag.trim()).filter(Boolean)));
+  const qualityTags = uniqueMediaTags(item.qualityTags);
   const primaryQuality = pickBestQualityTag(qualityTags);
   const categoryLabel = item.isAnime
     ? t("nav.anime")
@@ -38,10 +37,12 @@ function MediaWallCard({
   });
   const awards = factGroups.find((group) => group.key === "awards")?.values ?? [];
   const mediaMeta = awards.length > 0 ? [`${t("media.filters.awards")}: ${awards.slice(0, 2).join(" / ")}`] : [];
-  const originalTitle = originalTitleText.trim().toLowerCase() !== titleText.trim().toLowerCase()
-    ? originalTitleText
-    : null;
-  const maxSeedersText = item.maxSeeders != null ? String(item.maxSeeders) : "-";
+  const originalTitle = getOriginalTitleIfDifferent(item, titleText);
+  const stats = [
+    { label: t("media.sort.rating"), icon: <Star size={12} />, value: item.voteAverage ? item.voteAverage.toFixed(1) : "-" },
+    { label: t("media.torrentCount"), icon: <ListOrdered size={12} />, value: formatStatNumber(item.torrentCount) },
+    { label: t("media.sort.download"), icon: <Download size={12} />, value: formatStatNumber(item.maxSeeders) }
+  ];
 
   return (
     <div className="media-wall-item">
@@ -67,21 +68,13 @@ function MediaWallCard({
               </div>
               {primaryQuality ? <span className="media-poster-chip media-poster-chip-highlight">{primaryQuality}</span> : null}
             </div>
-
-            <div className="media-wall-overlay media-wall-overlay-bottom">
-              <div className="media-wall-overlay-group">
-                <span className="media-poster-chip">
-                  <ListOrdered size={12} />
-                  {item.torrentCount}
+            <div className="media-wall-overlay media-wall-overlay-bottom media-wall-overlay-stats">
+              {stats.map((stat) => (
+                <span key={`${item.id}:${stat.label}`} className="media-poster-chip media-poster-stat-chip" title={stat.label} aria-label={`${stat.label}: ${stat.value}`}>
+                  {stat.icon}
+                  <strong>{stat.value}</strong>
                 </span>
-                {item.maxSeeders != null ? (
-                  <span className="media-poster-chip">
-                    <Users size={12} />
-                    {maxSeedersText}
-                  </span>
-                ) : null}
-              </div>
-              {item.voteAverage ? <span className="media-rating-pill">★ {item.voteAverage.toFixed(1)}</span> : null}
+              ))}
             </div>
           </div>
 
@@ -101,6 +94,11 @@ function MediaWallCard({
       </Link>
     </div>
   );
+}
+
+function formatStatNumber(value?: number | null): string {
+  if (value == null || !Number.isFinite(value)) return "-";
+  return String(Math.min(999, Math.max(0, Math.floor(value))));
 }
 
 export function HomeLoadingSkeleton() {

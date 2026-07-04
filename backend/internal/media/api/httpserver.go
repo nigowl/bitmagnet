@@ -60,6 +60,10 @@ func (b *builder) Apply(e *gin.Engine) error {
 	e.GET("/api/media/player/transmission/audio-tracks", b.playerTransmissionAudioTracks)
 	e.GET("/api/media/player/transmission/status", b.playerTransmissionStatus)
 	e.GET("/api/media/player/transmission/status/batch", b.playerTransmissionBatchStatus)
+	e.POST("/api/media/player/transmission/cache/queue", b.playerTransmissionEnqueueCache)
+	e.GET("/api/media/player/transmission/cache/queue", b.playerTransmissionCacheQueue)
+	e.POST("/api/media/player/transmission/cache/cancel", b.playerTransmissionCancelCache)
+	e.DELETE("/api/media/player/transmission/cache/queue", b.playerTransmissionDeleteCache)
 	e.DELETE("/api/media/player/transmission/cache", b.playerTransmissionClearCache)
 	e.GET("/api/media/player/transmission/stream", b.playerTransmissionStream)
 	e.HEAD("/api/media/player/transmission/stream", b.playerTransmissionStream)
@@ -219,6 +223,94 @@ func (b *builder) playerTransmissionBatchStatus(c *gin.Context) {
 	})
 	if err != nil {
 		switch {
+		case errors.Is(err, media.ErrPlayerDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player disabled"})
+		case errors.Is(err, media.ErrPlayerTransmissionDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player transmission disabled"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) playerTransmissionEnqueueCache(c *gin.Context) {
+	var req media.PlayerTransmissionCacheQueueInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	result, err := b.service.PlayerTransmissionEnqueueCache(c.Request.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrInvalidInfoHash):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid infoHash"})
+		case errors.Is(err, media.ErrPlayerDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player disabled"})
+		case errors.Is(err, media.ErrPlayerTransmissionDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player transmission disabled"})
+		case errors.Is(err, media.ErrPlayerCacheQueueDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player cache queue disabled"})
+		case errors.Is(err, media.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "torrent not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) playerTransmissionCacheQueue(c *gin.Context) {
+	result, err := b.service.PlayerTransmissionCacheQueue(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) playerTransmissionCancelCache(c *gin.Context) {
+	var req media.PlayerTransmissionCacheQueueActionInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	result, err := b.service.PlayerTransmissionCancelCache(c.Request.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrInvalidInfoHash):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid infoHash"})
+		case errors.Is(err, media.ErrPlayerDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player disabled"})
+		case errors.Is(err, media.ErrPlayerTransmissionDisabled):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "player transmission disabled"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) playerTransmissionDeleteCache(c *gin.Context) {
+	var req media.PlayerTransmissionCacheQueueActionInput
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	if strings.TrimSpace(req.InfoHash) == "" {
+		req.InfoHash = strings.TrimSpace(c.Query("infoHash"))
+	}
+
+	result, err := b.service.PlayerTransmissionDeleteCache(c.Request.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, media.ErrInvalidInfoHash):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid infoHash"})
 		case errors.Is(err, media.ErrPlayerDisabled):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "player disabled"})
 		case errors.Is(err, media.ErrPlayerTransmissionDisabled):

@@ -1,6 +1,9 @@
+function normalizeErrorMessage(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error ?? "")).trim().toLowerCase();
+}
+
 export function isRequestCanceledError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  const normalized = message.trim().toLowerCase();
+  const normalized = normalizeErrorMessage(error);
   if (!normalized) return false;
   return normalized === "canceled" ||
     normalized === "cancelled" ||
@@ -36,7 +39,7 @@ export function getLocalizedErrorMessage(error: unknown, t: Translate): string |
   if (!message) {
     return null;
   }
-  const normalized = message.trim().toLowerCase();
+  const normalized = normalizeErrorMessage(message);
   const key = errorMessageKeys[normalized];
   const fallbackKey = key || Object.entries(errorMessageKeys).find(([needle]) => normalized.includes(needle))?.[1];
   if (!fallbackKey) {

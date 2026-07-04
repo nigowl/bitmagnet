@@ -58,9 +58,10 @@ export function useTorrentPlayerGlobalPreferences({
 }: UseTorrentPlayerGlobalPreferencesArgs) {
   useEffect(() => {
     hydratedRef.current = false;
+    let hydrationTimer: number | null = null;
     const key = player.buildPlayerGlobalPreferencesStorageKey(userId);
     try {
-      const raw = window.localStorage.getItem(key);
+      const raw = window.localStorage.getItem(key) || (userId ? window.localStorage.getItem(player.buildPlayerGlobalPreferencesStorageKey()) : null);
       if (!raw) {
         setVideoPlaybackRate(1);
         setVideoFitMode("contain");
@@ -92,8 +93,15 @@ export function useTorrentPlayerGlobalPreferences({
       setTranscodeOutputResolution(0);
       setSubtitleStylePreset(defaultSubtitleStylePreset);
     } finally {
-      hydratedRef.current = true;
+      hydrationTimer = window.setTimeout(() => {
+        hydratedRef.current = true;
+      }, 0);
     }
+    return () => {
+      if (hydrationTimer !== null) {
+        window.clearTimeout(hydrationTimer);
+      }
+    };
   }, [hydratedRef, setSubtitleStylePreset, setTranscodeOutputResolution, setTranscodePrebufferSeconds, setVideoFitMode, setVideoPlaybackRate, userId]);
 
   useEffect(() => {

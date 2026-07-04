@@ -8,6 +8,8 @@ import { LogIn, RefreshCw } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { graphqlRequest } from "@/lib/api";
+import { uniqueSorted } from "@/lib/collections";
+import { formatDateTime, hoursAgoISO } from "@/lib/datetime";
 import { HEALTH_QUERY, QUEUE_METRICS_QUERY, TORRENT_METRICS_QUERY, VERSION_QUERY } from "@/lib/graphql";
 import { useI18n } from "@/languages/provider";
 import {
@@ -150,7 +152,7 @@ export function MonitorPage() {
 
     setLoading(true);
     try {
-      const startTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const startTime = hoursAgoISO(24);
 
       const [healthResp, versionResp, queueResp, torrentResp] = await Promise.all([
         graphqlRequest<HealthResponse>(HEALTH_QUERY),
@@ -254,8 +256,8 @@ export function MonitorPage() {
 
   const queueOption = useMemo(() => {
     const points = queueBuckets.slice(-180);
-    const statuses = Array.from(new Set(points.map((item) => item.status))).sort();
-    const buckets = Array.from(new Set(points.map((item) => item.createdAtBucket))).sort();
+    const statuses = uniqueSorted(points.map((item) => item.status));
+    const buckets = uniqueSorted(points.map((item) => item.createdAtBucket));
     const bucketStatusMap = new Map<string, number>();
     for (const item of points) {
       const key = `${item.createdAtBucket}@@${item.status}`;
@@ -297,7 +299,7 @@ export function MonitorPage() {
   const torrentOption = useMemo(() => {
     const points = torrentBuckets.slice(-180);
     const topSources = torrentSummary.sourceRows.slice(0, 6).map((item) => ({ key: item.source, label: item.name }));
-    const buckets = Array.from(new Set(points.map((item) => item.bucket))).sort();
+    const buckets = uniqueSorted(points.map((item) => item.bucket));
     const bucketSourceMap = new Map<string, number>();
     for (const item of points) {
       const key = `${item.bucket}@@${item.source}`;
@@ -367,7 +369,7 @@ export function MonitorPage() {
         </div>
         <Group gap="sm" wrap="wrap">
           {lastUpdatedAt ? (
-            <Text c="dimmed" size="sm">{t("monitor.lastUpdated")}: {new Date(lastUpdatedAt).toLocaleString()}</Text>
+            <Text c="dimmed" size="sm">{t("monitor.lastUpdated")}: {formatDateTime(lastUpdatedAt)}</Text>
           ) : null}
           <Tooltip label={t("common.refresh")} withArrow>
             <ActionIcon

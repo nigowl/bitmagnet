@@ -9,6 +9,14 @@ import (
 	"time"
 )
 
+func playerTransmissionRPCResultError(method, result string) error {
+	result = strings.TrimSpace(result)
+	if strings.EqualFold(result, "success") {
+		return nil
+	}
+	return fmt.Errorf("transmission %s result=%q", method, result)
+}
+
 func (s *service) playerTransmissionEnsureTorrent(
 	ctx context.Context,
 	settings playerBootstrapSettings,
@@ -52,8 +60,8 @@ func (s *service) playerTransmissionEnsureTorrent(
 	if err := json.Unmarshal(addResponseRaw, &addResponse); err != nil {
 		return nil, err
 	}
-	if !strings.EqualFold(strings.TrimSpace(addResponse.Result), "success") {
-		return nil, fmt.Errorf("transmission torrent-add result=%q", strings.TrimSpace(addResponse.Result))
+	if err := playerTransmissionRPCResultError("torrent-add", addResponse.Result); err != nil {
+		return nil, err
 	}
 
 	_ = s.playerTransmissionTryStart(ctx, settings, infoHash)
@@ -124,8 +132,8 @@ func (s *service) playerTransmissionFetchTorrent(
 	if err := json.Unmarshal(raw, &response); err != nil {
 		return nil, err
 	}
-	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
-		return nil, fmt.Errorf("transmission torrent-get result=%q", strings.TrimSpace(response.Result))
+	if err := playerTransmissionRPCResultError("torrent-get", response.Result); err != nil {
+		return nil, err
 	}
 
 	for _, item := range response.Arguments.Torrents {
@@ -161,8 +169,12 @@ func (s *service) playerTransmissionFetchTorrents(
 			Fields: []string{
 				"id",
 				"hashString",
+				"name",
 				"status",
 				"percentDone",
+				"error",
+				"errorString",
+				"isFinished",
 			},
 		},
 	})
@@ -184,13 +196,13 @@ func (s *service) playerTransmissionFetchTorrents(
 	if err := json.Unmarshal(raw, &response); err != nil {
 		return nil, err
 	}
-	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
-		return nil, fmt.Errorf("transmission torrent-get result=%q", strings.TrimSpace(response.Result))
+	if err := playerTransmissionRPCResultError("torrent-get", response.Result); err != nil {
+		return nil, err
 	}
 
 	result := make(map[string]playerTransmissionRPCTorrent, len(response.Arguments.Torrents))
 	for _, item := range response.Arguments.Torrents {
-		key := strings.TrimSpace(strings.ToLower(item.HashString))
+		key := normalizePlayerInfoHashKey(item.HashString)
 		if key == "" {
 			continue
 		}
@@ -278,8 +290,8 @@ func (s *service) playerTransmissionSetOnlyWantedFile(
 	if err := json.Unmarshal(raw, &response); err != nil {
 		return err
 	}
-	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
-		return fmt.Errorf("transmission torrent-set result=%q", strings.TrimSpace(response.Result))
+	if err := playerTransmissionRPCResultError("torrent-set", response.Result); err != nil {
+		return err
 	}
 
 	return nil
@@ -317,10 +329,11 @@ func (s *service) playerTransmissionTryStart(
 			lastErr = err
 			continue
 		}
-		if strings.EqualFold(strings.TrimSpace(response.Result), "success") {
+		if err := playerTransmissionRPCResultError(method, response.Result); err == nil {
 			return nil
+		} else {
+			lastErr = err
 		}
-		lastErr = fmt.Errorf("transmission %s result=%q", method, strings.TrimSpace(response.Result))
 	}
 	return lastErr
 }

@@ -38,7 +38,7 @@ func TestMatch(ctx context.Context, config Config, input TestInput) (TestResult,
 	}
 
 	entry := model.MediaEntry{
-		ContentType: toContentType(input.ContentType),
+		ContentType: model.NormalizeVideoContentType(input.ContentType),
 		Title:       strings.TrimSpace(input.Title),
 		NameOriginal: func() model.NullString {
 			title := strings.TrimSpace(input.Title)
@@ -146,13 +146,4 @@ func TestMatch(ctx context.Context, config Config, input TestInput) (TestResult,
 	}
 
 	return result, nil
-}
-
-func toContentType(value string) model.ContentType {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "tv", "series", "show", "tv_show":
-		return model.ContentTypeTvShow
-	default:
-		return model.ContentTypeMovie
-	}
 }

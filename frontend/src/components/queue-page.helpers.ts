@@ -11,6 +11,8 @@ export const KNOWN_QUEUE_NAMES = [
   "backfill_cover_cache"
 ] as const;
 
+export { uniqueSorted } from "@/lib/collections";
+
 export type QueueJob = {
   id: string;
   queue: string;

@@ -2,9 +2,7 @@ package imdb
 
 import (
 	"context"
-	"strings"
 	"time"
-	"unicode"
 
 	"github.com/nigowl/bitmagnet/internal/model"
 	"go.uber.org/zap"
@@ -31,9 +29,9 @@ func (p *Plugin) Enrich(ctx context.Context, db *gorm.DB, entry model.MediaEntry
 	id := ""
 
 	if entry.ContentSource == model.SourceImdb {
-		id = normalizeIMDbID(entry.ContentID)
+		id = model.NormalizeIMDbID(entry.ContentID)
 	} else if entry.IMDbID.Valid {
-		id = normalizeIMDbID(entry.IMDbID.String)
+		id = model.NormalizeIMDbID(entry.IMDbID.String)
 	}
 
 	if id == "" {
@@ -102,31 +100,4 @@ func (p *Plugin) Enrich(ctx context.Context, db *gorm.DB, entry model.MediaEntry
 	}
 
 	return true, nil
-}
-
-func normalizeIMDbID(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-
-	if strings.HasPrefix(strings.ToLower(value), "tt") {
-		return "tt" + digitsOnly(value[2:])
-	}
-
-	digits := digitsOnly(value)
-	if digits == "" {
-		return ""
-	}
-	return "tt" + digits
-}
-
-func digitsOnly(value string) string {
-	var b strings.Builder
-	for _, r := range value {
-		if unicode.IsDigit(r) {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
 }

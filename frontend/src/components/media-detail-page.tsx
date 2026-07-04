@@ -13,12 +13,16 @@ import {
   Table,
   Text
 } from "@mantine/core";
+import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { ArrowLeft, Heart, HeartOff, RefreshCw } from "lucide-react";
 import { useAuth } from "@/auth/provider";
 import { useI18n } from "@/languages/provider";
 import {
+  cancelPlayerTransmissionCache,
   clearPlayerTransmissionCache,
+  deletePlayerTransmissionCache,
+  enqueuePlayerTransmissionCache,
   fetchMediaDetail,
   fetchPlayerTransmissionBatchStatus,
   type MediaDetailResponse,
@@ -35,6 +39,7 @@ import {
   fallbackCategoryHref,
   firstNonEmpty,
   isTransmissionTaskComplete,
+  normalizeInfoHash,
   normalizeResolutionFilter,
   resolutionSortValue,
   resolveReturnHref,
@@ -42,6 +47,7 @@ import {
   uniqueValues
 } from "./media-detail-page.helpers";
 import { useMediaEpisodeGroups } from "./media-detail-page.episodes";
+import { MediaDetailCacheStatusModal } from "./media-detail-page.cache-modal";
 import { MediaEpisodePanel } from "./media-detail-page.episodes-panel";
 import { MediaDetailHero } from "./media-detail-page.hero";
 import { MediaDetailSidecars } from "./media-detail-page.sidecars";
@@ -58,6 +64,9 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
   const [torrentResolutionFilter, setTorrentResolutionFilter] = useState("all");
   const [torrentCachedOnly, setTorrentCachedOnly] = useState(false);
   const [cacheClearing, setCacheClearing] = useState(false);
+  const [cacheQueueing, setCacheQueueing] = useState<Record<string, boolean>>({});
+  const [cacheActioning, setCacheActioning] = useState<string | null>(null);
+  const [cacheStatusTarget, setCacheStatusTarget] = useState<MediaDetailTorrent | null>(null);
   const [selectedEpisodeKey, setSelectedEpisodeKey] = useState<string | null>(null);
   const cacheFilterAutoAppliedRef = useRef("");
   const titleLanguage = locale === "en" ? "en" : "zh";
@@ -100,7 +109,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
     const result = await fetchPlayerTransmissionBatchStatus(infoHashes);
     const nextMap: Record<string, PlayerTransmissionTaskStatus> = {};
     result.items.forEach((item) => {
-      const key = item.infoHash.trim().toLowerCase();
+      const key = normalizeInfoHash(item.infoHash);
       if (!key) return;
       nextMap[key] = item;
     });
@@ -148,7 +157,7 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
     if (Object.keys(playerStatusMap).length === 0) return;
     cacheFilterAutoAppliedRef.current = itemKey;
     const hasCompletedCache = torrents.some((torrent) =>
-      isTransmissionTaskComplete(playerStatusMap[torrent.infoHash.trim().toLowerCase()])
+      isTransmissionTaskComplete(playerStatusMap[normalizeInfoHash(torrent.infoHash)])
     );
     if (hasCompletedCache) {
       setTorrentCachedOnly(true);
@@ -207,14 +216,15 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
     if (torrentResolutionFilter !== "all" && normalizeResolutionFilter(torrent.videoResolution) !== torrentResolutionFilter) {
       return false;
     }
-    if (torrentCachedOnly && !isTransmissionTaskComplete(playerStatusMap[torrent.infoHash.trim().toLowerCase()])) {
+    if (torrentCachedOnly && !isTransmissionTaskComplete(playerStatusMap[normalizeInfoHash(torrent.infoHash)])) {
       return false;
     }
     return true;
   }).sort(compareMediaDetailTorrents);
   const cachedTaskInfoHashes = torrents
-    .filter((torrent) => playerStatusMap[torrent.infoHash.trim().toLowerCase()]?.exists)
+    .filter((torrent) => playerStatusMap[normalizeInfoHash(torrent.infoHash)]?.exists)
     .map((torrent) => torrent.infoHash);
+  const activeCacheStatus = cacheStatusTarget ? playerStatusMap[normalizeInfoHash(cacheStatusTarget.infoHash)] : undefined;
   const torrentTotalPages = Math.max(1, Math.ceil(filteredTorrents.length / torrentPageSize));
   const normalizedTorrentPage = Math.max(1, Math.min(torrentPage, torrentTotalPages));
   const pagedTorrents = filteredTorrents.slice((normalizedTorrentPage - 1) * torrentPageSize, normalizedTorrentPage * torrentPageSize);
@@ -231,13 +241,9 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
   const selectedOverview = (titleLanguage === "zh"
     ? firstNonEmpty(item.overviewZh, item.overviewEn)
     : firstNonEmpty(item.overviewEn, item.overviewZh)) || firstNonEmpty(item.overviewOriginal, item.overview);
-  const aliases = (item.titleAliases ?? [])
-    .filter((alias) => alias.trim())
+  const aliases = uniqueValues(item.titleAliases ?? [])
     .filter((alias) => !sameText(alias, originalDisplayTitle))
-    .filter((alias) => !sameText(alias, selectedDisplayTitle))
-    .filter((alias, index, arr) =>
-      arr.findIndex((candidate) => candidate.trim().toLowerCase() === alias.trim().toLowerCase()) === index
-    );
+    .filter((alias) => !sameText(alias, selectedDisplayTitle));
 
   const genreNames = (item.collections ?? []).filter((collection) => collection.type === "genre").map((collection) => collection.name);
   const qualityTags = (item.qualityTags ?? []).map((tag) => formatQualityTag(tag)).filter(Boolean);
@@ -256,8 +262,8 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
   const quickExternalLinks = externalLinks;
   const recommendedTorrents = pickRecommendedTorrents(torrents, 6)
     .sort((left, right) => {
-      const leftCached = isTransmissionTaskComplete(playerStatusMap[left.infoHash.trim().toLowerCase()]) ? 1 : 0;
-      const rightCached = isTransmissionTaskComplete(playerStatusMap[right.infoHash.trim().toLowerCase()]) ? 1 : 0;
+      const leftCached = isTransmissionTaskComplete(playerStatusMap[normalizeInfoHash(left.infoHash)]) ? 1 : 0;
+      const rightCached = isTransmissionTaskComplete(playerStatusMap[normalizeInfoHash(right.infoHash)]) ? 1 : 0;
       if (leftCached !== rightCached) return rightCached - leftCached;
       return 0;
     })
@@ -320,8 +326,10 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
       selectedGroup={selectedEpisodeGroup}
       playerStatusMap={playerStatusMap}
       playerEnabled={Boolean(payload.playerEnabled)}
+      cacheQueueing={cacheQueueing}
       onOpenEpisode={setSelectedEpisodeKey}
       onCloseEpisode={() => setSelectedEpisodeKey(null)}
+      onCacheTorrent={(item) => void handleQueueTorrentCache(item)}
     />
   ) : null;
 
@@ -358,22 +366,107 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
       notifications.show({ color: "yellow", message: t("media.detail.cacheEmpty") });
       return;
     }
-    const confirmed = window.confirm(t("media.detail.cacheClearConfirm"));
-    if (!confirmed) {
+    modals.openConfirmModal({
+      title: t("media.detail.clearCache"),
+      children: <Text size="sm">{t("media.detail.cacheClearConfirm")}</Text>,
+      labels: { confirm: t("media.detail.clearCache"), cancel: t("common.cancel") },
+      confirmProps: { color: "red" },
+      onConfirm: async () => {
+        setCacheClearing(true);
+        try {
+          const result = await clearPlayerTransmissionCache(cachedTaskInfoHashes);
+          notifications.show({
+            color: "green",
+            message: `${t("media.detail.cacheCleared")} (${result.removed || 0})`
+          });
+          await refreshPlayerStatuses(torrents);
+        } catch (error) {
+          notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+        } finally {
+          setCacheClearing(false);
+        }
+      }
+    });
+  };
+
+  async function handleQueueTorrentCache(item: MediaDetailTorrent) {
+    const infoHash = normalizeInfoHash(item.infoHash);
+    if (!infoHash) {
       return;
     }
-    setCacheClearing(true);
+    const currentStatus = playerStatusMap[infoHash];
+    const queueState = currentStatus?.queueState?.trim().toLowerCase();
+    if (currentStatus?.exists || queueState === "pending" || queueState === "running" || queueState === "done" || queueState === "canceled") {
+      setCacheStatusTarget(item);
+      return;
+    }
+    const title = item.title || item.torrent.name || infoHash;
+    modals.openConfirmModal({
+      title: t("media.detail.cacheTorrent"),
+      children: <Text size="sm">{t("media.detail.cacheQueueConfirm").replace("{title}", title)}</Text>,
+      labels: { confirm: t("media.detail.cacheTorrent"), cancel: t("common.cancel") },
+      confirmProps: { color: "orange" },
+      onConfirm: async () => {
+        setCacheQueueing((current) => ({ ...current, [infoHash]: true }));
+        try {
+          const result = await enqueuePlayerTransmissionCache(infoHash);
+          const position = result?.position || 1;
+          notifications.show({
+            color: "green",
+            message: `${t("media.detail.cacheQueued")} (${position})`
+          });
+          await refreshPlayerStatuses(torrents);
+        } catch (error) {
+          notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+        } finally {
+          setCacheQueueing((current) => {
+            const next = { ...current };
+            delete next[infoHash];
+            return next;
+          });
+        }
+      }
+    });
+  }
+
+  const handleCancelTorrentCache = async () => {
+    if (!cacheStatusTarget) {
+      return;
+    }
+    const infoHash = normalizeInfoHash(cacheStatusTarget.infoHash);
+    if (!infoHash) {
+      return;
+    }
+    setCacheActioning(infoHash);
     try {
-      const result = await clearPlayerTransmissionCache(cachedTaskInfoHashes);
-      notifications.show({
-        color: "green",
-        message: `${t("media.detail.cacheCleared")} (${result.removed || 0})`
-      });
+      await cancelPlayerTransmissionCache(infoHash);
+      notifications.show({ color: "green", message: t("media.detail.cacheCanceled") });
       await refreshPlayerStatuses(torrents);
     } catch (error) {
       notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
     } finally {
-      setCacheClearing(false);
+      setCacheActioning(null);
+    }
+  };
+
+  const handleDeleteTorrentCache = async () => {
+    if (!cacheStatusTarget) {
+      return;
+    }
+    const infoHash = normalizeInfoHash(cacheStatusTarget.infoHash);
+    if (!infoHash) {
+      return;
+    }
+    setCacheActioning(infoHash);
+    try {
+      await deletePlayerTransmissionCache(infoHash);
+      notifications.show({ color: "green", message: t("media.detail.cacheDeleted") });
+      setCacheStatusTarget(null);
+      await refreshPlayerStatuses(torrents);
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setCacheActioning(null);
     }
   };
 
@@ -381,6 +474,16 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
     <div className="media-detail-page-wrap">
       {coverBackdrop ? <div className="media-global-backdrop" style={{ backgroundImage: `url(${coverBackdrop})` }} /> : null}
       {coverBackdrop ? <div className="media-global-backdrop-mask" /> : null}
+      <MediaDetailCacheStatusModal
+        t={t}
+        item={cacheStatusTarget}
+        status={activeCacheStatus}
+        opened={Boolean(cacheStatusTarget)}
+        loading={cacheActioning === (cacheStatusTarget ? normalizeInfoHash(cacheStatusTarget.infoHash) : null)}
+        onClose={() => setCacheStatusTarget(null)}
+        onCancel={() => void handleCancelTorrentCache()}
+        onDelete={() => void handleDeleteTorrentCache()}
+      />
 
       <Stack gap="md" className="media-detail-page-content">
         <Group justify="space-between" wrap="wrap">
@@ -482,12 +585,14 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
           torrentCachedOnly={torrentCachedOnly}
           cachedTaskInfoHashes={cachedTaskInfoHashes}
           cacheClearing={cacheClearing}
+          cacheQueueing={cacheQueueing}
           torrentTotalPages={torrentTotalPages}
           normalizedTorrentPage={normalizedTorrentPage}
           payload={payload}
           onChangeResolutionFilter={setTorrentResolutionFilter}
           onChangeCachedOnly={setTorrentCachedOnly}
           onClearCache={() => void handleClearTorrentCache()}
+          onCacheTorrent={(item) => void handleQueueTorrentCache(item)}
           onChangePage={setTorrentPage}
         />
 

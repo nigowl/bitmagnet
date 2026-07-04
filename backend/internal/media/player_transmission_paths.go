@@ -94,7 +94,7 @@ func buildTransmissionPathCandidates(downloadDir string, localDownloadDir string
 	}
 
 	appendCandidate(normalized)
-	if baseName := strings.ToLower(strings.TrimSpace(filepath.Base(normalized))); baseName == "complete" || baseName == "incomplete" {
+	if baseName := strings.TrimSpace(filepath.Base(normalized)); strings.EqualFold(baseName, "complete") || strings.EqualFold(baseName, "incomplete") {
 		appendCandidate(filepath.Dir(normalized))
 	}
 	if override := strings.TrimSpace(os.Getenv("BITMAGNET_PLAYER_TRANSMISSION_LOCAL_DOWNLOAD_DIR")); override != "" {

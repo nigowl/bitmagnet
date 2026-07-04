@@ -2,6 +2,7 @@
 
 import { ActionIcon, Group, Text, Tooltip } from "@mantine/core";
 import { CircleHelp } from "lucide-react";
+import { formatDateTimeOrRaw } from "@/lib/datetime";
 import type { SystemSettings } from "./settings-page.types";
 
 type TFunction = (key: string) => string;
@@ -62,10 +63,7 @@ export function createPerformanceLabelRenderer(t: TFunction) {
 }
 
 export function formatRuntimeCheckedAt(value: string) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString();
+  return formatDateTimeOrRaw(value);
 }
 
 export function prettifyGoDuration(raw?: string | number) {

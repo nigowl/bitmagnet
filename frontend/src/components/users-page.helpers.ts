@@ -1,3 +1,5 @@
+export { formatDateTime as formatDate } from "@/lib/datetime";
+
 export type AdminUserItem = {
   id: number;
   username: string;
@@ -65,11 +67,4 @@ export function toISODateTime(raw: string): string | null {
     return null;
   }
   return parsed.toISOString();
-}
-
-export function formatDate(raw?: string | null): string {
-  if (!raw) return "-";
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return "-";
-  return parsed.toLocaleString();
 }

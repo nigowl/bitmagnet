@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/nigowl/bitmagnet/internal/media"
@@ -24,6 +25,8 @@ type playerHLSSession struct {
 	LastHeartbeatAt  time.Time
 	PlaybackActive   bool
 	PrebufferSeconds int
+	StartSeconds     float64
+	TranscodePaused  bool
 	Cmd              *exec.Cmd
 	Done             chan struct{}
 	DoneObserved     bool
@@ -87,6 +90,7 @@ func (b *builder) playerHLSStartOrReuseSession(
 		resolveResult.StartSeconds,
 		resolveResult.AudioTrackIndex,
 		resolveResult.OutputResolution,
+		prebufferSeconds,
 		sessionDir,
 	)
 	cmd := exec.Command(binaryPath, args...)
@@ -108,6 +112,7 @@ func (b *builder) playerHLSStartOrReuseSession(
 		PlaylistPath:     playlistPath,
 		LastAccessedAt:   time.Now(),
 		PrebufferSeconds: prebufferSeconds,
+		StartSeconds:     math.Max(0, resolveResult.StartSeconds),
 		Cmd:              cmd,
 		Done:             make(chan struct{}),
 	}
@@ -244,6 +249,33 @@ func (b *builder) stopPlayerHLSSessionLocked(sessionKey string, session *playerH
 	}
 }
 
+func playerHLSCachedAheadSeconds(session *playerHLSSession, currentSeconds float64) (float64, bool) {
+	cachedSeconds, endList := playerHLSCachedSeconds(session.PlaylistPath)
+	current := currentSeconds
+	if math.IsNaN(current) || math.IsInf(current, 0) || current < session.StartSeconds {
+		current = session.StartSeconds
+	}
+	return math.Max(0, session.StartSeconds+cachedSeconds-current), endList
+}
+
+func pausePlayerHLSTranscodeLocked(session *playerHLSSession) {
+	if session.TranscodePaused || session.DoneObserved || session.Cmd == nil || session.Cmd.Process == nil {
+		return
+	}
+	if err := session.Cmd.Process.Signal(syscall.SIGSTOP); err == nil {
+		session.TranscodePaused = true
+	}
+}
+
+func resumePlayerHLSTranscodeLocked(session *playerHLSSession) {
+	if !session.TranscodePaused || session.DoneObserved || session.Cmd == nil || session.Cmd.Process == nil {
+		return
+	}
+	if err := session.Cmd.Process.Signal(syscall.SIGCONT); err == nil {
+		session.TranscodePaused = false
+	}
+}
+
 func (b *builder) schedulePlayerHLSSessionDirRemoval(sessionKey string, dir string) {
 	if strings.TrimSpace(dir) == "" {
 		return
@@ -260,10 +292,14 @@ func (b *builder) schedulePlayerHLSSessionDirRemoval(sessionKey string, dir stri
 	}()
 }
 
+func normalizePlayerHLSInfoHashKey(infoHash string) string {
+	return strings.TrimSpace(strings.ToLower(infoHash))
+}
+
 func buildPlayerHLSCacheKey(resolveResult media.PlayerTransmissionResolveStreamResult, input media.PlayerTransmissionResolveStreamInput, prebufferSeconds int) string {
 	payload := fmt.Sprintf(
 		"%s|%d|%.3f|%d|%d|%d|%d|%s",
-		strings.TrimSpace(strings.ToLower(input.InfoHash)),
+		normalizePlayerHLSInfoHashKey(input.InfoHash),
 		input.FileIndex,
 		math.Max(0, input.StartSeconds),
 		input.StartBytes,
@@ -279,7 +315,7 @@ func buildPlayerHLSCacheKey(resolveResult media.PlayerTransmissionResolveStreamR
 func buildPlayerHLSGroupKey(input media.PlayerTransmissionResolveStreamInput) string {
 	payload := fmt.Sprintf(
 		"%s|%d|%d|%d",
-		strings.TrimSpace(strings.ToLower(input.InfoHash)),
+		normalizePlayerHLSInfoHashKey(input.InfoHash),
 		input.FileIndex,
 		input.AudioTrackIndex,
 		input.OutputResolution,

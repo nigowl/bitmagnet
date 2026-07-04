@@ -1,6 +1,8 @@
 import type { MediaDetailTorrent } from "@/lib/media-api";
 import { apiBaseURL } from "@/lib/api";
 import { md5 } from "@/lib/md5";
+import { resolveInternalHref } from "@/lib/navigation";
+import { firstNonEmptyText } from "@/lib/text";
 export { buildMediaExternalLinks, extractMediaFacts } from "@/lib/media-facts";
 export type { MediaExternalLink, MediaFactGroup, MediaFactKey } from "@/lib/media-facts";
 
@@ -39,6 +41,11 @@ export type MediaTitleLanguage = "original" | "zh" | "en";
 export type MediaCategory = "movie" | "series" | "anime";
 
 export type MediaCoverSize = "sm" | "md" | "lg" | "xl";
+
+export function normalizeContentType(type?: string | null): string {
+  const normalized = typeof type === "string" ? type.trim().toLowerCase() : "";
+  return normalized === "0" ? "" : normalized;
+}
 
 export function buildMediaEntryIdFromContentRef(
   contentType?: string | null,
@@ -128,16 +135,6 @@ export function getBackdropUrl(item: MediaLikeItem, size: MediaCoverSize = "lg")
   return normalizeTMDBImage(backdropPath, tmdbBackdropSize(size));
 }
 
-function firstNonEmptyText(...values: Array<string | null | undefined>): string | null {
-  for (const value of values) {
-    const normalized = value?.trim();
-    if (normalized) {
-      return normalized;
-    }
-  }
-  return null;
-}
-
 export function getDisplayTitle(item: MediaLikeItem, language: MediaTitleLanguage = "original"): string {
   const original = firstNonEmptyText(item.nameOriginal, item.originalTitle, item.title, item.content?.title);
   const zh = firstNonEmptyText(item.nameZh);
@@ -150,6 +147,11 @@ export function getDisplayTitle(item: MediaLikeItem, language: MediaTitleLanguag
     return firstNonEmptyText(en, zh, original) || "-";
   }
   return original || "-";
+}
+
+export function getOriginalTitleIfDifferent(item: MediaLikeItem, title: string): string | null {
+  const original = getDisplayTitle(item, "original");
+  return original.trim().toLowerCase() !== title.trim().toLowerCase() ? original : null;
 }
 
 export function isAnimeItem(item: MediaLikeItem): boolean {
@@ -187,8 +189,8 @@ export function buildMediaDetailHref(
 ): string {
   const category = resolveMediaCategory(item);
   const baseHref = `/media/${category}/${encodeURIComponent(item.id)}`;
-  const normalizedSource = sourceHref?.trim();
-  if (!normalizedSource || !normalizedSource.startsWith("/") || normalizedSource.startsWith("//")) {
+  const normalizedSource = resolveInternalHref(sourceHref, "");
+  if (!normalizedSource) {
     return baseHref;
   }
 
@@ -261,8 +263,12 @@ export function pickBestQualityTag(tags: string[] | null | undefined): string | 
   return best || null;
 }
 
+export function uniqueMediaTags(tags: string[] | null | undefined): string[] {
+  return Array.from(new Set(toArray(tags).map((tag) => tag.trim()).filter(Boolean)));
+}
+
 function toArray<T>(value?: T[] | null): T[] {
-  return Array.isArray(value) ? value : [];
+	return Array.isArray(value) ? value : [];
 }
 
 function resolutionScore(value?: string | null): number {

@@ -7,7 +7,7 @@ func BearerToken(authorizationHeader string) string {
 	if header == "" {
 		return ""
 	}
-	if !strings.HasPrefix(strings.ToLower(header), "bearer ") {
+	if len(header) < len("bearer ") || !strings.EqualFold(header[:len("bearer ")], "bearer ") {
 		return ""
 	}
 	return strings.TrimSpace(header[7:])

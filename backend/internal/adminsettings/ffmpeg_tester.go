@@ -30,18 +30,12 @@ type FFmpegTestResult struct {
 }
 
 func (s *service) TestPlayerFFmpeg(ctx context.Context, input FFmpegTestInput) (FFmpegTestResult, error) {
-	binaryPath := strings.TrimSpace(input.BinaryPath)
-	if binaryPath == "" {
-		binaryPath = strings.TrimSpace(s.defaults.Player.FFmpeg.BinaryPath)
-	}
+	binaryPath := firstNonEmptyTrimmed(input.BinaryPath, s.defaults.Player.FFmpeg.BinaryPath)
 	if binaryPath == "" {
 		return FFmpegTestResult{}, fmt.Errorf("%w: player.ffmpeg.binaryPath", ErrInvalidInput)
 	}
 
-	preset := strings.TrimSpace(input.Preset)
-	if preset == "" {
-		preset = strings.TrimSpace(s.defaults.Player.FFmpeg.Preset)
-	}
+	preset := firstNonEmptyTrimmed(input.Preset, s.defaults.Player.FFmpeg.Preset)
 	if preset == "" {
 		preset = "veryfast"
 	}
@@ -74,45 +68,33 @@ func (s *service) TestPlayerFFmpeg(ctx context.Context, input FFmpegTestInput) (
 		CRF:              crf,
 		AudioBitrateKbps: audioBitrate,
 		Threads:          threads,
-		ExtraArgs:        strings.TrimSpace(input.ExtraArgs),
+		ExtraArgs:        firstNonEmptyTrimmed(input.ExtraArgs),
 	}
 	testArgs := buildFFmpegSanityArgs(options)
 	preview := strings.Join(append([]string{binaryPath}, testArgs...), " ")
 
 	startedAt := time.Now()
-	version, err := probeFFmpegVersion(ctx, binaryPath)
-	if err != nil {
+	buildResult := func(success bool, message string, version string) FFmpegTestResult {
 		return FFmpegTestResult{
-			Success:     false,
-			Message:     err.Error(),
-			BinaryPath:  binaryPath,
-			LatencyMs:   time.Since(startedAt).Milliseconds(),
-			ArgsPreview: preview,
-			EncodeMode:  "lavfi-smoke",
-		}, nil
-	}
-
-	if err := probeFFmpegEncode(ctx, binaryPath, testArgs); err != nil {
-		return FFmpegTestResult{
-			Success:     false,
-			Message:     err.Error(),
+			Success:     success,
+			Message:     message,
 			BinaryPath:  binaryPath,
 			LatencyMs:   time.Since(startedAt).Milliseconds(),
 			Version:     version,
 			ArgsPreview: preview,
 			EncodeMode:  "lavfi-smoke",
-		}, nil
+		}
+	}
+	version, err := probeFFmpegVersion(ctx, binaryPath)
+	if err != nil {
+		return buildResult(false, err.Error(), ""), nil
 	}
 
-	return FFmpegTestResult{
-		Success:     true,
-		Message:     "ffmpeg encode pipeline ok",
-		BinaryPath:  binaryPath,
-		LatencyMs:   time.Since(startedAt).Milliseconds(),
-		Version:     version,
-		ArgsPreview: preview,
-		EncodeMode:  "lavfi-smoke",
-	}, nil
+	if err := probeFFmpegEncode(ctx, binaryPath, testArgs); err != nil {
+		return buildResult(false, err.Error(), version), nil
+	}
+
+	return buildResult(true, "ffmpeg encode pipeline ok", version), nil
 }
 
 func probeFFmpegVersion(ctx context.Context, binaryPath string) (string, error) {

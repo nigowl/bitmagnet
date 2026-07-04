@@ -80,100 +80,68 @@ type transmissionSessionGetPayload struct {
 }
 
 func (s *service) TestPlayerTransmission(ctx context.Context, input TransmissionTestInput) (TransmissionTestResult, error) {
-	url := strings.TrimSpace(input.URL)
-	if url == "" {
-		url = strings.TrimSpace(s.defaults.Player.Transmission.URL)
-	}
+	url := firstNonEmptyTrimmed(input.URL, s.defaults.Player.Transmission.URL)
 	if url == "" {
 		return TransmissionTestResult{}, fmt.Errorf("%w: player.transmission.url", ErrInvalidInput)
 	}
 
-	timeoutSeconds := input.TimeoutSeconds
-	if timeoutSeconds <= 0 {
-		timeoutSeconds = s.defaults.Player.Transmission.TimeoutSeconds
-	}
-	if timeoutSeconds < 2 || timeoutSeconds > 60 {
+	timeoutSeconds := normalizeTransmissionTimeoutSeconds(input.TimeoutSeconds, s.defaults.Player.Transmission.TimeoutSeconds)
+	if !validTransmissionTimeoutSeconds(timeoutSeconds) {
 		return TransmissionTestResult{}, fmt.Errorf("%w: player.transmission.timeoutSeconds", ErrInvalidInput)
 	}
 
-	mappingDirectory := strings.TrimSpace(input.DownloadMappingDirectory)
-	if mappingDirectory == "" {
-		mappingDirectory = strings.TrimSpace(input.LocalDownloadDir)
-	}
-	if mappingDirectory == "" {
-		mappingDirectory = strings.TrimSpace(s.defaults.Player.Transmission.DownloadMappingDirectory)
-	}
-	if mappingDirectory == "" {
-		mappingDirectory = strings.TrimSpace(s.defaults.Player.Transmission.LocalDownloadDir)
-	}
+	mappingDirectory := firstNonEmptyTrimmed(
+		input.DownloadMappingDirectory,
+		input.LocalDownloadDir,
+		s.defaults.Player.Transmission.DownloadMappingDirectory,
+		s.defaults.Player.Transmission.LocalDownloadDir,
+	)
 
 	mappingResult, _ := s.TestPlayerDownloadMapping(ctx, DownloadMappingTestInput{
 		Directory:      mappingDirectory,
 		TimeoutSeconds: timeoutSeconds,
 	})
+	startedAt := time.Now()
+	buildResult := func(success bool, message string) TransmissionTestResult {
+		return TransmissionTestResult{
+			Success:                  success,
+			Message:                  message,
+			URL:                      url,
+			LatencyMs:                time.Since(startedAt).Milliseconds(),
+			DownloadMapping:          mappingResult,
+			LocalDownloadDir:         mappingResult.Directory,
+			LocalDownloadDirExists:   mappingResult.DirectoryExists,
+			LocalDownloadDirIsDir:    mappingResult.DirectoryIsDir,
+			LocalDownloadDirReadable: mappingResult.DirectoryReadable,
+			LocalDownloadDirEntries:  mappingResult.DirectoryEntries,
+			LocalDownloadDirError:    mappingResult.DirectoryError,
+		}
+	}
 
 	payload, err := json.Marshal(transmissionSessionGetRequest{Method: "session-get"})
 	if err != nil {
 		return TransmissionTestResult{}, err
 	}
-
-	startedAt := time.Now()
 	responseBytes, err := callTransmissionRPCWithSession(
 		ctx,
 		url,
-		strings.TrimSpace(input.Username),
-		strings.TrimSpace(input.Password),
+		firstNonEmptyTrimmed(input.Username),
+		firstNonEmptyTrimmed(input.Password),
 		input.InsecureTLS,
 		timeoutSeconds,
 		payload,
 	)
 	if err != nil {
-		return TransmissionTestResult{
-			Success:                  false,
-			Message:                  err.Error(),
-			URL:                      url,
-			LatencyMs:                time.Since(startedAt).Milliseconds(),
-			DownloadMapping:          mappingResult,
-			LocalDownloadDir:         mappingResult.Directory,
-			LocalDownloadDirExists:   mappingResult.DirectoryExists,
-			LocalDownloadDirIsDir:    mappingResult.DirectoryIsDir,
-			LocalDownloadDirReadable: mappingResult.DirectoryReadable,
-			LocalDownloadDirEntries:  mappingResult.DirectoryEntries,
-			LocalDownloadDirError:    mappingResult.DirectoryError,
-		}, nil
+		return buildResult(false, err.Error()), nil
 	}
 
 	var parsed transmissionSessionGetResponse
 	if err := json.Unmarshal(responseBytes, &parsed); err != nil {
-		return TransmissionTestResult{
-			Success:                  false,
-			Message:                  fmt.Sprintf("parse rpc response failed: %v", err),
-			URL:                      url,
-			LatencyMs:                time.Since(startedAt).Milliseconds(),
-			DownloadMapping:          mappingResult,
-			LocalDownloadDir:         mappingResult.Directory,
-			LocalDownloadDirExists:   mappingResult.DirectoryExists,
-			LocalDownloadDirIsDir:    mappingResult.DirectoryIsDir,
-			LocalDownloadDirReadable: mappingResult.DirectoryReadable,
-			LocalDownloadDirEntries:  mappingResult.DirectoryEntries,
-			LocalDownloadDirError:    mappingResult.DirectoryError,
-		}, nil
+		return buildResult(false, fmt.Sprintf("parse rpc response failed: %v", err)), nil
 	}
 
 	if !strings.EqualFold(strings.TrimSpace(parsed.Result), "success") {
-		return TransmissionTestResult{
-			Success:                  false,
-			Message:                  fmt.Sprintf("rpc result=%q", strings.TrimSpace(parsed.Result)),
-			URL:                      url,
-			LatencyMs:                time.Since(startedAt).Milliseconds(),
-			DownloadMapping:          mappingResult,
-			LocalDownloadDir:         mappingResult.Directory,
-			LocalDownloadDirExists:   mappingResult.DirectoryExists,
-			LocalDownloadDirIsDir:    mappingResult.DirectoryIsDir,
-			LocalDownloadDirReadable: mappingResult.DirectoryReadable,
-			LocalDownloadDirEntries:  mappingResult.DirectoryEntries,
-			LocalDownloadDirError:    mappingResult.DirectoryError,
-		}, nil
+		return buildResult(false, fmt.Sprintf("rpc result=%q", strings.TrimSpace(parsed.Result))), nil
 	}
 
 	return TransmissionTestResult{
@@ -197,11 +165,8 @@ func (s *service) TestPlayerTransmission(ctx context.Context, input Transmission
 
 func (s *service) TestPlayerDownloadMapping(ctx context.Context, input DownloadMappingTestInput) (DownloadMappingTestResult, error) {
 	_ = ctx
-	timeoutSeconds := input.TimeoutSeconds
-	if timeoutSeconds <= 0 {
-		timeoutSeconds = s.defaults.Player.Transmission.TimeoutSeconds
-	}
-	if timeoutSeconds < 2 || timeoutSeconds > 60 {
+	timeoutSeconds := normalizeTransmissionTimeoutSeconds(input.TimeoutSeconds, s.defaults.Player.Transmission.TimeoutSeconds)
+	if !validTransmissionTimeoutSeconds(timeoutSeconds) {
 		return DownloadMappingTestResult{}, fmt.Errorf("%w: player.transmission.timeoutSeconds", ErrInvalidInput)
 	}
 	return testDownloadMappingDirectory(strings.TrimSpace(input.Directory)), nil
@@ -253,7 +218,7 @@ func testDownloadMappingDirectory(path string) DownloadMappingTestResult {
 		DirectoryEntries:  probe.Entries,
 		DirectoryError:    probe.Error,
 	}
-	if strings.TrimSpace(probe.Path) == "" {
+	if probe.Path == "" {
 		result.Success = false
 		result.Message = "directory path is empty"
 		return result
@@ -264,7 +229,7 @@ func testDownloadMappingDirectory(path string) DownloadMappingTestResult {
 		return result
 	}
 	result.Success = false
-	if strings.TrimSpace(probe.Error) == "" {
+	if probe.Error == "" {
 		result.Message = "directory mapping unavailable"
 	} else {
 		result.Message = probe.Error

@@ -36,7 +36,7 @@ func TestBuildPlayerHLSFFmpegArgsWritesSegmentedPlaylist(t *testing.T) {
 		AudioBitrateKbps: 128,
 	}
 
-	args := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 12.5, -1, 1080, "/tmp/hls-cache")
+	args := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 12.5, -1, 1080, 60, "/tmp/hls-cache")
 	joined := strings.Join(args, " ")
 	for _, expected := range []string{
 		"-f hls",
@@ -58,8 +58,8 @@ func TestBuildPlayerHLSFFmpegArgsWritesSegmentedPlaylist(t *testing.T) {
 	if containsArg(args, "-re") {
 		t.Fatalf("expected completed HLS input to skip -re, args=%s", joined)
 	}
-	if containsArg(args, "-readrate") || containsArg(args, "-readrate_initial_burst") {
-		t.Fatalf("expected completed HLS input to transcode ahead without realtime throttling, args=%s", joined)
+	if containsArg(args, "-readrate") || containsArg(args, "-readrate_initial_burst") || containsArg(args, "-readrate_catchup") {
+		t.Fatalf("expected HLS input rate to be controlled by session pause/resume, args=%s", joined)
 	}
 }
 
@@ -71,6 +71,35 @@ func TestRewritePlayerHLSPlaylist(t *testing.T) {
 	}
 	if !strings.Contains(rewritten, "#EXT-X-START:TIME-OFFSET=0,PRECISE=YES") {
 		t.Fatalf("expected explicit playlist start, got=%s", rewritten)
+	}
+}
+
+func TestPlayerHLSCachedAheadSecondsUsesPlaybackPosition(t *testing.T) {
+	dir := t.TempDir()
+	playlistPath := filepath.Join(dir, "index.m3u8")
+	playlist := "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2.000000,\nsegment-000000.ts\n#EXTINF:2.000000,\nsegment-000001.ts\n#EXTINF:2.000000,\nsegment-000002.ts\n"
+	if err := os.WriteFile(playlistPath, []byte(playlist), 0o644); err != nil {
+		t.Fatalf("write playlist: %v", err)
+	}
+
+	ahead, endList := playerHLSCachedAheadSeconds(&playerHLSSession{
+		PlaylistPath: playlistPath,
+		StartSeconds: 100,
+	}, 103)
+	if endList {
+		t.Fatalf("expected open event playlist")
+	}
+	if ahead != 3 {
+		t.Fatalf("expected 3 seconds ahead, got=%f", ahead)
+	}
+}
+
+func TestPlayerHLSShouldResumeTranscodeUsesFixedCatchupRatio(t *testing.T) {
+	if !playerHLSShouldResumeTranscode(71.9, 90) {
+		t.Fatalf("expected cache below 80 percent to resume")
+	}
+	if playerHLSShouldResumeTranscode(72, 90) {
+		t.Fatalf("expected cache at 80 percent to stay paused")
 	}
 }
 
@@ -131,7 +160,7 @@ func TestNormalizePlayerHLSPrebufferSeconds(t *testing.T) {
 }
 
 func TestNormalizePlayerHLSStartupPrebufferSeconds(t *testing.T) {
-	if got := normalizePlayerHLSStartupPrebufferSeconds(60); got != 4 {
+	if got := normalizePlayerHLSStartupPrebufferSeconds(60); got != 10 {
 		t.Fatalf("expected normal startup target to stay small, got=%d", got)
 	}
 	if got := normalizePlayerHLSStartupPrebufferSeconds(2); got != 2 {

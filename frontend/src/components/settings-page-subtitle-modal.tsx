@@ -49,7 +49,10 @@ export function SettingsPageSubtitleModal({
         <Switch
           label={t("settings.subtitleTemplateEnabled")}
           checked={form.enabled}
-          onChange={(event) => onChangeForm((current) => ({ ...current, enabled: event.currentTarget.checked }))}
+          onChange={(event) => {
+            const checked = event.currentTarget.checked;
+            onChangeForm((current) => ({ ...current, enabled: checked }));
+          }}
         />
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose} disabled={saving}>

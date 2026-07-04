@@ -8,18 +8,14 @@ import (
 	"time"
 
 	"github.com/nigowl/bitmagnet/internal/model"
-	"github.com/nigowl/bitmagnet/internal/protocol"
 	"gorm.io/gorm"
 )
 
 const playerSubtitleMaxContentBytes = 2 * 1024 * 1024
 
 func normalizePlayerSubtitleInfoHash(raw string) (string, error) {
-	infoHash := strings.TrimSpace(strings.ToLower(raw))
-	if infoHash == "" {
-		return "", ErrInvalidInfoHash
-	}
-	if _, err := protocol.ParseID(infoHash); err != nil {
+	infoHash, err := normalizePlayerInfoHash(raw)
+	if err != nil {
 		return "", ErrInvalidInfoHash
 	}
 	return infoHash, nil

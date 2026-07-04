@@ -308,10 +308,21 @@ export function useTorrentPlayerPlaybackControls({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const nextRate = player.normalizePlaybackRatePreference(videoPlaybackRate);
-    if (Math.abs(video.playbackRate - nextRate) >= 0.01) {
-      setNativePlaybackRate(video, nextRate);
-    }
+    const applyPlaybackRate = () => {
+      const nextRate = player.normalizePlaybackRatePreference(videoPlaybackRate);
+      if (Math.abs(video.playbackRate - nextRate) >= 0.01) {
+        setNativePlaybackRate(video, nextRate);
+      }
+    };
+    applyPlaybackRate();
+    video.addEventListener("loadedmetadata", applyPlaybackRate);
+    video.addEventListener("canplay", applyPlaybackRate);
+    video.addEventListener("play", applyPlaybackRate);
+    return () => {
+      video.removeEventListener("loadedmetadata", applyPlaybackRate);
+      video.removeEventListener("canplay", applyPlaybackRate);
+      video.removeEventListener("play", applyPlaybackRate);
+    };
   }, [streamUrl, videoPlaybackRate, videoRef]);
 
   const handleTogglePip = useCallback(async () => {

@@ -44,17 +44,14 @@ var structuredMetadataColumns = []string{
 }
 
 func findFirstAttributeValue(attrs []model.MediaAttribute, source string, keys ...string) string {
-	keySet := make(map[string]struct{}, len(keys))
-	for _, key := range keys {
-		keySet[strings.ToLower(strings.TrimSpace(key))] = struct{}{}
-	}
+	keySet := attributeKeySet(keys)
 
-	source = strings.ToLower(strings.TrimSpace(source))
+	source = normalizedAttributeToken(source)
 	for _, attr := range attrs {
-		if source != "" && strings.ToLower(strings.TrimSpace(attr.Source)) != source {
+		if source != "" && normalizedAttributeToken(attr.Source) != source {
 			continue
 		}
-		if _, ok := keySet[strings.ToLower(strings.TrimSpace(attr.Key))]; !ok {
+		if _, ok := keySet[normalizedAttributeToken(attr.Key)]; !ok {
 			continue
 		}
 		value := strings.TrimSpace(attr.Value)
@@ -64,6 +61,18 @@ func findFirstAttributeValue(attrs []model.MediaAttribute, source string, keys .
 	}
 
 	return ""
+}
+
+func attributeKeySet(keys []string) map[string]struct{} {
+	keySet := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		keySet[normalizedAttributeToken(key)] = struct{}{}
+	}
+	return keySet
+}
+
+func normalizedAttributeToken(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
 }
 
 func pickFirstNonEmpty(values ...string) model.NullString {
@@ -76,26 +85,11 @@ func pickFirstNonEmpty(values ...string) model.NullString {
 	return model.NullString{}
 }
 
-func normalizeIMDbID(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	if !strings.HasPrefix(strings.ToLower(value), "tt") {
-		digits := extractDigits(value)
-		if digits == "" {
-			return ""
-		}
-		return "tt" + digits
-	}
-	return value
-}
-
 func collectProductionCountries(entry model.MediaEntry) []string {
 	values := make([]string, 0)
 
 	for _, collection := range entry.Collections {
-		collectionType := strings.ToLower(strings.TrimSpace(collection.Type))
+		collectionType := normalizedAttributeToken(collection.Type)
 		if collectionType != "country" && collectionType != "region" {
 			continue
 		}
@@ -197,7 +191,7 @@ func collectStudios(entry model.MediaEntry) []string {
 	values := make([]string, 0)
 
 	for _, collection := range entry.Collections {
-		collectionType := strings.ToLower(strings.TrimSpace(collection.Type))
+		collectionType := normalizedAttributeToken(collection.Type)
 		if collectionType == "studio" || collectionType == "production_company" {
 			pushUniqueFold(&values, collection.Name)
 		}
@@ -213,7 +207,7 @@ func collectAwards(entry model.MediaEntry) []string {
 	values := make([]string, 0)
 
 	for _, collection := range entry.Collections {
-		collectionType := strings.ToLower(strings.TrimSpace(collection.Type))
+		collectionType := normalizedAttributeToken(collection.Type)
 		if collectionType == "award" || collectionType == "awards" {
 			pushUniqueFold(&values, collection.Name)
 		}
@@ -279,18 +273,15 @@ func collectAttributeValues(attrs []model.MediaAttribute, source string, keys ..
 }
 
 func collectRawAttributeValues(attrs []model.MediaAttribute, source string, keys ...string) []string {
-	keySet := make(map[string]struct{}, len(keys))
-	for _, key := range keys {
-		keySet[strings.ToLower(strings.TrimSpace(key))] = struct{}{}
-	}
-	normalizedSource := strings.ToLower(strings.TrimSpace(source))
+	keySet := attributeKeySet(keys)
+	normalizedSource := normalizedAttributeToken(source)
 
 	values := make([]string, 0)
 	for _, attr := range attrs {
-		if normalizedSource != "" && strings.ToLower(strings.TrimSpace(attr.Source)) != normalizedSource {
+		if normalizedSource != "" && normalizedAttributeToken(attr.Source) != normalizedSource {
 			continue
 		}
-		if _, ok := keySet[strings.ToLower(strings.TrimSpace(attr.Key))]; !ok {
+		if _, ok := keySet[normalizedAttributeToken(attr.Key)]; !ok {
 			continue
 		}
 		normalized := cleanText(attr.Value)

@@ -155,7 +155,7 @@ export function resolvePlayableTranscodeStart(input: {
     return {
       seconds: clampedSeconds,
       startBytes: rawStartBytes,
-      prebufferSeconds: Math.max(10, Math.min(configuredPrebufferSeconds, Math.floor(availableAheadSeconds))),
+      prebufferSeconds: configuredPrebufferSeconds,
       availableAheadSeconds,
       adjusted: false,
       originalSeconds,
@@ -168,7 +168,7 @@ export function resolvePlayableTranscodeStart(input: {
     return {
       seconds: clampedSeconds,
       startBytes: rawStartBytes,
-      prebufferSeconds: Math.max(10, Math.min(configuredPrebufferSeconds, Math.floor(availableAheadSeconds))),
+      prebufferSeconds: configuredPrebufferSeconds,
       availableAheadSeconds,
       adjusted: false,
       originalSeconds,
@@ -219,7 +219,7 @@ export function resolvePlayableTranscodeStart(input: {
   return {
     seconds,
     startBytes: estimateTranscodeStartBytes(seconds, timeline, fileBytes),
-    prebufferSeconds: Math.max(10, Math.min(configuredPrebufferSeconds, Math.floor(availableAheadSeconds))),
+    prebufferSeconds: configuredPrebufferSeconds,
     availableAheadSeconds,
     adjusted: Math.abs(seconds - clampedSeconds) >= 0.25,
     originalSeconds,

@@ -9,7 +9,11 @@ import { ArrowLeft, ExternalLink, Heart, HeartOff, Play, RefreshCw } from "lucid
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { graphqlRequest } from "@/lib/api";
+import { formatBytes } from "@/lib/format";
 import { TORRENT_CONTENT_SEARCH_QUERY, TORRENT_FILES_QUERY } from "@/lib/graphql";
+import { normalizeContentType } from "@/lib/media";
+import { resolveInternalHref } from "@/lib/navigation";
+import { isVideoFile } from "@/lib/video-file";
 import { useI18n } from "@/languages/provider";
 
 type DetailResponse = {
@@ -57,41 +61,6 @@ type FilesResponse = {
   };
 };
 
-function formatBytes(size: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = size;
-  let index = 0;
-  while (value >= 1024 && index < units.length - 1) {
-    value /= 1024;
-    index += 1;
-  }
-  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[index]}`;
-}
-
-const PLAYER_FILE_VIDEO_EXTENSIONS = [
-  ".mp4", ".m4v", ".webm", ".mkv", ".mov", ".avi", ".flv", ".ts", ".m2ts", ".mpeg", ".mpg",
-  ".wmv", ".asf", ".3gp", ".3g2", ".f4v", ".rm", ".rmvb", ".vob", ".mxf", ".divx", ".xvid"
-];
-
-function isPlayableVideoFile(path: string, fileType?: string | null): boolean {
-  const normalizedPath = String(path || "").trim().toLowerCase();
-  if (!normalizedPath) return false;
-  if (PLAYER_FILE_VIDEO_EXTENSIONS.some((ext) => normalizedPath.endsWith(ext))) {
-    return true;
-  }
-  const normalizedType = String(fileType || "").trim().toLowerCase();
-  if (!normalizedType) return false;
-  return normalizedType.includes("video");
-}
-
-function resolveReturnHref(sourceHref: string | null, fallbackHref: string): string {
-  const normalized = sourceHref?.trim();
-  if (!normalized || !normalized.startsWith("/") || normalized.startsWith("//")) {
-    return fallbackHref;
-  }
-  return normalized;
-}
-
 export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
   const { t } = useI18n();
   const { openLogin } = useAuthDialog();
@@ -100,7 +69,7 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
   const [loading, setLoading] = useState(true);
   const [item, setItem] = useState<DetailResponse["torrentContent"]["search"]["items"][number] | null>(null);
   const [files, setFiles] = useState<FilesResponse["torrent"]["files"]["items"]>([]);
-  const backToListHref = resolveReturnHref(searchParams.get("from"), "/torrents");
+  const backToListHref = resolveInternalHref(searchParams.get("from"), "/torrents");
 
   const renderContentType = useCallback(
     (type?: string | null) => {
@@ -114,8 +83,8 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
 
   const typeSpecificRows = useMemo(() => {
     if (!item) return [];
-    const normalizedContentType = String(item.contentType || "").trim().toLowerCase();
-    if (!normalizedContentType || normalizedContentType === "0") {
+    const normalizedContentType = normalizeContentType(item.contentType);
+    if (!normalizedContentType) {
       return [];
     }
 
@@ -238,8 +207,8 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
   }
 
   const favoriteActive = hasFavorite(infoHash);
-  const normalizedContentType = String(item.contentType || "").trim().toLowerCase();
-  const hasVisibleContentType = normalizedContentType !== "" && normalizedContentType !== "0";
+  const normalizedContentType = normalizeContentType(item.contentType);
+  const hasVisibleContentType = normalizedContentType !== "";
 
   return (
     <Stack gap="md">
@@ -363,7 +332,7 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
                   <Table.Td>{file.fileType || "-"}</Table.Td>
                   <Table.Td>{formatBytes(file.size)}</Table.Td>
                   <Table.Td>
-                    {isPlayableVideoFile(file.path, file.fileType) ? (
+                    {isVideoFile(file.path, file.fileType) ? (
                       <Tooltip label={t("media.player.play")} withArrow>
                         <ActionIcon
                           className="app-icon-btn"

@@ -29,6 +29,9 @@ const (
 	KeyPlayerTransmissionTimeoutSec               = "system.player.transmission.timeout_seconds"
 	KeyPlayerTransmissionSequential               = "system.player.transmission.sequential_download"
 	KeyPlayerTransmissionDownloadVideoFormats     = "system.player.transmission.download_video_formats"
+	KeyPlayerTransmissionCacheQueueEnabled        = "system.player.transmission.cache_queue.enabled"
+	KeyPlayerTransmissionCacheQueueMaxActive      = "system.player.transmission.cache_queue.max_active"
+	KeyPlayerTransmissionCacheQueueCheckInterval  = "system.player.transmission.cache_queue.check_interval_seconds"
 	KeyPlayerTransmissionCleanupEnabled           = "system.player.transmission.cleanup.enabled"
 	KeyPlayerTransmissionCleanupSlowTaskEnabled   = "system.player.transmission.cleanup.slow_task.enabled"
 	KeyPlayerTransmissionCleanupStorageEnabled    = "system.player.transmission.cleanup.storage.enabled"
@@ -194,6 +197,9 @@ func PlayerKeys() []string {
 		KeyPlayerTransmissionTimeoutSec,
 		KeyPlayerTransmissionSequential,
 		KeyPlayerTransmissionDownloadVideoFormats,
+		KeyPlayerTransmissionCacheQueueEnabled,
+		KeyPlayerTransmissionCacheQueueMaxActive,
+		KeyPlayerTransmissionCacheQueueCheckInterval,
 		KeyPlayerTransmissionCleanupEnabled,
 		KeyPlayerTransmissionCleanupSlowTaskEnabled,
 		KeyPlayerTransmissionCleanupStorageEnabled,

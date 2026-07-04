@@ -1,5 +1,7 @@
 package model
 
+import "strings"
+
 // ContentType represents the type of content
 // ENUM(movie, tv_show, music, ebook, comic, audiobook, game, software, xxx)
 type ContentType string
@@ -14,4 +16,13 @@ func (c ContentType) IsNil() bool {
 
 func (c ContentType) IsVideo() bool {
 	return c == ContentTypeMovie || c == ContentTypeTvShow || c == ContentTypeXxx
+}
+
+func NormalizeVideoContentType(value string) ContentType {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "tv", "series", "show", "tv_show":
+		return ContentTypeTvShow
+	default:
+		return ContentTypeMovie
+	}
 }

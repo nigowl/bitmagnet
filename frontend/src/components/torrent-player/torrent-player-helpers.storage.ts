@@ -1,15 +1,7 @@
 import { PLAYBACK_RATE_OPTIONS, PLAYER_FILE_SELECTION_KEY_PREFIX, PLAYER_GLOBAL_PREFS_KEY_PREFIX, PLAYER_TRACK_PREFS_KEY_PREFIX, PLAYBACK_PROGRESS_KEY_PREFIX, SUBTITLE_RENDER_FONT_SIZE_OPTIONS, SUBTITLE_RENDER_LINE_HEIGHT_OPTIONS, SUBTITLE_SCALE_OPTIONS, TRANSCODE_OUTPUT_RESOLUTION_OPTIONS, TRANSCODE_PREBUFFER_DEFAULT_SECONDS, TRANSCODE_PREBUFFER_OPTIONS } from "./torrent-player-helpers.constants";
 import type { PlaybackFileSelectionRecord, PlaybackProgressRecord, PlayerGlobalPreferences, PlayerTrackPreferences, SubtitleStylePreset } from "./torrent-player-helpers.types";
-
-export function firstNonEmpty(...values: Array<string | undefined | null>): string | null {
-  for (const value of values) {
-    const normalized = value?.trim();
-    if (normalized) {
-      return normalized;
-    }
-  }
-  return null;
-}
+export { normalizeInfoHash } from "@/lib/info-hash";
+export { firstNonEmptyText as firstNonEmpty } from "@/lib/text";
 
 export function applySubtitleTemplate(urlTemplate: string, title: string, releaseYear?: number): string | null {
   const template = urlTemplate.trim();

@@ -20,10 +20,10 @@ func parseInt(raw string, fallback int) int {
 }
 
 func parseBool(raw string, fallback bool) bool {
-	switch raw {
-	case "1", "true", "TRUE", "True", "yes", "YES", "on", "ON":
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes", "on":
 		return true
-	case "0", "false", "FALSE", "False", "no", "NO", "off", "OFF":
+	case "0", "false", "no", "off":
 		return false
 	default:
 		return fallback
@@ -31,26 +31,31 @@ func parseBool(raw string, fallback bool) bool {
 }
 
 func parseFloat(raw string, fallback float64) float64 {
-	if strings.TrimSpace(raw) == "" {
-		return fallback
-	}
-	value, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
-	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+	value, ok := parseFiniteFloat(raw)
+	if !ok {
 		return fallback
 	}
 	return value
 }
 
 func parseOptionalFloat(raw string) *float64 {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return nil
-	}
-	value, err := strconv.ParseFloat(trimmed, 64)
-	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+	value, ok := parseFiniteFloat(raw)
+	if !ok {
 		return nil
 	}
 	return &value
+}
+
+func parseFiniteFloat(raw string) (float64, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return 0, false
+	}
+	value, err := strconv.ParseFloat(trimmed, 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0, false
+	}
+	return value, true
 }
 
 func parseOptionalPositiveInt(value string) *int {
@@ -68,10 +73,11 @@ func parseOptionalPositiveInt(value string) *int {
 }
 
 func parseInt64(raw string, fallback int64) int64 {
-	if strings.TrimSpace(raw) == "" {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
 		return fallback
 	}
-	value, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	value, err := strconv.ParseInt(trimmed, 10, 64)
 	if err != nil {
 		return fallback
 	}

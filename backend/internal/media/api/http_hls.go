@@ -20,7 +20,8 @@ import (
 const playerHLSSegmentSeconds = 2
 const playerHLSDefaultPrebufferSeconds = 60
 const playerHLSMaxPrebufferSeconds = 180
-const playerHLSStartupPrebufferSeconds = 4
+const playerHLSStartupPrebufferSeconds = 10
+const playerHLSCatchupRatio = 0.8
 const playerHLSWaitPollInterval = 250 * time.Millisecond
 const playerHLSCacheTTL = 6 * time.Hour
 const playerHLSIdleTranscodeTTL = 20 * time.Second
@@ -30,9 +31,11 @@ const playerHLSHeartbeatTimeout = 10 * time.Second
 const playerHLSStoppedSegmentGrace = 90 * time.Second
 
 type playerHLSHeartbeatRequest struct {
-	State          string  `json:"state"`
-	CurrentSeconds float64 `json:"currentSeconds"`
-	Visible        bool    `json:"visible"`
+	State               string  `json:"state"`
+	CurrentSeconds      float64 `json:"currentSeconds"`
+	NetworkCacheSeconds float64 `json:"networkCacheSeconds"`
+	PlaybackRate        float64 `json:"playbackRate"`
+	Visible             bool    `json:"visible"`
 }
 
 func (b *builder) playerTransmissionHLSPlaylist(c *gin.Context) {
@@ -234,10 +237,25 @@ func (b *builder) playerTransmissionHLSHeartbeat(c *gin.Context) {
 		session.PlaybackActive = true
 		session.LastHeartbeatAt = now
 		session.LastAccessedAt = now
+		cachedAhead, endList := playerHLSCachedAheadSeconds(session, input.CurrentSeconds)
+		playlistAhead := cachedAhead
+		if !math.IsNaN(input.NetworkCacheSeconds) && !math.IsInf(input.NetworkCacheSeconds, 0) && input.NetworkCacheSeconds >= 0 {
+			cachedAhead = math.Min(cachedAhead, input.NetworkCacheSeconds)
+		}
+		targetSeconds := math.Max(0, float64(session.PrebufferSeconds))
+		if endList || playlistAhead >= targetSeconds {
+			pausePlayerHLSTranscodeLocked(session)
+		} else if playerHLSShouldResumeTranscode(cachedAhead, targetSeconds) {
+			resumePlayerHLSTranscodeLocked(session)
+		}
 		active++
 	}
 	b.hlsMu.Unlock()
 	c.JSON(http.StatusOK, gin.H{"active": active > 0, "sessions": active})
+}
+
+func playerHLSShouldResumeTranscode(cachedAhead float64, targetSeconds float64) bool {
+	return cachedAhead < targetSeconds*playerHLSCatchupRatio
 }
 
 func waitForPlayerHLSPrebuffer(ctx context.Context, session *playerHLSSession, targetSeconds int, touch func()) (float64, bool, error) {

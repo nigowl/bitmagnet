@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActionIcon,
+  Badge,
   Button,
   Card,
   Group,
@@ -18,6 +19,7 @@ import {
   Title
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { modals } from "@mantine/modals";
 import { CalendarSync, DatabaseBackup, Filter, LogIn, RotateCcw, Settings2, Trash2 } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
@@ -27,7 +29,15 @@ import {
   QUEUE_METRICS_QUERY
 } from "@/lib/graphql";
 import { queueOrderFields, queueStatuses } from "@/lib/domain";
+import { hoursAgoISO } from "@/lib/datetime";
+import { parsePositiveIntParam } from "@/lib/url-params";
 import { useI18n } from "@/languages/provider";
+import {
+  cancelPlayerTransmissionCache,
+  deletePlayerTransmissionCache,
+  fetchPlayerTransmissionCacheQueue,
+  type PlayerTransmissionCacheQueueItem
+} from "@/lib/media-api";
 import {
   ALL_FILTER_OPTION,
   CHART_LINE_COLOR,
@@ -37,13 +47,15 @@ import {
   METRICS_CHART_PALETTE,
   type QueueJobsResponse,
   type QueueMetricsResponse,
-  normalizeFilterSelection
+  normalizeFilterSelection,
+  uniqueSorted
 } from "./queue-page.helpers";
 import {
   openQueueCleanupSettingsModal,
   openQueueEnqueueModal,
   openQueuePurgeModal
 } from "./queue-page.modals";
+import { QueueCacheTable } from "./queue-page.cache-table";
 import { QueueJobsTable } from "./queue-page.table";
 
 const ECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
@@ -60,6 +72,8 @@ export function QueuePage() {
   const [statuses, setStatuses] = useState<string[]>([ALL_FILTER_OPTION]);
   const [result, setResult] = useState<QueueJobsResponse["queue"]["jobs"] | null>(null);
   const [metricsBuckets, setMetricsBuckets] = useState<QueueMetricsResponse["queue"]["metrics"]["buckets"]>([]);
+  const [cacheItems, setCacheItems] = useState<PlayerTransmissionCacheQueueItem[]>([]);
+  const [cacheActioning, setCacheActioning] = useState<Record<string, boolean>>({});
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const { t } = useI18n();
 
@@ -147,7 +161,7 @@ export function QueuePage() {
 
   const metricsOption = useMemo(() => {
     const latestBuckets = metricsBuckets.slice(-140);
-    const bucketLabels = Array.from(new Set(latestBuckets.map((item) => item.createdAtBucket))).sort();
+    const bucketLabels = uniqueSorted(latestBuckets.map((item) => item.createdAtBucket));
     const labels = bucketLabels.map((value) => value.slice(11, 16));
     const bucketStatusMap = new Map<string, number>();
     for (const item of latestBuckets) {
@@ -197,9 +211,9 @@ export function QueuePage() {
 
     setLoading(true);
     try {
-      const startTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const startTime = hoursAgoISO(24);
 
-      const [jobsData, metricsData] = await Promise.all([
+      const [jobsData, metricsData, cacheQueueData] = await Promise.all([
         graphqlRequest<QueueJobsResponse>(QUEUE_JOBS_QUERY, {
           input: {
             limit,
@@ -220,11 +234,13 @@ export function QueuePage() {
         }),
         graphqlRequest<QueueMetricsResponse>(QUEUE_METRICS_QUERY, {
           input: { bucketDuration: "hour", startTime }
-        })
+        }),
+        fetchPlayerTransmissionCacheQueue()
       ]);
 
       setResult(jobsData.queue.jobs);
       setMetricsBuckets(metricsData.queue.metrics.buckets || []);
+      setCacheItems(Array.isArray(cacheQueueData) ? cacheQueueData : []);
     } catch (error) {
       notifications.show({
         color: "red",
@@ -275,6 +291,45 @@ export function QueuePage() {
   const openPurgeModal = () => openQueuePurgeModal({ t, reload: load, queueAggregationItems });
   const openCleanupSettingsModal = () => openQueueCleanupSettingsModal(t);
   const openEnqueueModal = () => openQueueEnqueueModal({ t, reload: load });
+  const runCacheAction = async (infoHash: string, action: "cancel" | "delete") => {
+    setCacheActioning((current) => ({ ...current, [infoHash]: true }));
+    try {
+      if (action === "cancel") {
+        await cancelPlayerTransmissionCache(infoHash);
+        notifications.show({ color: "green", message: t("media.detail.cacheCanceled") });
+      } else {
+        await deletePlayerTransmissionCache(infoHash);
+        notifications.show({ color: "green", message: t("media.detail.cacheDeleted") });
+      }
+      await load();
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setCacheActioning((current) => {
+        const next = { ...current };
+        delete next[infoHash];
+        return next;
+      });
+    }
+  };
+  const openCacheCancelModal = (infoHash: string) => modals.openConfirmModal({
+    title: t("queue.cacheCancelTitle"),
+    children: <Text size="sm">{t("queue.cacheCancelConfirm")}</Text>,
+    labels: { confirm: t("common.cancel"), cancel: t("common.close") },
+    confirmProps: { color: "orange" },
+    onConfirm: async () => {
+      await runCacheAction(infoHash, "cancel");
+    }
+  });
+  const openCacheDeleteModal = (infoHash: string) => modals.openConfirmModal({
+    title: t("queue.cacheDeleteTitle"),
+    children: <Text size="sm">{t("queue.cacheDeleteConfirm")}</Text>,
+    labels: { confirm: t("common.delete"), cancel: t("common.close") },
+    confirmProps: { color: "red" },
+    onConfirm: async () => {
+      await runCacheAction(infoHash, "delete");
+    }
+  });
 
   return (
     <Stack gap="md">
@@ -341,6 +396,24 @@ export function QueuePage() {
             </Card>
           ))}
         </SimpleGrid>
+      </Card>
+
+      <Card className="glass-card" withBorder>
+        <Group mb="sm" justify="space-between" wrap="wrap">
+          <div>
+            <Text fw={600}>{t("queue.cacheTitle")}</Text>
+            <Text size="sm" c="dimmed">{t("queue.cacheSubtitle")}</Text>
+          </div>
+          <Badge variant="light">{cacheItems.length}</Badge>
+        </Group>
+        <QueueCacheTable
+          t={t}
+          items={cacheItems}
+          loading={loading}
+          actioning={cacheActioning}
+          onCancel={openCacheCancelModal}
+          onDelete={openCacheDeleteModal}
+        />
       </Card>
 
       <Card className="glass-card" withBorder>
@@ -467,7 +540,7 @@ export function QueuePage() {
             ]}
             value={String(limit)}
             onChange={(value) => {
-              setLimit(Number(value) || 20);
+              setLimit(parsePositiveIntParam(value, 20));
               setPage(1);
             }}
           />

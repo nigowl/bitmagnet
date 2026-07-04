@@ -307,6 +307,7 @@ export function useTorrentPlayerStream({
     userPausedRef,
     videoRef,
     resolveAbsoluteCurrent,
+    resolveHLSNetworkCacheAheadSeconds,
     logWarn
   });
 

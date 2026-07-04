@@ -16,14 +16,7 @@ func playerFFmpegH264Level(outputResolution int) string {
 	return "4.1"
 }
 
-func buildPlayerFFmpegArgs(
-	filePath string,
-	options media.PlayerFFmpegTranscodeSettings,
-	startSeconds float64,
-	audioTrackIndex int,
-	outputResolution int,
-	realTimeInput bool,
-) []string {
+func normalizedPlayerFFmpegOptions(options media.PlayerFFmpegTranscodeSettings) (string, int, int) {
 	preset := strings.TrimSpace(options.Preset)
 	if preset == "" {
 		preset = "veryfast"
@@ -36,6 +29,18 @@ func buildPlayerFFmpegArgs(
 	if audioBitrate < 64 || audioBitrate > 320 {
 		audioBitrate = 128
 	}
+	return preset, crf, audioBitrate
+}
+
+func buildPlayerFFmpegArgs(
+	filePath string,
+	options media.PlayerFFmpegTranscodeSettings,
+	startSeconds float64,
+	audioTrackIndex int,
+	outputResolution int,
+	realTimeInput bool,
+) []string {
+	preset, crf, audioBitrate := normalizedPlayerFFmpegOptions(options)
 
 	args := []string{
 		"-hide_banner",
@@ -102,20 +107,10 @@ func buildPlayerHLSFFmpegArgs(
 	startSeconds float64,
 	audioTrackIndex int,
 	outputResolution int,
+	_ int,
 	outputDir string,
 ) []string {
-	preset := strings.TrimSpace(options.Preset)
-	if preset == "" {
-		preset = "veryfast"
-	}
-	crf := options.CRF
-	if crf < 16 || crf > 38 {
-		crf = 23
-	}
-	audioBitrate := options.AudioBitrateKbps
-	if audioBitrate < 64 || audioBitrate > 320 {
-		audioBitrate = 128
-	}
+	preset, crf, audioBitrate := normalizedPlayerFFmpegOptions(options)
 
 	segmentPattern := filepath.Join(outputDir, "segment-%06d.ts")
 	playlistPath := filepath.Join(outputDir, "index.m3u8")

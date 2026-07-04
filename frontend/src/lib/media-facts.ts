@@ -37,6 +37,10 @@ function pushUnique(target: string[], value: string) {
   }
 }
 
+function normalizeLookupKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
 function flattenParsedValue(value: unknown): string[] {
   if (value == null) return [];
   if (typeof value === "string") return splitDisplayValues(value);
@@ -98,7 +102,7 @@ function splitDisplayValues(value: string): string[] {
 }
 
 function factKeyFromAttributeKey(rawKey: string): MediaFactKey | null {
-  const key = rawKey.toLowerCase();
+  const key = normalizeLookupKey(rawKey);
 
   if (/(award|awards|accolade|accolades|prize|prizes|wins|nominations)/.test(key)) return "awards";
   if (/(production_compan|studio|studios|company|companies)/.test(key)) return "studio";
@@ -116,7 +120,7 @@ function factKeyFromAttributeKey(rawKey: string): MediaFactKey | null {
 
 function findAttributeValue(attributes: MediaDetailAttribute[] | null | undefined, keys: string[]): string | null {
   for (const attribute of toArray(attributes)) {
-    const normalizedKey = attribute.key.trim().toLowerCase();
+    const normalizedKey = normalizeLookupKey(attribute.key);
     if (keys.includes(normalizedKey) && attribute.value.trim()) {
       return attribute.value.trim();
     }
@@ -136,7 +140,7 @@ function normalizeExternalID(source: string, id: string): string {
 }
 
 function buildExternalLink(contentType: string, source: string, id: string): MediaExternalLink | null {
-  const normalizedSource = source.trim().toLowerCase();
+  const normalizedSource = normalizeLookupKey(source);
   const normalizedID = normalizeExternalID(normalizedSource, id);
   if (!normalizedID) return null;
 
@@ -199,8 +203,8 @@ export function buildMediaExternalLinks(input: {
 
   const doubanIDKeys = new Set(["douban_id", "doubanid", "subject_id", "subjectid"]);
   for (const attribute of toArray(input.attributes)) {
-    const normalizedKey = attribute.key.trim().toLowerCase();
-    if (normalizedKey === "id" || (attribute.source.trim().toLowerCase() === "douban" && doubanIDKeys.has(normalizedKey))) {
+    const normalizedKey = normalizeLookupKey(attribute.key);
+    if (normalizedKey === "id" || (normalizeLookupKey(attribute.source) === "douban" && doubanIDKeys.has(normalizedKey))) {
       pushLink(buildExternalLink(input.contentType, attribute.source, attribute.value));
     }
   }

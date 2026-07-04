@@ -207,7 +207,7 @@ export function useTorrentPlayerVideoState({
     const video = videoRef.current;
     if (!video) return;
 
-    const sync = () => {
+    const sync = (event?: Event) => {
       const videoWidth = Number(video.videoWidth || 0);
       const videoHeight = Number(video.videoHeight || 0);
       if (videoWidth > 0 && videoHeight > 0) {
@@ -248,7 +248,9 @@ export function useTorrentPlayerVideoState({
         userPausedRef.current = false;
       }
       setIsVideoPaused(paused);
-      setVideoPlaybackRate(Number.isFinite(video.playbackRate) && video.playbackRate > 0 ? video.playbackRate : 1);
+      if (event?.type === "ratechange") {
+        setVideoPlaybackRate(Number.isFinite(video.playbackRate) && video.playbackRate > 0 ? video.playbackRate : 1);
+      }
     };
 
     sync();

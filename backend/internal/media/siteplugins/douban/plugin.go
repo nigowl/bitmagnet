@@ -223,28 +223,24 @@ func (p *Plugin) runtimeMatcher(ctx context.Context, db *gorm.DB) *matcher {
 		return p.matcher
 	}
 
-	if raw, ok := values[runtimeconfig.KeyMediaDoubanEnabled]; ok {
-		if parsed, parseErr := strconv.ParseBool(strings.TrimSpace(raw)); parseErr == nil {
-			cfg.Enabled = parsed
-		}
+	if parsed, ok := parseRuntimeBool(values[runtimeconfig.KeyMediaDoubanEnabled]); ok {
+		cfg.Enabled = parsed
 	}
-	if raw, ok := values[runtimeconfig.KeyMediaDoubanMinScore]; ok {
-		if parsed, parseErr := strconv.ParseFloat(strings.TrimSpace(raw), 64); parseErr == nil && parsed >= 0 && parsed <= 1 {
-			cfg.MinScore = parsed
-		}
+	if parsed, ok := parseRuntimeFloatInRange(values[runtimeconfig.KeyMediaDoubanMinScore], 0, 1); ok {
+		cfg.MinScore = parsed
 	}
-	if raw, ok := values[runtimeconfig.KeyMediaDoubanCookie]; ok {
-		cfg.Cookie = strings.TrimSpace(raw)
-	}
-	if raw, ok := values[runtimeconfig.KeyMediaDoubanUserAgent]; ok {
-		cfg.UserAgent = strings.TrimSpace(raw)
-	}
-	if raw, ok := values[runtimeconfig.KeyMediaDoubanAcceptLanguage]; ok {
-		cfg.AcceptLanguage = strings.TrimSpace(raw)
-	}
-	if raw, ok := values[runtimeconfig.KeyMediaDoubanReferer]; ok {
-		cfg.Referer = strings.TrimSpace(raw)
-	}
+	applyRuntimeString(values, runtimeconfig.KeyMediaDoubanCookie, func(value string) {
+		cfg.Cookie = value
+	})
+	applyRuntimeString(values, runtimeconfig.KeyMediaDoubanUserAgent, func(value string) {
+		cfg.UserAgent = value
+	})
+	applyRuntimeString(values, runtimeconfig.KeyMediaDoubanAcceptLanguage, func(value string) {
+		cfg.AcceptLanguage = value
+	})
+	applyRuntimeString(values, runtimeconfig.KeyMediaDoubanReferer, func(value string) {
+		cfg.Referer = value
+	})
 
 	p.configCacheMutex.Lock()
 	p.cacheLoaded = true
@@ -253,6 +249,27 @@ func (p *Plugin) runtimeMatcher(ctx context.Context, db *gorm.DB) *matcher {
 	p.configCacheMutex.Unlock()
 
 	return newMatcher(cfg)
+}
+
+func parseRuntimeBool(raw string) (bool, bool) {
+	parsed, err := strconv.ParseBool(strings.TrimSpace(raw))
+	return parsed, err == nil
+}
+
+func parseRuntimeFloatInRange(raw string, min float64, max float64) (float64, bool) {
+	parsed, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil || parsed < min || parsed > max {
+		return 0, false
+	}
+	return parsed, true
+}
+
+func applyRuntimeString(values map[string]string, key string, setter func(string)) {
+	raw, ok := values[key]
+	if !ok {
+		return
+	}
+	setter(strings.TrimSpace(raw))
 }
 
 func readRuntimeValues(ctx context.Context, db *gorm.DB) (map[string]string, error) {

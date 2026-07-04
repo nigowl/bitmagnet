@@ -212,6 +212,39 @@ export function SettingsPagePlayerTab({
                         }}
                       />
                       <Switch
+                        label={t("settings.playerTransmissionCacheQueueEnabled")}
+                        checked={settings.player.transmission.cacheQueueEnabled}
+                        onChange={(event) => {
+                          onUpdateTransmissionSettings({ cacheQueueEnabled: event.currentTarget.checked });
+                        }}
+                      />
+                      {settings.player.transmission.cacheQueueEnabled ? (
+                        <SimpleGrid className="settings-nested-options" cols={{ base: 1, md: 2 }}>
+                          <NumberInput
+                            label={t("settings.playerTransmissionCacheQueueMaxActive")}
+                            min={1}
+                            max={20}
+                            value={settings.player.transmission.cacheQueueMaxActive}
+                            onChange={(value) => {
+                              if (typeof value === "number" && Number.isFinite(value)) {
+                                onUpdateTransmissionSettings({ cacheQueueMaxActive: value });
+                              }
+                            }}
+                          />
+                          <NumberInput
+                            label={t("settings.playerTransmissionCacheQueueCheckIntervalSeconds")}
+                            min={3}
+                            max={300}
+                            value={settings.player.transmission.cacheQueueCheckIntervalSeconds}
+                            onChange={(value) => {
+                              if (typeof value === "number" && Number.isFinite(value)) {
+                                onUpdateTransmissionSettings({ cacheQueueCheckIntervalSeconds: value });
+                              }
+                            }}
+                          />
+                        </SimpleGrid>
+                      ) : null}
+                      <Switch
                         label={t("settings.playerTransmissionAutoCleanupEnabled")}
                         checked={settings.player.transmission.autoCleanupEnabled}
                         onChange={(event) => {
@@ -219,7 +252,7 @@ export function SettingsPagePlayerTab({
                         }}
                       />
                       {settings.player.transmission.autoCleanupEnabled ? (
-                        <Stack gap="sm" className="settings-toggle-panel">
+                        <Stack gap="sm" className="settings-nested-options">
                           <Switch
                             label={t("settings.playerTransmissionAutoCleanupSlowTaskEnabled")}
                             checked={settings.player.transmission.autoCleanupSlowTaskEnabled}
@@ -228,6 +261,39 @@ export function SettingsPagePlayerTab({
                             }}
                           />
                           {settings.player.transmission.autoCleanupSlowTaskEnabled ? (
+                            <SimpleGrid cols={{ base: 1, md: 2 }}>
+                              <NumberInput
+                                label={t("settings.playerTransmissionAutoCleanupSlowWindowMinutes")}
+                                min={5}
+                                max={1440}
+                                value={settings.player.transmission.autoCleanupSlowWindowMinutes}
+                                onChange={(value) => {
+                                  if (typeof value === "number" && Number.isFinite(value)) {
+                                    onUpdateTransmissionSettings({ autoCleanupSlowWindowMinutes: value });
+                                  }
+                                }}
+                              />
+                              <NumberInput
+                                label={t("settings.playerTransmissionAutoCleanupSlowRateKbps")}
+                                min={0}
+                                max={102400}
+                                value={settings.player.transmission.autoCleanupSlowRateKbps}
+                                onChange={(value) => {
+                                  if (typeof value === "number" && Number.isFinite(value)) {
+                                    onUpdateTransmissionSettings({ autoCleanupSlowRateKbps: value });
+                                  }
+                                }}
+                              />
+                            </SimpleGrid>
+                          ) : null}
+                          <Switch
+                            label={t("settings.playerTransmissionAutoCleanupStorageEnabled")}
+                            checked={settings.player.transmission.autoCleanupStorageEnabled}
+                            onChange={(event) => {
+                              onUpdateTransmissionSettings({ autoCleanupStorageEnabled: event.currentTarget.checked });
+                            }}
+                          />
+                          {settings.player.transmission.autoCleanupStorageEnabled ? (
                             <SimpleGrid cols={{ base: 1, md: 2 }}>
                               <NumberInput
                                 label={t("settings.playerTransmissionAutoCleanupMaxTasks")}

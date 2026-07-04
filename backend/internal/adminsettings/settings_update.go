@@ -2,7 +2,6 @@ package adminsettings
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/nigowl/bitmagnet/internal/runtimeconfig"
 )
@@ -16,114 +15,101 @@ func applyQueuePerformanceUpdate(
 	effective *Settings,
 	updates map[string]*string,
 ) error {
-	setInt := func(field *int, min, max int, key string, setter func(v int), label string) error {
-		if field == nil {
-			return nil
-		}
-		if *field < min || *field > max {
-			return fmt.Errorf("%w: %s", ErrInvalidInput, label)
-		}
-		value := strconv.Itoa(*field)
-		updates[key] = &value
-		setter(*field)
-		return nil
-	}
-
-	if err := setInt(
+	if err := applyOptionalIntUpdate(
 		input.ProcessTorrentConcurrency, 1, 128, runtimeconfig.KeyQueueProcessTorrentConcurrency,
+		"performance.queue.processTorrentConcurrency", updates,
 		func(v int) { effective.Performance.Queue.ProcessTorrentConcurrency = v },
-		"performance.queue.processTorrentConcurrency",
 	); err != nil {
 		return err
 	}
-	if err := setInt(
+	if err := applyOptionalIntUpdate(
 		input.ProcessTorrentCheckIntervalSeconds, 1, 300, runtimeconfig.KeyQueueProcessTorrentCheckIntervalSeconds,
+		"performance.queue.processTorrentCheckIntervalSeconds", updates,
 		func(v int) { effective.Performance.Queue.ProcessTorrentCheckIntervalSeconds = v },
-		"performance.queue.processTorrentCheckIntervalSeconds",
 	); err != nil {
 		return err
 	}
-	if err := setInt(
+	if err := applyOptionalIntUpdate(
 		input.ProcessTorrentTimeoutSeconds, 5, 7200, runtimeconfig.KeyQueueProcessTorrentTimeoutSeconds,
+		"performance.queue.processTorrentTimeoutSeconds", updates,
 		func(v int) { effective.Performance.Queue.ProcessTorrentTimeoutSeconds = v },
-		"performance.queue.processTorrentTimeoutSeconds",
 	); err != nil {
 		return err
 	}
-	if err := setInt(
+	if err := applyOptionalIntUpdate(
 		input.ProcessTorrentBatchConcurrency, 1, 128, runtimeconfig.KeyQueueProcessTorrentBatchConcurrency,
+		"performance.queue.processTorrentBatchConcurrency", updates,
 		func(v int) { effective.Performance.Queue.ProcessTorrentBatchConcurrency = v },
-		"performance.queue.processTorrentBatchConcurrency",
 	); err != nil {
 		return err
 	}
-	if err := setInt(
+	if err := applyOptionalIntUpdate(
 		input.ProcessTorrentBatchCheckIntervalSeconds, 1, 300, runtimeconfig.KeyQueueProcessTorrentBatchCheckIntervalSeconds,
+		"performance.queue.processTorrentBatchCheckIntervalSeconds", updates,
 		func(v int) { effective.Performance.Queue.ProcessTorrentBatchCheckIntervalSeconds = v },
-		"performance.queue.processTorrentBatchCheckIntervalSeconds",
 	); err != nil {
 		return err
 	}
-	if err := setInt(
+	if err := applyOptionalIntUpdate(
 		input.ProcessTorrentBatchTimeoutSeconds, 5, 7200, runtimeconfig.KeyQueueProcessTorrentBatchTimeoutSeconds,
+		"performance.queue.processTorrentBatchTimeoutSeconds", updates,
 		func(v int) { effective.Performance.Queue.ProcessTorrentBatchTimeoutSeconds = v },
-		"performance.queue.processTorrentBatchTimeoutSeconds",
 	); err != nil {
 		return err
 	}
-	if err := setInt(
+	if err := applyOptionalIntUpdate(
 		input.RefreshMediaMetadataConcurrency, 1, 128, runtimeconfig.KeyQueueRefreshMediaMetadataConcurrency,
+		"performance.queue.refreshMediaMetadataConcurrency", updates,
 		func(v int) { effective.Performance.Queue.RefreshMediaMetadataConcurrency = v },
-		"performance.queue.refreshMediaMetadataConcurrency",
 	); err != nil {
 		return err
 	}
-	if err := setInt(
+	if err := applyOptionalIntUpdate(
 		input.RefreshMediaMetadataCheckIntervalSeconds, 1, 300, runtimeconfig.KeyQueueRefreshMediaMetadataCheckIntervalSeconds,
+		"performance.queue.refreshMediaMetadataCheckIntervalSeconds", updates,
 		func(v int) { effective.Performance.Queue.RefreshMediaMetadataCheckIntervalSeconds = v },
-		"performance.queue.refreshMediaMetadataCheckIntervalSeconds",
 	); err != nil {
 		return err
 	}
-	if err := setInt(
+	if err := applyOptionalIntUpdate(
 		input.RefreshMediaMetadataTimeoutSeconds, 5, 7200, runtimeconfig.KeyQueueRefreshMediaMetadataTimeoutSeconds,
+		"performance.queue.refreshMediaMetadataTimeoutSeconds", updates,
 		func(v int) { effective.Performance.Queue.RefreshMediaMetadataTimeoutSeconds = v },
-		"performance.queue.refreshMediaMetadataTimeoutSeconds",
 	); err != nil {
 		return err
 	}
-	if err := setInt(
+	if err := applyOptionalIntUpdate(
 		input.BackfillCoverCacheConcurrency, 1, 128, runtimeconfig.KeyQueueBackfillCoverCacheConcurrency,
+		"performance.queue.backfillCoverCacheConcurrency", updates,
 		func(v int) { effective.Performance.Queue.BackfillCoverCacheConcurrency = v },
-		"performance.queue.backfillCoverCacheConcurrency",
 	); err != nil {
 		return err
 	}
-	if err := setInt(
+	if err := applyOptionalIntUpdate(
 		input.BackfillCoverCacheCheckIntervalSeconds, 1, 300, runtimeconfig.KeyQueueBackfillCoverCacheCheckIntervalSeconds,
+		"performance.queue.backfillCoverCacheCheckIntervalSeconds", updates,
 		func(v int) { effective.Performance.Queue.BackfillCoverCacheCheckIntervalSeconds = v },
-		"performance.queue.backfillCoverCacheCheckIntervalSeconds",
 	); err != nil {
 		return err
 	}
-	if err := setInt(
+	if err := applyOptionalIntUpdate(
 		input.BackfillCoverCacheTimeoutSeconds, 5, 7200, runtimeconfig.KeyQueueBackfillCoverCacheTimeoutSeconds,
+		"performance.queue.backfillCoverCacheTimeoutSeconds", updates,
 		func(v int) { effective.Performance.Queue.BackfillCoverCacheTimeoutSeconds = v },
-		"performance.queue.backfillCoverCacheTimeoutSeconds",
 	); err != nil {
 		return err
 	}
-	if err := setInt(
+	if err := applyOptionalIntUpdate(
 		input.CleanupCompletedMaxRecords, 100, 1000000, runtimeconfig.KeyQueueCleanupCompletedMaxRecords,
+		"performance.queue.cleanupCompletedMaxRecords", updates,
 		func(v int) { effective.Performance.Queue.CleanupCompletedMaxRecords = v },
-		"performance.queue.cleanupCompletedMaxRecords",
 	); err != nil {
 		return err
 	}
-	if err := setInt(
+	if err := applyOptionalIntUpdate(
 		input.CleanupCompletedMaxAgeDays, 1, 3650, runtimeconfig.KeyQueueCleanupCompletedMaxAgeDays,
+		"performance.queue.cleanupCompletedMaxAgeDays", updates,
 		func(v int) { effective.Performance.Queue.CleanupCompletedMaxAgeDays = v },
-		"performance.queue.cleanupCompletedMaxAgeDays",
 	); err != nil {
 		return err
 	}
@@ -136,28 +122,17 @@ func applyMediaPerformanceUpdate(
 	effective *Settings,
 	updates map[string]*string,
 ) error {
-	if input.AutoCacheCover != nil {
-		value := strconv.FormatBool(*input.AutoCacheCover)
-		updates[runtimeconfig.KeyMediaAutoCacheCover] = &value
-		effective.Performance.Media.AutoCacheCover = *input.AutoCacheCover
-	}
-
-	if input.AutoFetchBilingual != nil {
-		value := strconv.FormatBool(*input.AutoFetchBilingual)
-		updates[runtimeconfig.KeyMediaAutoFetchBilingual] = &value
-		effective.Performance.Media.AutoFetchBilingual = *input.AutoFetchBilingual
-	}
-
-	if input.WarmupTimeoutSeconds != nil {
-		if *input.WarmupTimeoutSeconds < 5 || *input.WarmupTimeoutSeconds > 7200 {
-			return fmt.Errorf("%w: performance.media.warmupTimeoutSeconds", ErrInvalidInput)
-		}
-		value := strconv.Itoa(*input.WarmupTimeoutSeconds)
-		updates[runtimeconfig.KeyMediaWarmupTimeoutSeconds] = &value
-		effective.Performance.Media.WarmupTimeoutSeconds = *input.WarmupTimeoutSeconds
-	}
-
-	return nil
+	applyOptionalBoolUpdate(input.AutoCacheCover, runtimeconfig.KeyMediaAutoCacheCover, updates, func(value bool) {
+		effective.Performance.Media.AutoCacheCover = value
+	})
+	applyOptionalBoolUpdate(input.AutoFetchBilingual, runtimeconfig.KeyMediaAutoFetchBilingual, updates, func(value bool) {
+		effective.Performance.Media.AutoFetchBilingual = value
+	})
+	return applyOptionalIntUpdate(
+		input.WarmupTimeoutSeconds, 5, 7200, runtimeconfig.KeyMediaWarmupTimeoutSeconds,
+		"performance.media.warmupTimeoutSeconds", updates,
+		func(value int) { effective.Performance.Media.WarmupTimeoutSeconds = value },
+	)
 }
 
 func applyHomeUpdate(
@@ -170,67 +145,60 @@ func applyHomeUpdate(
 	}
 
 	if daily := input.Daily; daily != nil {
-		if daily.RefreshHour != nil {
-			if *daily.RefreshHour < 0 || *daily.RefreshHour > 23 {
-				return fmt.Errorf("%w: home.daily.refreshHour", ErrInvalidInput)
-			}
-			value := strconv.Itoa(*daily.RefreshHour)
-			updates[runtimeconfig.KeyHomeDailyRefreshHour] = &value
-			effective.Home.Daily.RefreshHour = *daily.RefreshHour
+		if err := applyOptionalIntUpdate(
+			daily.RefreshHour, 0, 23, runtimeconfig.KeyHomeDailyRefreshHour,
+			"home.daily.refreshHour", updates,
+			func(value int) { effective.Home.Daily.RefreshHour = value },
+		); err != nil {
+			return err
 		}
-		if daily.PoolLimit != nil {
-			if *daily.PoolLimit < 24 || *daily.PoolLimit > 240 {
-				return fmt.Errorf("%w: home.daily.poolLimit", ErrInvalidInput)
-			}
-			value := strconv.Itoa(*daily.PoolLimit)
-			updates[runtimeconfig.KeyHomeDailyPoolLimit] = &value
-			effective.Home.Daily.PoolLimit = *daily.PoolLimit
+		if err := applyOptionalIntUpdate(
+			daily.PoolLimit, 24, 240, runtimeconfig.KeyHomeDailyPoolLimit,
+			"home.daily.poolLimit", updates,
+			func(value int) { effective.Home.Daily.PoolLimit = value },
+		); err != nil {
+			return err
 		}
 	}
 
 	if hot := input.Hot; hot != nil {
-		if hot.Days != nil {
-			if *hot.Days < 1 || *hot.Days > 3650 {
-				return fmt.Errorf("%w: home.hot.days", ErrInvalidInput)
-			}
-			value := strconv.Itoa(*hot.Days)
-			updates[runtimeconfig.KeyHomeHotDays] = &value
-			effective.Home.Hot.Days = *hot.Days
+		if err := applyOptionalIntUpdate(
+			hot.Days, 1, 3650, runtimeconfig.KeyHomeHotDays,
+			"home.hot.days", updates,
+			func(value int) { effective.Home.Hot.Days = value },
+		); err != nil {
+			return err
 		}
 	}
 
 	if high := input.HighScore; high != nil {
-		if high.PoolLimit != nil {
-			if *high.PoolLimit < 24 || *high.PoolLimit > 240 {
-				return fmt.Errorf("%w: home.highScore.poolLimit", ErrInvalidInput)
-			}
-			value := strconv.Itoa(*high.PoolLimit)
-			updates[runtimeconfig.KeyHomeHighScorePoolLimit] = &value
-			effective.Home.HighScore.PoolLimit = *high.PoolLimit
+		if err := applyOptionalIntUpdate(
+			high.PoolLimit, 24, 240, runtimeconfig.KeyHomeHighScorePoolLimit,
+			"home.highScore.poolLimit", updates,
+			func(value int) { effective.Home.HighScore.PoolLimit = value },
+		); err != nil {
+			return err
 		}
-		if high.MinScore != nil {
-			if *high.MinScore < 0 || *high.MinScore > 10 {
-				return fmt.Errorf("%w: home.highScore.minScore", ErrInvalidInput)
-			}
-			value := strconv.FormatFloat(*high.MinScore, 'f', 4, 64)
-			updates[runtimeconfig.KeyHomeHighScoreMin] = &value
-			effective.Home.HighScore.MinScore = *high.MinScore
+		if err := applyOptionalFloatUpdate(
+			high.MinScore, runtimeconfig.KeyHomeHighScoreMin, "home.highScore.minScore", updates,
+			func(value float64) bool { return value >= 0 && value <= 10 },
+			func(value float64) { effective.Home.HighScore.MinScore = value },
+		); err != nil {
+			return err
 		}
-		if high.MaxScore != nil {
-			if *high.MaxScore < 0 || *high.MaxScore > 10 {
-				return fmt.Errorf("%w: home.highScore.maxScore", ErrInvalidInput)
-			}
-			value := strconv.FormatFloat(*high.MaxScore, 'f', 4, 64)
-			updates[runtimeconfig.KeyHomeHighScoreMax] = &value
-			effective.Home.HighScore.MaxScore = *high.MaxScore
+		if err := applyOptionalFloatUpdate(
+			high.MaxScore, runtimeconfig.KeyHomeHighScoreMax, "home.highScore.maxScore", updates,
+			func(value float64) bool { return value >= 0 && value <= 10 },
+			func(value float64) { effective.Home.HighScore.MaxScore = value },
+		); err != nil {
+			return err
 		}
-		if high.Window != nil {
-			if *high.Window <= 0 || *high.Window > 10 {
-				return fmt.Errorf("%w: home.highScore.window", ErrInvalidInput)
-			}
-			value := strconv.FormatFloat(*high.Window, 'f', 4, 64)
-			updates[runtimeconfig.KeyHomeHighScoreWindow] = &value
-			effective.Home.HighScore.Window = *high.Window
+		if err := applyOptionalFloatUpdate(
+			high.Window, runtimeconfig.KeyHomeHighScoreWindow, "home.highScore.window", updates,
+			func(value float64) bool { return value > 0 && value <= 10 },
+			func(value float64) { effective.Home.HighScore.Window = value },
+		); err != nil {
+			return err
 		}
 	}
 
@@ -249,20 +217,14 @@ func applyAuthUpdate(
 	if input == nil {
 		return nil
 	}
-	if input.MembershipEnabled != nil {
-		value := strconv.FormatBool(*input.MembershipEnabled)
-		updates[runtimeconfig.KeyAuthMembershipEnabled] = &value
-		effective.Auth.MembershipEnabled = *input.MembershipEnabled
-	}
-	if input.RegistrationEnabled != nil {
-		value := strconv.FormatBool(*input.RegistrationEnabled)
-		updates[runtimeconfig.KeyAuthRegistrationEnabled] = &value
-		effective.Auth.RegistrationEnabled = *input.RegistrationEnabled
-	}
-	if input.InviteRequired != nil {
-		value := strconv.FormatBool(*input.InviteRequired)
-		updates[runtimeconfig.KeyAuthInviteRequired] = &value
-		effective.Auth.InviteRequired = *input.InviteRequired
-	}
+	applyOptionalBoolUpdate(input.MembershipEnabled, runtimeconfig.KeyAuthMembershipEnabled, updates, func(value bool) {
+		effective.Auth.MembershipEnabled = value
+	})
+	applyOptionalBoolUpdate(input.RegistrationEnabled, runtimeconfig.KeyAuthRegistrationEnabled, updates, func(value bool) {
+		effective.Auth.RegistrationEnabled = value
+	})
+	applyOptionalBoolUpdate(input.InviteRequired, runtimeconfig.KeyAuthInviteRequired, updates, func(value bool) {
+		effective.Auth.InviteRequired = value
+	})
 	return nil
 }

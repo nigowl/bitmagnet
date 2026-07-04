@@ -1,19 +1,12 @@
 import type { MediaDetailResponse, MediaDetailTorrent, PlayerTransmissionTaskStatus } from "@/lib/media-api";
+export { formatBytes } from "@/lib/format";
+export { normalizeInfoHash } from "@/lib/info-hash";
+export { resolveInternalHref as resolveReturnHref } from "@/lib/navigation";
+export { firstNonEmptyText as firstNonEmpty, sameText } from "@/lib/text";
 
 type TranslationFn = (key: string) => string;
 type MediaDetailItem = MediaDetailResponse["item"];
 export type MediaDetailMetaRow = { label: string; value: string };
-
-export function formatBytes(size: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = size;
-  let index = 0;
-  while (value >= 1024 && index < units.length - 1) {
-    value /= 1024;
-    index += 1;
-  }
-  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[index]}`;
-}
 
 export function displayResolution(value?: string): string {
   if (!value) return "-";
@@ -136,20 +129,6 @@ export function uniqueValues(values: Array<string | null | undefined>): string[]
   return result;
 }
 
-export function firstNonEmpty(...values: Array<string | undefined | null>): string | null {
-  for (const value of values) {
-    const normalized = value?.trim();
-    if (normalized) {
-      return normalized;
-    }
-  }
-  return null;
-}
-
-export function sameText(left: string, right: string): boolean {
-  return left.trim().toLowerCase() === right.trim().toLowerCase();
-}
-
 export function compactInlineValue(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
@@ -158,14 +137,6 @@ export function fallbackCategoryHref(mediaType?: string): string {
   if (mediaType === "anime") return "/media/anime";
   if (mediaType === "series") return "/media/series";
   return "/media/movie";
-}
-
-export function resolveReturnHref(sourceHref: string | null, fallbackHref: string): string {
-  const normalized = sourceHref?.trim();
-  if (!normalized || !normalized.startsWith("/") || normalized.startsWith("//")) {
-    return fallbackHref;
-  }
-  return normalized;
 }
 
 export function applySubtitleTemplate(urlTemplate: string, title: string, releaseYear?: number): string | null {
@@ -192,10 +163,14 @@ export function applySubtitleTemplate(urlTemplate: string, title: string, releas
   }
 }
 
-export function isTransmissionTaskComplete(status?: PlayerTransmissionTaskStatus): boolean {
-  if (!status?.exists) return false;
+function isTransmissionTaskReady(status: PlayerTransmissionTaskStatus): boolean {
   const state = status.state.trim().toLowerCase();
   return status.progress >= 0.999 || state === "seeding" || state === "seed_wait";
+}
+
+export function isTransmissionTaskComplete(status?: PlayerTransmissionTaskStatus): boolean {
+  if (!status?.exists) return false;
+  return isTransmissionTaskReady(status);
 }
 
 export function resolvePlayerActionState(
@@ -205,7 +180,7 @@ export function resolvePlayerActionState(
     return { color: "slate", variant: "default" };
   }
   const state = status.state.trim().toLowerCase();
-  if (status.progress >= 0.999 || state === "seeding" || state === "seed_wait") {
+  if (isTransmissionTaskReady(status)) {
     return { color: "green", variant: "light" };
   }
   if (

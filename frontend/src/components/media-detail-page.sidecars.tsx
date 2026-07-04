@@ -6,7 +6,7 @@ import { ActionIcon, Badge, Button, Card, Group, Stack, Text, Tooltip } from "@m
 import { ExternalLink, Eye } from "lucide-react";
 import type { MediaDetailTorrent, PlayerTransmissionTaskStatus } from "@/lib/media-api";
 import { formatQualityTag } from "@/lib/media";
-import { displayResolution, formatBytes, isTransmissionTaskComplete } from "./media-detail-page.helpers";
+import { displayResolution, formatBytes, isTransmissionTaskComplete, normalizeInfoHash } from "./media-detail-page.helpers";
 
 type ExternalLinkCard = {
   id: string;
@@ -97,7 +97,7 @@ export function MediaDetailSidecars({
                     <Badge size="xs" variant={index === 0 ? "filled" : "light"} color="orange">
                       #{index + 1}
                     </Badge>
-                    {isTransmissionTaskComplete(playerStatusMap[torrent.infoHash.trim().toLowerCase()]) ? (
+                    {isTransmissionTaskComplete(playerStatusMap[normalizeInfoHash(torrent.infoHash)]) ? (
                       <Badge size="xs" variant="light" color="green">{t("media.cacheBadge")}</Badge>
                     ) : null}
                   </Group>

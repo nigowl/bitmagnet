@@ -101,6 +101,9 @@ type TransmissionSettings struct {
 	InsecureTLS                  bool     `json:"insecureTls"`
 	TimeoutSeconds               int      `json:"timeoutSeconds"`
 	SequentialDownload           bool     `json:"sequentialDownload"`
+	CacheQueueEnabled            bool     `json:"cacheQueueEnabled"`
+	CacheQueueMaxActive          int      `json:"cacheQueueMaxActive"`
+	CacheQueueCheckIntervalSec   int      `json:"cacheQueueCheckIntervalSeconds"`
 	AutoCleanupEnabled           bool     `json:"autoCleanupEnabled"`
 	AutoCleanupSlowTaskEnabled   bool     `json:"autoCleanupSlowTaskEnabled"`
 	AutoCleanupStorageEnabled    bool     `json:"autoCleanupStorageEnabled"`

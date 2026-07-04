@@ -23,6 +23,14 @@ import (
 
 const statusClientClosedRequest = 499
 
+func ffmpegErrorMessage(stderrText string, fallback error) string {
+	message := strings.TrimSpace(stderrText)
+	if message == "" && fallback != nil {
+		message = strings.TrimSpace(fallback.Error())
+	}
+	return message
+}
+
 func (b *builder) playerTransmissionStream(c *gin.Context) {
 	infoHash := strings.TrimSpace(c.Query("infoHash"))
 	fileIndex := parseInt(c.Query("fileIndex"), -1)
@@ -250,7 +258,7 @@ func (b *builder) playerTransmissionStreamTranscoded(c *gin.Context, resolveResu
 	case <-time.After(firstChunkTimeout):
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
-		message := strings.TrimSpace(stderr.String())
+		message := ffmpegErrorMessage(stderr.String(), nil)
 		if message == "" {
 			message = fmt.Sprintf(
 				"ffmpeg produced no output within %ds (source=%s,start=%.3fs,input=%s)",
@@ -266,12 +274,9 @@ func (b *builder) playerTransmissionStreamTranscoded(c *gin.Context, resolveResu
 
 	if firstRead.n <= 0 {
 		if waitErr := cmd.Wait(); waitErr != nil {
-			message := strings.TrimSpace(stderr.String())
+			message := ffmpegErrorMessage(stderr.String(), waitErr)
 			if isExpectedFFmpegExit(waitErr, c.Request.Context(), message) {
 				return
-			}
-			if message == "" {
-				message = waitErr.Error()
 			}
 			if isTransientFFmpegStartupFailure(message) || isRetryableFFmpegFailure(message) {
 				c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("ffmpeg startup pending: %s", message)})
@@ -313,12 +318,9 @@ func (b *builder) playerTransmissionStreamTranscoded(c *gin.Context, resolveResu
 		}
 	}
 	if err := cmd.Wait(); err != nil {
-		message := strings.TrimSpace(stderr.String())
+		message := ffmpegErrorMessage(stderr.String(), err)
 		if isExpectedFFmpegExit(err, c.Request.Context(), message) {
 			return
-		}
-		if message == "" {
-			message = err.Error()
 		}
 		c.Error(fmt.Errorf("ffmpeg stream failed: %s", message))
 	}
@@ -412,8 +414,8 @@ func isExpectedFFmpegExit(waitErr error, requestCtx context.Context, stderrText 
 	if errors.Is(waitErr, context.Canceled) || errors.Is(requestCtx.Err(), context.Canceled) {
 		return true
 	}
-	message := strings.ToLower(strings.TrimSpace(waitErr.Error()))
-	stderrNormalized := strings.ToLower(strings.TrimSpace(stderrText))
+	message := normalizedFFmpegMessage(waitErr.Error())
+	stderrNormalized := normalizedFFmpegMessage(stderrText)
 	if strings.Contains(message, "signal: killed") {
 		if stderrNormalized == "" ||
 			strings.Contains(stderrNormalized, "broken pipe") ||
@@ -425,7 +427,7 @@ func isExpectedFFmpegExit(waitErr error, requestCtx context.Context, stderrText 
 }
 
 func isTransientFFmpegStartupFailure(message string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(message))
+	normalized := normalizedFFmpegMessage(message)
 	if normalized == "" {
 		return true
 	}
@@ -448,7 +450,7 @@ func isTransientFFmpegStartupFailure(message string) bool {
 }
 
 func isRetryableFFmpegFailure(message string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(message))
+	normalized := normalizedFFmpegMessage(message)
 	if normalized == "" {
 		return true
 	}
@@ -465,4 +467,8 @@ func isRetryableFFmpegFailure(message string) bool {
 		}
 	}
 	return true
+}
+
+func normalizedFFmpegMessage(message string) string {
+	return strings.ToLower(strings.TrimSpace(message))
 }

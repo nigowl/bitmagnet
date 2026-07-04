@@ -60,7 +60,7 @@ export function useTorrentPlayerSubtitles({
     try {
       const items = await fetchPlayerSubtitles(infoHash);
       if (subtitleLoadTokenRef.current !== loadToken) return;
-      const filtered = items.filter((item) => item.infoHash.trim().toLowerCase() === infoHash);
+      const filtered = items.filter((item) => player.normalizeInfoHash(item.infoHash) === infoHash);
       setSubtitleItems(filtered);
       logInfo("subtitle", "subtitle list loaded", { count: filtered.length });
     } catch (error) {

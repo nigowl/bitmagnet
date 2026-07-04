@@ -40,6 +40,36 @@ func newMediaRuntimeSettings() mediaRuntimeSettings {
 	}
 }
 
+func parseRuntimeBool(raw string) (bool, bool) {
+	parsed, err := strconv.ParseBool(strings.TrimSpace(raw))
+	return parsed, err == nil
+}
+
+func parseRuntimeInt(raw string) (int, bool) {
+	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
+	return parsed, err == nil
+}
+
+func parseRuntimeIntInRange(raw string, min int, max int) (int, bool) {
+	parsed, ok := parseRuntimeInt(raw)
+	if !ok || parsed < min || parsed > max {
+		return 0, false
+	}
+	return parsed, true
+}
+
+func applyRuntimeString(values map[string]string, key string, allowEmpty bool, setter func(string)) {
+	raw, ok := values[key]
+	if !ok {
+		return
+	}
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" && !allowEmpty {
+		return
+	}
+	setter(trimmed)
+}
+
 func (s *service) InvalidateRuntimeSettingsCache() {
 	if s == nil {
 		return
@@ -84,23 +114,17 @@ func (s *service) loadRuntimeOptions(ctx context.Context, db *gorm.DB) mediaRunt
 	for rawKey, value := range values {
 		switch rawKey {
 		case runtimeconfig.KeyMediaAutoCacheCover:
-			parsedValue, err := strconv.ParseBool(strings.TrimSpace(value))
-			if err != nil {
-				continue
+			if parsedValue, ok := parseRuntimeBool(value); ok {
+				parsed.autoCacheCover = parsedValue
 			}
-			parsed.autoCacheCover = parsedValue
 		case runtimeconfig.KeyMediaAutoFetchBilingual:
-			parsedValue, err := strconv.ParseBool(strings.TrimSpace(value))
-			if err != nil {
-				continue
+			if parsedValue, ok := parseRuntimeBool(value); ok {
+				parsed.autoFetchBilingual = parsedValue
 			}
-			parsed.autoFetchBilingual = parsedValue
 		case runtimeconfig.KeyHomeHotDays:
-			parsedValue, err := strconv.Atoi(strings.TrimSpace(value))
-			if err != nil {
-				continue
+			if parsedValue, ok := parseRuntimeInt(value); ok {
+				parsed.homeHotDays = clampHomeHotDays(parsedValue)
 			}
-			parsed.homeHotDays = clampHomeHotDays(parsedValue)
 		}
 	}
 

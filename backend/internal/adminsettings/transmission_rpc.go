@@ -7,6 +7,14 @@ import (
 	"strings"
 )
 
+func transmissionRPCResultError(method, result string) error {
+	result = strings.TrimSpace(result)
+	if strings.EqualFold(result, "success") {
+		return nil
+	}
+	return fmt.Errorf("transmission %s result=%q", method, result)
+}
+
 func (s *service) loadTransmissionTaskItems(
 	ctx context.Context,
 	cfg TransmissionSettings,
@@ -50,8 +58,8 @@ func (s *service) loadTransmissionTaskItems(
 	if err := json.Unmarshal(responseBytes, &response); err != nil {
 		return nil, err
 	}
-	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
-		return nil, fmt.Errorf("transmission torrent-get result=%q", strings.TrimSpace(response.Result))
+	if err := transmissionRPCResultError("torrent-get", response.Result); err != nil {
+		return nil, err
 	}
 	return response.Arguments.Torrents, nil
 }
@@ -76,8 +84,8 @@ func (s *service) loadTransmissionFreeSpace(ctx context.Context, cfg Transmissio
 	if err := json.Unmarshal(responseBytes, &response); err != nil {
 		return 0, err
 	}
-	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
-		return 0, fmt.Errorf("transmission session-get result=%q", strings.TrimSpace(response.Result))
+	if err := transmissionRPCResultError("session-get", response.Result); err != nil {
+		return 0, err
 	}
 	return response.Arguments.DownloadDirFreeSpace, nil
 }
@@ -113,8 +121,8 @@ func (s *service) removeTransmissionTasks(
 	if err := json.Unmarshal(responseBytes, &response); err != nil {
 		return err
 	}
-	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
-		return fmt.Errorf("transmission torrent-remove result=%q", strings.TrimSpace(response.Result))
+	if err := transmissionRPCResultError("torrent-remove", response.Result); err != nil {
+		return err
 	}
 	return nil
 }

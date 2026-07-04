@@ -45,10 +45,7 @@ func (s *service) TestPlugin(ctx context.Context, pluginKey string, input Plugin
 }
 
 func (s *service) testTMDBPlugin(ctx context.Context, input PluginTestInput) (PluginTestResult, error) {
-	query := strings.TrimSpace(input.Query)
-	if query == "" {
-		query = strings.TrimSpace(input.Title)
-	}
+	query := firstNonEmptyTrimmed(input.Query, input.Title)
 	if query == "" {
 		return PluginTestResult{}, fmt.Errorf("%w: query", ErrInvalidInput)
 	}
@@ -58,7 +55,7 @@ func (s *service) testTMDBPlugin(ctx context.Context, input PluginTestInput) (Pl
 		return PluginTestResult{}, err
 	}
 
-	contentType := normalizeTestContentType(input.ContentType)
+	contentType := model.NormalizeVideoContentType(input.ContentType)
 	languages := []string{"zh-CN", "en-US"}
 	logs := make([]string, 0, 8)
 	langResults := make(map[string]any, len(languages))
@@ -117,19 +114,13 @@ func (s *service) testTMDBPlugin(ctx context.Context, input PluginTestInput) (Pl
 		},
 		Logs: logs,
 	}
-	s.logger.Info("plugin test result", zap.String("plugin", result.Plugin), zap.Bool("success", result.Success), zap.Any("input", result.Input), zap.Any("output", result.Output))
+	s.logPluginTestResult(result)
 	return result, nil
 }
 
 func (s *service) testIMDbPlugin(ctx context.Context, input PluginTestInput) (PluginTestResult, error) {
-	rawID := strings.TrimSpace(input.IMDbID)
-	if rawID == "" {
-		rawID = strings.TrimSpace(input.ExternalID)
-	}
-	if rawID == "" {
-		rawID = strings.TrimSpace(input.Query)
-	}
-	normalizedID := normalizeIMDbID(rawID)
+	rawID := firstNonEmptyTrimmed(input.IMDbID, input.ExternalID, input.Query)
+	normalizedID := model.NormalizeIMDbID(rawID)
 	if normalizedID == "" {
 		return PluginTestResult{}, fmt.Errorf("%w: imdbId", ErrInvalidInput)
 	}
@@ -175,7 +166,7 @@ func (s *service) testIMDbPlugin(ctx context.Context, input PluginTestInput) (Pl
 		},
 		Logs: logs,
 	}
-	s.logger.Info("plugin test result", zap.String("plugin", result.Plugin), zap.Bool("success", result.Success), zap.Any("input", result.Input), zap.Any("output", result.Output))
+	s.logPluginTestResult(result)
 	return result, nil
 }
 
@@ -185,10 +176,7 @@ func (s *service) testDoubanPlugin(ctx context.Context, input PluginTestInput) (
 		return PluginTestResult{}, err
 	}
 
-	title := strings.TrimSpace(input.Title)
-	if title == "" {
-		title = strings.TrimSpace(input.Query)
-	}
+	title := firstNonEmptyTrimmed(input.Title, input.Query)
 	if title == "" {
 		return PluginTestResult{}, fmt.Errorf("%w: title", ErrInvalidInput)
 	}
@@ -227,15 +215,25 @@ func (s *service) testDoubanPlugin(ctx context.Context, input PluginTestInput) (
 		Message: "Douban test completed",
 		Input: map[string]any{
 			"title":       title,
-			"contentType": normalizeTestContentType(input.ContentType).String(),
+			"contentType": model.NormalizeVideoContentType(input.ContentType).String(),
 			"year":        input.Year,
 			"minScore":    settings.DoubanMinScore,
 		},
 		Output: output,
 		Logs:   testResult.Logs,
 	}
-	s.logger.Info("plugin test result", zap.String("plugin", result.Plugin), zap.Bool("success", result.Success), zap.Any("input", result.Input), zap.Any("output", result.Output))
+	s.logPluginTestResult(result)
 	return result, nil
+}
+
+func (s *service) logPluginTestResult(result PluginTestResult) {
+	s.logger.Info(
+		"plugin test result",
+		zap.String("plugin", result.Plugin),
+		zap.Bool("success", result.Success),
+		zap.Any("input", result.Input),
+		zap.Any("output", result.Output),
+	)
 }
 
 func (s *service) getTMDBClient() (tmdb.Client, error) {
@@ -348,32 +346,6 @@ func mapFirstFindTV(results []struct {
 	}
 }
 
-func normalizeIMDbID(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	valueLower := strings.ToLower(value)
-	if strings.HasPrefix(valueLower, "tt") {
-		return "tt" + digitsOnly(value[2:])
-	}
-	digits := digitsOnly(value)
-	if digits == "" {
-		return ""
-	}
-	return "tt" + digits
-}
-
-func digitsOnly(value string) string {
-	var b strings.Builder
-	for _, r := range value {
-		if r >= '0' && r <= '9' {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
-
 func toModelYear(year *int) model.Year {
 	if year == nil || *year <= 0 {
 		return model.Year(0)
@@ -386,13 +358,4 @@ func intFromPtr(value *int) int {
 		return 0
 	}
 	return *value
-}
-
-func normalizeTestContentType(value string) model.ContentType {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "tv", "series", "show", "tv_show":
-		return model.ContentTypeTvShow
-	default:
-		return model.ContentTypeMovie
-	}
 }

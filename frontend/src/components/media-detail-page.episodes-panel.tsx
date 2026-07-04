@@ -3,6 +3,7 @@
 import { Badge, Group, Loader, Modal, ScrollArea, Stack, Table, Text, Tooltip } from "@mantine/core";
 import type { PlayerTransmissionTaskStatus } from "@/lib/media-api";
 import type { MediaEpisodeGroup } from "./media-detail-page.episode-parser";
+import { normalizeInfoHash } from "./media-detail-page.helpers";
 import { TorrentRow } from "./media-detail-page.torrent-row";
 
 type MediaEpisodePanelProps = {
@@ -13,9 +14,13 @@ type MediaEpisodePanelProps = {
   selectedGroup: MediaEpisodeGroup | null;
   playerStatusMap: Record<string, PlayerTransmissionTaskStatus>;
   playerEnabled: boolean;
+  cacheQueueing: Record<string, boolean>;
   onOpenEpisode: (key: string) => void;
   onCloseEpisode: () => void;
+  onCacheTorrent: (item: MediaDetailGroupTorrent) => void;
 };
+
+type MediaDetailGroupTorrent = MediaEpisodeGroup["torrents"][number]["torrent"];
 
 export function MediaEpisodePanel({
   t,
@@ -25,8 +30,10 @@ export function MediaEpisodePanel({
   selectedGroup,
   playerStatusMap,
   playerEnabled,
+  cacheQueueing,
   onOpenEpisode,
-  onCloseEpisode
+  onCloseEpisode,
+  onCacheTorrent
 }: MediaEpisodePanelProps) {
   return (
     <div className="media-episode-panel">
@@ -90,10 +97,8 @@ export function MediaEpisodePanel({
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>{t("torrents.table.title")}</Table.Th>
-                    <Table.Th>{t("torrents.table.seeders")}</Table.Th>
-                    <Table.Th>{t("torrents.table.leechers")}</Table.Th>
-                    <Table.Th>{t("torrents.table.size")}</Table.Th>
-                    <Table.Th>{t("torrents.table.filesCount")}</Table.Th>
+                    <Table.Th>{t("torrents.table.seeders")} / {t("torrents.table.leechers")}</Table.Th>
+                    <Table.Th>{t("torrents.table.size")} / {t("torrents.table.filesCount")}</Table.Th>
                     <Table.Th>{t("media.detail.resolution")}</Table.Th>
                     <Table.Th>{t("torrents.table.actions")}</Table.Th>
                   </Table.Tr>
@@ -104,8 +109,10 @@ export function MediaEpisodePanel({
                       key={`${selectedGroup.key}:${entry.torrent.infoHash}`}
                       item={entry.torrent}
                       t={t}
-                      playerStatus={playerStatusMap[entry.torrent.infoHash.trim().toLowerCase()]}
+                      playerStatus={playerStatusMap[normalizeInfoHash(entry.torrent.infoHash)]}
                       playerEnabled={playerEnabled}
+                      cacheQueuing={Boolean(cacheQueueing[normalizeInfoHash(entry.torrent.infoHash)])}
+                      onCache={onCacheTorrent}
                     />
                   ))}
                 </Table.Tbody>

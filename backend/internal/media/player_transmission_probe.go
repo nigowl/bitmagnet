@@ -93,7 +93,7 @@ func playerTransmissionProbeAudioTracks(
 	}
 	result := make([]PlayerTransmissionAudioTrack, 0, len(payload.Streams))
 	for idx, stream := range payload.Streams {
-		if strings.TrimSpace(strings.ToLower(stream.CodecType)) != "audio" {
+		if !strings.EqualFold(strings.TrimSpace(stream.CodecType), "audio") {
 			continue
 		}
 		label := strings.TrimSpace(stream.Tags["title"])

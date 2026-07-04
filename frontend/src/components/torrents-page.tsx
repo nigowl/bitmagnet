@@ -468,7 +468,7 @@ export function TorrentsPage() {
                 ]}
                 value={String(limit)}
                 onChange={(value) => {
-                  const nextLimit = Number(value) || 20;
+                  const nextLimit = parsePositiveIntParam(value, 20);
                   updateQuery({ limit: nextLimit, page: null });
                 }}
               />

@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/nigowl/bitmagnet/internal/protocol"
 )
 
 const defaultPlayerStreamProbeChunkBytes int64 = 16 * 1024 * 1024
@@ -131,7 +129,7 @@ func (s *service) PlayerTransmissionAudioTracks(
 		return PlayerTransmissionAudioTracksResult{}, err
 	}
 	return PlayerTransmissionAudioTracksResult{
-		InfoHash:  strings.TrimSpace(strings.ToLower(input.InfoHash)),
+		InfoHash:  normalizePlayerInfoHashKey(input.InfoHash),
 		FileIndex: input.FileIndex,
 		Tracks:    tracks,
 	}, nil
@@ -182,22 +180,7 @@ func (s *service) PlayerTransmissionBatchStatus(
 		return PlayerTransmissionBatchStatusResult{}, ErrPlayerTransmissionDisabled
 	}
 
-	infoHashes := make([]string, 0, len(input.InfoHashes))
-	seen := make(map[string]struct{}, len(input.InfoHashes))
-	for _, raw := range input.InfoHashes {
-		infoHash := strings.TrimSpace(strings.ToLower(raw))
-		if infoHash == "" {
-			continue
-		}
-		if _, parseErr := protocol.ParseID(infoHash); parseErr != nil {
-			continue
-		}
-		if _, ok := seen[infoHash]; ok {
-			continue
-		}
-		seen[infoHash] = struct{}{}
-		infoHashes = append(infoHashes, infoHash)
-	}
+	infoHashes := normalizePlayerInfoHashList(input.InfoHashes)
 	if len(infoHashes) == 0 {
 		return PlayerTransmissionBatchStatusResult{Items: []PlayerTransmissionTaskStatus{}}, nil
 	}
@@ -206,25 +189,31 @@ func (s *service) PlayerTransmissionBatchStatus(
 	if err != nil {
 		return PlayerTransmissionBatchStatusResult{}, err
 	}
+	queueSnapshots := s.playerCacheQueue.snapshots(infoHashes)
 
 	items := make([]PlayerTransmissionTaskStatus, 0, len(infoHashes))
 	for _, infoHash := range infoHashes {
+		queueSnapshot := queueSnapshots[infoHash]
 		snapshot, ok := snapshots[infoHash]
 		if !ok {
 			items = append(items, PlayerTransmissionTaskStatus{
-				InfoHash: infoHash,
-				Exists:   false,
-				State:    "missing",
-				Progress: 0,
+				InfoHash:      infoHash,
+				Exists:        false,
+				State:         "missing",
+				Progress:      0,
+				QueueState:    queueSnapshot.state,
+				QueuePosition: queueSnapshot.position,
 			})
 			continue
 		}
 		items = append(items, PlayerTransmissionTaskStatus{
-			InfoHash:  infoHash,
-			Exists:    true,
-			TorrentID: snapshot.ID,
-			State:     playerTransmissionStatusLabel(snapshot.Status),
-			Progress:  clampRatio(snapshot.PercentDone),
+			InfoHash:      infoHash,
+			Exists:        true,
+			TorrentID:     snapshot.ID,
+			State:         playerTransmissionStatusLabel(snapshot.Status),
+			Progress:      clampRatio(snapshot.PercentDone),
+			QueueState:    queueSnapshot.state,
+			QueuePosition: queueSnapshot.position,
 		})
 	}
 

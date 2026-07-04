@@ -59,7 +59,10 @@ export function SettingsPageContentTab({
                 <Switch
                   label={t("settings.pluginTmdbEnabled")}
                   checked={settings.tmdbEnabled}
-                  onChange={(event) => setSettings((current) => ({ ...current, tmdbEnabled: event.currentTarget.checked }))}
+                  onChange={(event) => {
+                    const checked = event.currentTarget.checked;
+                    setSettings((current) => ({ ...current, tmdbEnabled: checked }));
+                  }}
                 />
                 {settings.tmdbEnabled ? (
                   <Stack gap="sm" className="settings-toggle-panel">
@@ -105,7 +108,10 @@ export function SettingsPageContentTab({
                 <Switch
                   label={t("settings.pluginImdbEnabled")}
                   checked={settings.imdbEnabled}
-                  onChange={(event) => setSettings((current) => ({ ...current, imdbEnabled: event.currentTarget.checked }))}
+                  onChange={(event) => {
+                    const checked = event.currentTarget.checked;
+                    setSettings((current) => ({ ...current, imdbEnabled: checked }));
+                  }}
                 />
                 {settings.imdbEnabled ? (
                   <Stack gap="sm" className="settings-toggle-panel">
@@ -133,7 +139,10 @@ export function SettingsPageContentTab({
                 <Switch
                   label={t("settings.doubanEnabled")}
                   checked={settings.doubanEnabled}
-                  onChange={(event) => setSettings((current) => ({ ...current, doubanEnabled: event.currentTarget.checked }))}
+                  onChange={(event) => {
+                    const checked = event.currentTarget.checked;
+                    setSettings((current) => ({ ...current, doubanEnabled: checked }));
+                  }}
                 />
                 {settings.doubanEnabled ? (
                   <Stack gap="sm" className="settings-toggle-panel">

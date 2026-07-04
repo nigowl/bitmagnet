@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { TorrentPlayerPage } from "@/components/torrent-player-page";
+import { normalizeInfoHash } from "@/components/torrent-player/torrent-player-helpers";
 import { buildMetadata } from "@/lib/seo";
 
 type PlayerRouteProps = {
@@ -10,7 +11,7 @@ type PlayerRouteProps = {
 
 export async function generateMetadata({ params }: PlayerRouteProps): Promise<Metadata> {
   const resolved = await params;
-  const infoHash = resolved.infoHash.trim().toLowerCase();
+  const infoHash = normalizeInfoHash(resolved.infoHash);
 
   return buildMetadata({
     title: `在线播放 ${infoHash.slice(0, 10)}`,

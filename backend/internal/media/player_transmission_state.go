@@ -3,7 +3,6 @@ package media
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/nigowl/bitmagnet/internal/model"
 	"github.com/nigowl/bitmagnet/internal/protocol"
@@ -19,8 +18,8 @@ func (s *service) loadPlayerTransmissionBase(
 		return "", nil, model.Torrent{}, playerBootstrapSettings{}, err
 	}
 
-	infoHash := strings.TrimSpace(strings.ToLower(infoHashInput))
-	if infoHash == "" {
+	infoHash, err := normalizePlayerInfoHash(infoHashInput)
+	if err != nil {
 		return "", nil, model.Torrent{}, playerBootstrapSettings{}, ErrInvalidInfoHash
 	}
 	parsed, err := protocol.ParseID(infoHash)
@@ -91,7 +90,7 @@ func (s *service) playerTransmissionRememberSelectedFile(infoHash string, fileIn
 	if s == nil || fileIndex < 0 {
 		return
 	}
-	key := strings.TrimSpace(strings.ToLower(infoHash))
+	key := normalizePlayerInfoHashKey(infoHash)
 	if key == "" {
 		return
 	}
@@ -102,7 +101,7 @@ func (s *service) playerTransmissionRememberedSelectedFile(infoHash string) (int
 	if s == nil {
 		return 0, false
 	}
-	key := strings.TrimSpace(strings.ToLower(infoHash))
+	key := normalizePlayerInfoHashKey(infoHash)
 	if key == "" {
 		return 0, false
 	}

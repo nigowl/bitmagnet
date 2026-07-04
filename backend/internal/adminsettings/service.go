@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/nigowl/bitmagnet/internal/auth"
@@ -167,138 +166,94 @@ func (s *service) Update(ctx context.Context, input UpdateInput) (Settings, erro
 		}
 	}
 
-	if input.TMDBEnabled != nil {
-		value := strconv.FormatBool(*input.TMDBEnabled)
-		updates[runtimeconfig.KeyMediaTMDBEnabled] = &value
-		effective.TMDBEnabled = *input.TMDBEnabled
-	}
-	if input.IMDbEnabled != nil {
-		value := strconv.FormatBool(*input.IMDbEnabled)
-		updates[runtimeconfig.KeyMediaIMDbEnabled] = &value
-		effective.IMDbEnabled = *input.IMDbEnabled
-	}
-	if input.DoubanEnabled != nil {
-		value := strconv.FormatBool(*input.DoubanEnabled)
-		updates[runtimeconfig.KeyMediaDoubanEnabled] = &value
-		effective.DoubanEnabled = *input.DoubanEnabled
-	}
+	applyOptionalBoolUpdate(input.TMDBEnabled, runtimeconfig.KeyMediaTMDBEnabled, updates, func(value bool) {
+		effective.TMDBEnabled = value
+	})
+	applyOptionalBoolUpdate(input.IMDbEnabled, runtimeconfig.KeyMediaIMDbEnabled, updates, func(value bool) {
+		effective.IMDbEnabled = value
+	})
+	applyOptionalBoolUpdate(input.DoubanEnabled, runtimeconfig.KeyMediaDoubanEnabled, updates, func(value bool) {
+		effective.DoubanEnabled = value
+	})
 	if input.DoubanMinScore != nil {
-		if *input.DoubanMinScore < 0 || *input.DoubanMinScore > 1 {
-			return Settings{}, fmt.Errorf("%w: doubanMinScore", ErrInvalidInput)
-		}
-		value := strconv.FormatFloat(*input.DoubanMinScore, 'f', 4, 64)
-		updates[runtimeconfig.KeyMediaDoubanMinScore] = &value
-		effective.DoubanMinScore = *input.DoubanMinScore
-	}
-	if input.DoubanCookie != nil {
-		trimmed := strings.TrimSpace(*input.DoubanCookie)
-		if trimmed == "" {
-			updates[runtimeconfig.KeyMediaDoubanCookie] = nil
-			effective.DoubanCookie = s.defaults.DoubanCookie
-		} else {
-			updates[runtimeconfig.KeyMediaDoubanCookie] = &trimmed
-			effective.DoubanCookie = trimmed
+		if err := applyOptionalFloatUpdate(
+			input.DoubanMinScore, runtimeconfig.KeyMediaDoubanMinScore, "doubanMinScore", updates,
+			func(value float64) bool { return value >= 0 && value <= 1 },
+			func(value float64) { effective.DoubanMinScore = value },
+		); err != nil {
+			return Settings{}, err
 		}
 	}
-	if input.DoubanUserAgent != nil {
-		trimmed := strings.TrimSpace(*input.DoubanUserAgent)
-		if trimmed == "" {
-			updates[runtimeconfig.KeyMediaDoubanUserAgent] = nil
-			effective.DoubanUserAgent = s.defaults.DoubanUserAgent
-		} else {
-			updates[runtimeconfig.KeyMediaDoubanUserAgent] = &trimmed
-			effective.DoubanUserAgent = trimmed
-		}
-	}
-	if input.DoubanAcceptLanguage != nil {
-		trimmed := strings.TrimSpace(*input.DoubanAcceptLanguage)
-		if trimmed == "" {
-			updates[runtimeconfig.KeyMediaDoubanAcceptLanguage] = nil
-			effective.DoubanAcceptLanguage = s.defaults.DoubanAcceptLanguage
-		} else {
-			updates[runtimeconfig.KeyMediaDoubanAcceptLanguage] = &trimmed
-			effective.DoubanAcceptLanguage = trimmed
-		}
-	}
-	if input.DoubanReferer != nil {
-		trimmed := strings.TrimSpace(*input.DoubanReferer)
-		if trimmed == "" {
-			updates[runtimeconfig.KeyMediaDoubanReferer] = nil
-			effective.DoubanReferer = s.defaults.DoubanReferer
-		} else {
-			updates[runtimeconfig.KeyMediaDoubanReferer] = &trimmed
-			effective.DoubanReferer = trimmed
-		}
-	}
+	applyOptionalTrimmedStringUpdate(input.DoubanCookie, runtimeconfig.KeyMediaDoubanCookie, s.defaults.DoubanCookie, updates, func(value string) {
+		effective.DoubanCookie = value
+	})
+	applyOptionalTrimmedStringUpdate(input.DoubanUserAgent, runtimeconfig.KeyMediaDoubanUserAgent, s.defaults.DoubanUserAgent, updates, func(value string) {
+		effective.DoubanUserAgent = value
+	})
+	applyOptionalTrimmedStringUpdate(input.DoubanAcceptLanguage, runtimeconfig.KeyMediaDoubanAcceptLanguage, s.defaults.DoubanAcceptLanguage, updates, func(value string) {
+		effective.DoubanAcceptLanguage = value
+	})
+	applyOptionalTrimmedStringUpdate(input.DoubanReferer, runtimeconfig.KeyMediaDoubanReferer, s.defaults.DoubanReferer, updates, func(value string) {
+		effective.DoubanReferer = value
+	})
 
 	if input.Performance != nil {
 		if dht := input.Performance.DHT; dht != nil {
-			if dht.ScalingFactor != nil {
-				if *dht.ScalingFactor < 1 || *dht.ScalingFactor > 200 {
-					return Settings{}, fmt.Errorf("%w: performance.dht.scalingFactor", ErrInvalidInput)
-				}
-				value := strconv.FormatUint(uint64(*dht.ScalingFactor), 10)
-				updates[runtimeconfig.KeyDHTCrawlerScalingFactor] = &value
-				effective.Performance.DHT.ScalingFactor = *dht.ScalingFactor
+			if err := applyOptionalUintUpdate(
+				dht.ScalingFactor, 1, 200, runtimeconfig.KeyDHTCrawlerScalingFactor,
+				"performance.dht.scalingFactor", updates,
+				func(value uint) { effective.Performance.DHT.ScalingFactor = value },
+			); err != nil {
+				return Settings{}, err
 			}
-			if dht.ReseedIntervalSeconds != nil {
-				if *dht.ReseedIntervalSeconds < 10 || *dht.ReseedIntervalSeconds > 3600 {
-					return Settings{}, fmt.Errorf("%w: performance.dht.reseedIntervalSeconds", ErrInvalidInput)
-				}
-				value := strconv.Itoa(*dht.ReseedIntervalSeconds)
-				updates[runtimeconfig.KeyDHTCrawlerReseedIntervalSeconds] = &value
-				effective.Performance.DHT.ReseedIntervalSeconds = *dht.ReseedIntervalSeconds
+			if err := applyOptionalIntUpdate(
+				dht.ReseedIntervalSeconds, 10, 3600, runtimeconfig.KeyDHTCrawlerReseedIntervalSeconds,
+				"performance.dht.reseedIntervalSeconds", updates,
+				func(value int) { effective.Performance.DHT.ReseedIntervalSeconds = value },
+			); err != nil {
+				return Settings{}, err
 			}
-			if dht.SaveFilesThreshold != nil {
-				if *dht.SaveFilesThreshold < 1 || *dht.SaveFilesThreshold > 20000 {
-					return Settings{}, fmt.Errorf("%w: performance.dht.saveFilesThreshold", ErrInvalidInput)
-				}
-				value := strconv.FormatUint(uint64(*dht.SaveFilesThreshold), 10)
-				updates[runtimeconfig.KeyDHTCrawlerSaveFilesThreshold] = &value
-				effective.Performance.DHT.SaveFilesThreshold = *dht.SaveFilesThreshold
+			if err := applyOptionalUintUpdate(
+				dht.SaveFilesThreshold, 1, 20000, runtimeconfig.KeyDHTCrawlerSaveFilesThreshold,
+				"performance.dht.saveFilesThreshold", updates,
+				func(value uint) { effective.Performance.DHT.SaveFilesThreshold = value },
+			); err != nil {
+				return Settings{}, err
 			}
-			if dht.SavePieces != nil {
-				value := strconv.FormatBool(*dht.SavePieces)
-				updates[runtimeconfig.KeyDHTCrawlerSavePieces] = &value
-				effective.Performance.DHT.SavePieces = *dht.SavePieces
+			applyOptionalBoolUpdate(dht.SavePieces, runtimeconfig.KeyDHTCrawlerSavePieces, updates, func(value bool) {
+				effective.Performance.DHT.SavePieces = value
+			})
+			if err := applyOptionalIntUpdate(
+				dht.RescrapeThresholdHours, 1, 24*365, runtimeconfig.KeyDHTCrawlerRescrapeThresholdHours,
+				"performance.dht.rescrapeThresholdHours", updates,
+				func(value int) { effective.Performance.DHT.RescrapeThresholdHours = value },
+			); err != nil {
+				return Settings{}, err
 			}
-			if dht.RescrapeThresholdHours != nil {
-				if *dht.RescrapeThresholdHours < 1 || *dht.RescrapeThresholdHours > 24*365 {
-					return Settings{}, fmt.Errorf("%w: performance.dht.rescrapeThresholdHours", ErrInvalidInput)
-				}
-				value := strconv.Itoa(*dht.RescrapeThresholdHours)
-				updates[runtimeconfig.KeyDHTCrawlerRescrapeThresholdHours] = &value
-				effective.Performance.DHT.RescrapeThresholdHours = *dht.RescrapeThresholdHours
+			if err := applyOptionalIntUpdate(
+				dht.StatusLogIntervalSeconds, 5, 3600, runtimeconfig.KeyDHTCrawlerStatusLogIntervalSeconds,
+				"performance.dht.statusLogIntervalSeconds", updates,
+				func(value int) { effective.Performance.DHT.StatusLogIntervalSeconds = value },
+			); err != nil {
+				return Settings{}, err
 			}
-			if dht.StatusLogIntervalSeconds != nil {
-				if *dht.StatusLogIntervalSeconds < 5 || *dht.StatusLogIntervalSeconds > 3600 {
-					return Settings{}, fmt.Errorf("%w: performance.dht.statusLogIntervalSeconds", ErrInvalidInput)
-				}
-				value := strconv.Itoa(*dht.StatusLogIntervalSeconds)
-				updates[runtimeconfig.KeyDHTCrawlerStatusLogIntervalSeconds] = &value
-				effective.Performance.DHT.StatusLogIntervalSeconds = *dht.StatusLogIntervalSeconds
+			if err := applyOptionalIntUpdate(
+				dht.GetOldestNodesIntervalSeconds, 1, 600, runtimeconfig.KeyDHTCrawlerGetOldestNodesIntervalSeconds,
+				"performance.dht.getOldestNodesIntervalSeconds", updates,
+				func(value int) { effective.Performance.DHT.GetOldestNodesIntervalSeconds = value },
+			); err != nil {
+				return Settings{}, err
 			}
-			if dht.GetOldestNodesIntervalSeconds != nil {
-				if *dht.GetOldestNodesIntervalSeconds < 1 || *dht.GetOldestNodesIntervalSeconds > 600 {
-					return Settings{}, fmt.Errorf("%w: performance.dht.getOldestNodesIntervalSeconds", ErrInvalidInput)
-				}
-				value := strconv.Itoa(*dht.GetOldestNodesIntervalSeconds)
-				updates[runtimeconfig.KeyDHTCrawlerGetOldestNodesIntervalSeconds] = &value
-				effective.Performance.DHT.GetOldestNodesIntervalSeconds = *dht.GetOldestNodesIntervalSeconds
+			if err := applyOptionalIntUpdate(
+				dht.OldPeerThresholdMinutes, 1, 24*60, runtimeconfig.KeyDHTCrawlerOldPeerThresholdMinutes,
+				"performance.dht.oldPeerThresholdMinutes", updates,
+				func(value int) { effective.Performance.DHT.OldPeerThresholdMinutes = value },
+			); err != nil {
+				return Settings{}, err
 			}
-			if dht.OldPeerThresholdMinutes != nil {
-				if *dht.OldPeerThresholdMinutes < 1 || *dht.OldPeerThresholdMinutes > 24*60 {
-					return Settings{}, fmt.Errorf("%w: performance.dht.oldPeerThresholdMinutes", ErrInvalidInput)
-				}
-				value := strconv.Itoa(*dht.OldPeerThresholdMinutes)
-				updates[runtimeconfig.KeyDHTCrawlerOldPeerThresholdMinutes] = &value
-				effective.Performance.DHT.OldPeerThresholdMinutes = *dht.OldPeerThresholdMinutes
-			}
-			if dht.ScheduleEnabled != nil {
-				value := strconv.FormatBool(*dht.ScheduleEnabled)
-				updates[runtimeconfig.KeyDHTCrawlerScheduleEnabled] = &value
-				effective.Performance.DHT.ScheduleEnabled = *dht.ScheduleEnabled
-			}
+			applyOptionalBoolUpdate(dht.ScheduleEnabled, runtimeconfig.KeyDHTCrawlerScheduleEnabled, updates, func(value bool) {
+				effective.Performance.DHT.ScheduleEnabled = value
+			})
 			if dht.ScheduleWeekdays != nil {
 				weekdays, err := normalizeDHTScheduleWeekdays(*dht.ScheduleWeekdays)
 				if err != nil {
@@ -308,21 +263,19 @@ func (s *service) Update(ctx context.Context, input UpdateInput) (Settings, erro
 				updates[runtimeconfig.KeyDHTCrawlerScheduleWeekdays] = &value
 				effective.Performance.DHT.ScheduleWeekdays = weekdays
 			}
-			if dht.ScheduleStartHour != nil {
-				if *dht.ScheduleStartHour < 0 || *dht.ScheduleStartHour > 23 {
-					return Settings{}, fmt.Errorf("%w: performance.dht.scheduleStartHour", ErrInvalidInput)
-				}
-				value := strconv.Itoa(*dht.ScheduleStartHour)
-				updates[runtimeconfig.KeyDHTCrawlerScheduleStartHour] = &value
-				effective.Performance.DHT.ScheduleStartHour = *dht.ScheduleStartHour
+			if err := applyOptionalIntUpdate(
+				dht.ScheduleStartHour, 0, 23, runtimeconfig.KeyDHTCrawlerScheduleStartHour,
+				"performance.dht.scheduleStartHour", updates,
+				func(value int) { effective.Performance.DHT.ScheduleStartHour = value },
+			); err != nil {
+				return Settings{}, err
 			}
-			if dht.ScheduleEndHour != nil {
-				if *dht.ScheduleEndHour < 1 || *dht.ScheduleEndHour > 24 {
-					return Settings{}, fmt.Errorf("%w: performance.dht.scheduleEndHour", ErrInvalidInput)
-				}
-				value := strconv.Itoa(*dht.ScheduleEndHour)
-				updates[runtimeconfig.KeyDHTCrawlerScheduleEndHour] = &value
-				effective.Performance.DHT.ScheduleEndHour = *dht.ScheduleEndHour
+			if err := applyOptionalIntUpdate(
+				dht.ScheduleEndHour, 1, 24, runtimeconfig.KeyDHTCrawlerScheduleEndHour,
+				"performance.dht.scheduleEndHour", updates,
+				func(value int) { effective.Performance.DHT.ScheduleEndHour = value },
+			); err != nil {
+				return Settings{}, err
 			}
 			if err := validateDHTSchedule(effective.Performance.DHT); err != nil {
 				return Settings{}, err

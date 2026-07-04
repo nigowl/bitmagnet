@@ -21,6 +21,8 @@ import { HeartOff, LogIn, RefreshCw, UserPlus } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { graphqlRequest } from "@/lib/api";
+import { formatDateTime } from "@/lib/datetime";
+import { formatBytes } from "@/lib/format";
 import { TORRENT_CONTENT_SEARCH_QUERY } from "@/lib/graphql";
 import { buildMediaDetailHref, buildMediaEntryIdFromContentRef, isAnimeItem, type MediaLikeItem } from "@/lib/media";
 import { useTabsUnderline } from "@/lib/use-tabs-underline";
@@ -54,17 +56,6 @@ type FavoriteSearchResponse = {
     };
   };
 };
-
-function formatBytes(size: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = size;
-  let index = 0;
-  while (value >= 1024 && index < units.length - 1) {
-    value /= 1024;
-    index += 1;
-  }
-  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[index]}`;
-}
 
 function resolveFavoriteTypeLabel(item: FavoriteItem, t: (key: string) => string): string {
   if (isAnimeItem(item as MediaLikeItem)) {
@@ -145,7 +136,7 @@ export function ProfilePage() {
 
   const createdAt = useMemo(() => {
     if (!user) return "-";
-    return new Date(user.createdAt).toLocaleString();
+    return formatDateTime(user.createdAt);
   }, [user]);
 
   const submitPassword = async () => {

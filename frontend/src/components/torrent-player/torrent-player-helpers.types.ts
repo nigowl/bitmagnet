@@ -100,6 +100,10 @@ export type SubtitleCue = {
 
 export type HlsLike = {
   attachMedia: (media: HTMLMediaElement) => void;
+  config?: {
+    maxBufferLength?: number;
+    maxMaxBufferLength?: number;
+  };
   destroy: () => void;
   loadSource: (url: string) => void;
   on: (event: string, handler: (event: string, data?: unknown) => void) => void;

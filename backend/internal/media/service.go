@@ -32,6 +32,7 @@ var ErrNotFound = errors.New("media not found")
 var ErrInvalidInfoHash = errors.New("invalid info hash")
 var ErrPlayerDisabled = errors.New("player is disabled")
 var ErrPlayerTransmissionDisabled = errors.New("player transmission is disabled")
+var ErrPlayerCacheQueueDisabled = errors.New("player cache queue is disabled")
 var ErrPlayerTranscodeDisabled = errors.New("player transcode is disabled")
 var ErrPlayerFileNotFound = errors.New("player file not found")
 var ErrPlayerStreamUnavailable = errors.New("player stream range unavailable")
@@ -48,6 +49,10 @@ type Service interface {
 	PlayerTransmissionAudioTracks(ctx context.Context, input PlayerTransmissionAudioTracksInput) (PlayerTransmissionAudioTracksResult, error)
 	PlayerTransmissionStatus(ctx context.Context, input PlayerTransmissionStatusInput) (PlayerTransmissionStatusResult, error)
 	PlayerTransmissionBatchStatus(ctx context.Context, input PlayerTransmissionBatchStatusInput) (PlayerTransmissionBatchStatusResult, error)
+	PlayerTransmissionEnqueueCache(ctx context.Context, input PlayerTransmissionCacheQueueInput) (PlayerTransmissionCacheQueueResult, error)
+	PlayerTransmissionCacheQueue(ctx context.Context) (PlayerTransmissionCacheQueueListResult, error)
+	PlayerTransmissionCancelCache(ctx context.Context, input PlayerTransmissionCacheQueueActionInput) (PlayerTransmissionCacheQueueItem, error)
+	PlayerTransmissionDeleteCache(ctx context.Context, input PlayerTransmissionCacheQueueActionInput) (PlayerTransmissionCacheQueueDeleteResult, error)
 	PlayerTransmissionClearCache(ctx context.Context, input PlayerTransmissionClearCacheInput) (PlayerTransmissionClearCacheResult, error)
 	PlayerTransmissionResolveStream(ctx context.Context, input PlayerTransmissionResolveStreamInput) (PlayerTransmissionResolveStreamResult, error)
 	PlayerSubtitleList(ctx context.Context, input PlayerSubtitleListInput) ([]PlayerSubtitle, error)
@@ -97,7 +102,8 @@ func NewService(p Params) Service {
 				model.SourceDouban: p.Config.DoubanEnabled,
 			},
 		}, p.Plugins...),
-		runtime: newMediaRuntimeSettings(),
+		runtime:          newMediaRuntimeSettings(),
+		playerCacheQueue: newPlayerTransmissionCacheQueue(),
 	}
 }
 
@@ -107,6 +113,7 @@ type service struct {
 	coverFailures     sync.Map
 	playerDurations   sync.Map
 	playerSelections  sync.Map
+	playerCacheQueue  playerTransmissionCacheQueue
 	logger            *zap.Logger
 	sitePluginManager *siteplugins.Manager
 	runtime           mediaRuntimeSettings

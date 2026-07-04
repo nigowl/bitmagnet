@@ -2,6 +2,7 @@
 
 import { Badge, Card, Group, ScrollArea, Table, Text } from "@mantine/core";
 import { Activity } from "lucide-react";
+import { formatDateTime } from "@/lib/datetime";
 
 type Translate = (key: string) => string;
 
@@ -160,7 +161,7 @@ export function MonitorHealthChecksCard({
                     {renderHealthStatus(check.status)}
                   </Badge>
                 </Table.Td>
-                <Table.Td>{new Date(check.timestamp).toLocaleString()}</Table.Td>
+                <Table.Td>{formatDateTime(check.timestamp)}</Table.Td>
                 <Table.Td>
                   <Text c={healthCheckInfoColor(check)} size="sm">{healthCheckInfo(check)}</Text>
                 </Table.Td>

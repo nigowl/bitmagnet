@@ -22,6 +22,9 @@ const defaultPlayerTransmissionRPCURL = "http://127.0.0.1:9091/transmission/rpc"
 const defaultPlayerTransmissionTimeoutSeconds = 8
 const defaultPlayerTransmissionSequentialDownload = true
 const defaultPlayerTransmissionDownloadVideoFormats = ".mp4,.m4v,.webm,.mkv,.mov,.avi,.flv,.ts,.m2ts,.mpeg,.mpg,.wmv,.asf,.3gp,.3g2,.f4v,.rm,.rmvb,.vob,.mxf,.divx,.xvid"
+const defaultPlayerTransmissionCacheQueueEnabled = true
+const defaultPlayerTransmissionCacheQueueMaxActive = 3
+const defaultPlayerTransmissionCacheQueueCheckIntervalSeconds = 15
 const defaultPlayerTransmissionCleanupEnabled = false
 const defaultPlayerTransmissionCleanupSlowTaskEnabled = true
 const defaultPlayerTransmissionCleanupStorageEnabled = true
@@ -50,6 +53,9 @@ type playerBootstrapSettings struct {
 	TransmissionTimeoutSeconds           int
 	TransmissionSequential               bool
 	TransmissionDownloadVideoFormats     []string
+	TransmissionCacheQueueEnabled        bool
+	TransmissionCacheQueueMaxActive      int
+	TransmissionCacheQueueCheckInterval  int
 	TransmissionCleanupEnabled           bool
 	TransmissionCleanupSlowTaskEnabled   bool
 	TransmissionCleanupStorageEnabled    bool
@@ -80,6 +86,9 @@ func (s *service) loadPlayerBootstrapSettings(ctx context.Context, db *gorm.DB) 
 		TransmissionTimeoutSeconds:           defaultPlayerTransmissionTimeoutSeconds,
 		TransmissionSequential:               defaultPlayerTransmissionSequentialDownload,
 		TransmissionDownloadVideoFormats:     parsePlayerExtensionList(defaultPlayerTransmissionDownloadVideoFormats),
+		TransmissionCacheQueueEnabled:        defaultPlayerTransmissionCacheQueueEnabled,
+		TransmissionCacheQueueMaxActive:      defaultPlayerTransmissionCacheQueueMaxActive,
+		TransmissionCacheQueueCheckInterval:  defaultPlayerTransmissionCacheQueueCheckIntervalSeconds,
 		TransmissionCleanupEnabled:           defaultPlayerTransmissionCleanupEnabled,
 		TransmissionCleanupSlowTaskEnabled:   defaultPlayerTransmissionCleanupSlowTaskEnabled,
 		TransmissionCleanupStorageEnabled:    defaultPlayerTransmissionCleanupStorageEnabled,
@@ -100,17 +109,17 @@ func (s *service) loadPlayerBootstrapSettings(ctx context.Context, db *gorm.DB) 
 	}
 
 	if raw, ok := values[runtimeconfig.KeyPlayerMetadataTimeoutSeconds]; ok {
-		if parsed, parseErr := strconv.Atoi(strings.TrimSpace(raw)); parseErr == nil && parsed >= 5 && parsed <= 300 {
+		if parsed, ok := parseRuntimeIntInRange(raw, 5, 300); ok {
 			settings.MetadataTimeoutSeconds = parsed
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerEnabled]; ok {
-		if parsed, parseErr := strconv.ParseBool(strings.TrimSpace(raw)); parseErr == nil {
+		if parsed, ok := parseRuntimeBool(raw); ok {
 			settings.PlayerEnabled = parsed
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerHardTimeoutSeconds]; ok {
-		if parsed, parseErr := strconv.Atoi(strings.TrimSpace(raw)); parseErr == nil && parsed >= 10 && parsed <= 900 {
+		if parsed, ok := parseRuntimeIntInRange(raw, 10, 900); ok {
 			settings.HardTimeoutSeconds = parsed
 		}
 	}
@@ -118,41 +127,34 @@ func (s *service) loadPlayerBootstrapSettings(ctx context.Context, db *gorm.DB) 
 		settings.HardTimeoutSeconds = settings.MetadataTimeoutSeconds
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionEnabled]; ok {
-		if parsed, parseErr := strconv.ParseBool(strings.TrimSpace(raw)); parseErr == nil {
+		if parsed, ok := parseRuntimeBool(raw); ok {
 			settings.TransmissionEnabled = parsed
 		}
 	}
-	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionURL]; ok {
-		if trimmed := strings.TrimSpace(raw); trimmed != "" {
-			settings.TransmissionURL = trimmed
-		}
-	}
-	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionLocalDownloadDir]; ok {
-		settings.TransmissionLocalDownloadDir = strings.TrimSpace(raw)
-	}
-	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionUsername]; ok {
-		settings.TransmissionUsername = strings.TrimSpace(raw)
-	}
-	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionPassword]; ok {
-		settings.TransmissionPassword = strings.TrimSpace(raw)
-	}
+	applyRuntimeString(values, runtimeconfig.KeyPlayerTransmissionURL, false, func(value string) {
+		settings.TransmissionURL = value
+	})
+	applyRuntimeString(values, runtimeconfig.KeyPlayerTransmissionLocalDownloadDir, true, func(value string) {
+		settings.TransmissionLocalDownloadDir = value
+	})
+	applyRuntimeString(values, runtimeconfig.KeyPlayerTransmissionUsername, true, func(value string) {
+		settings.TransmissionUsername = value
+	})
+	applyRuntimeString(values, runtimeconfig.KeyPlayerTransmissionPassword, true, func(value string) {
+		settings.TransmissionPassword = value
+	})
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionInsecure]; ok {
-		if parsed, parseErr := strconv.ParseBool(strings.TrimSpace(raw)); parseErr == nil {
+		if parsed, ok := parseRuntimeBool(raw); ok {
 			settings.TransmissionInsecureTLS = parsed
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionTimeoutSec]; ok {
-		if parsed, parseErr := strconv.Atoi(strings.TrimSpace(raw)); parseErr == nil && parsed >= 2 && parsed <= 60 {
+		if parsed, ok := parseRuntimeIntInRange(raw, 2, 60); ok {
 			settings.TransmissionTimeoutSeconds = parsed
 		}
 	}
-	if settings.TransmissionLocalDownloadDir == "" {
-		if raw, ok := values[runtimeconfig.KeyPlayerTransmissionLocalDownloadDir]; ok {
-			settings.TransmissionLocalDownloadDir = strings.TrimSpace(raw)
-		}
-	}
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionSequential]; ok {
-		if parsed, parseErr := strconv.ParseBool(strings.TrimSpace(raw)); parseErr == nil {
+		if parsed, ok := parseRuntimeBool(raw); ok {
 			settings.TransmissionSequential = parsed
 		}
 	}
@@ -161,79 +163,90 @@ func (s *service) loadPlayerBootstrapSettings(ctx context.Context, db *gorm.DB) 
 			settings.TransmissionDownloadVideoFormats = formats
 		}
 	}
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCacheQueueEnabled]; ok {
+		if parsed, ok := parseRuntimeBool(raw); ok {
+			settings.TransmissionCacheQueueEnabled = parsed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCacheQueueMaxActive]; ok {
+		if parsed, ok := parseRuntimeIntInRange(raw, 1, 20); ok {
+			settings.TransmissionCacheQueueMaxActive = parsed
+		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCacheQueueCheckInterval]; ok {
+		if parsed, ok := parseRuntimeIntInRange(raw, 3, 300); ok {
+			settings.TransmissionCacheQueueCheckInterval = parsed
+		}
+	}
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupEnabled]; ok {
-		if parsed, parseErr := strconv.ParseBool(strings.TrimSpace(raw)); parseErr == nil {
+		if parsed, ok := parseRuntimeBool(raw); ok {
 			settings.TransmissionCleanupEnabled = parsed
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupSlowTaskEnabled]; ok {
-		if parsed, parseErr := strconv.ParseBool(strings.TrimSpace(raw)); parseErr == nil {
+		if parsed, ok := parseRuntimeBool(raw); ok {
 			settings.TransmissionCleanupSlowTaskEnabled = parsed
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupStorageEnabled]; ok {
-		if parsed, parseErr := strconv.ParseBool(strings.TrimSpace(raw)); parseErr == nil {
+		if parsed, ok := parseRuntimeBool(raw); ok {
 			settings.TransmissionCleanupStorageEnabled = parsed
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupMaxTasks]; ok {
-		if parsed, parseErr := strconv.Atoi(strings.TrimSpace(raw)); parseErr == nil && parsed >= 0 && parsed <= 5000 {
+		if parsed, ok := parseRuntimeIntInRange(raw, 0, 5000); ok {
 			settings.TransmissionCleanupMaxTasks = parsed
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupMaxTotalSizeGB]; ok {
-		if parsed, parseErr := strconv.Atoi(strings.TrimSpace(raw)); parseErr == nil && parsed >= 0 && parsed <= 32768 {
+		if parsed, ok := parseRuntimeIntInRange(raw, 0, 32768); ok {
 			settings.TransmissionCleanupMaxTotalSizeGB = parsed
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupMinFreeSpaceGB]; ok {
-		if parsed, parseErr := strconv.Atoi(strings.TrimSpace(raw)); parseErr == nil && parsed >= 0 && parsed <= 8192 {
+		if parsed, ok := parseRuntimeIntInRange(raw, 0, 8192); ok {
 			settings.TransmissionCleanupMinFreeSpaceGB = parsed
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupSlowWindowMinutes]; ok {
-		if parsed, parseErr := strconv.Atoi(strings.TrimSpace(raw)); parseErr == nil && parsed >= 5 && parsed <= 1440 {
+		if parsed, ok := parseRuntimeIntInRange(raw, 5, 1440); ok {
 			settings.TransmissionCleanupSlowWindowMinutes = parsed
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerTransmissionCleanupSlowRateKbps]; ok {
-		if parsed, parseErr := strconv.Atoi(strings.TrimSpace(raw)); parseErr == nil && parsed >= 0 && parsed <= 102400 {
+		if parsed, ok := parseRuntimeIntInRange(raw, 0, 102400); ok {
 			settings.TransmissionCleanupSlowRateKbps = parsed
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegEnabled]; ok {
-		if parsed, parseErr := strconv.ParseBool(strings.TrimSpace(raw)); parseErr == nil {
+		if parsed, ok := parseRuntimeBool(raw); ok {
 			settings.FFmpeg.Enabled = parsed
 		}
 	}
-	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegBinaryPath]; ok {
-		if trimmed := strings.TrimSpace(raw); trimmed != "" {
-			settings.FFmpeg.BinaryPath = trimmed
-		}
-	}
-	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegPreset]; ok {
-		if trimmed := strings.TrimSpace(raw); trimmed != "" {
-			settings.FFmpeg.Preset = trimmed
-		}
-	}
+	applyRuntimeString(values, runtimeconfig.KeyPlayerFFmpegBinaryPath, false, func(value string) {
+		settings.FFmpeg.BinaryPath = value
+	})
+	applyRuntimeString(values, runtimeconfig.KeyPlayerFFmpegPreset, false, func(value string) {
+		settings.FFmpeg.Preset = value
+	})
 	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegCRF]; ok {
-		if parsed, parseErr := strconv.Atoi(strings.TrimSpace(raw)); parseErr == nil && parsed >= 16 && parsed <= 38 {
+		if parsed, ok := parseRuntimeIntInRange(raw, 16, 38); ok {
 			settings.FFmpeg.CRF = parsed
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegAudioBitrateKbps]; ok {
-		if parsed, parseErr := strconv.Atoi(strings.TrimSpace(raw)); parseErr == nil && parsed >= 64 && parsed <= 320 {
+		if parsed, ok := parseRuntimeIntInRange(raw, 64, 320); ok {
 			settings.FFmpeg.AudioBitrateKbps = parsed
 		}
 	}
 	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegThreads]; ok {
-		if parsed, parseErr := strconv.Atoi(strings.TrimSpace(raw)); parseErr == nil && parsed >= 0 && parsed <= 32 {
+		if parsed, ok := parseRuntimeIntInRange(raw, 0, 32); ok {
 			settings.FFmpeg.Threads = parsed
 		}
 	}
-	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegExtraArgs]; ok {
-		settings.FFmpeg.ExtraArgs = strings.TrimSpace(raw)
-	}
+	applyRuntimeString(values, runtimeconfig.KeyPlayerFFmpegExtraArgs, true, func(value string) {
+		settings.FFmpeg.ExtraArgs = value
+	})
 	settings.TransmissionEnabled = settings.PlayerEnabled
 	settings.FFmpeg.Enabled = settings.PlayerEnabled
 	if len(settings.TransmissionDownloadVideoFormats) == 0 {

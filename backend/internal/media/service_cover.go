@@ -72,6 +72,30 @@ func (s *service) entryNeedsCoverCache(entry model.MediaEntry) bool {
 		s.entryNeedsCoverCacheKind(entry.ID, coverKindBackdrop, entry.BackdropPath.String)
 }
 
+func coverSourcePath(entry model.MediaEntry, kind coverKind) string {
+	switch kind {
+	case coverKindPoster:
+		return strings.TrimSpace(entry.PosterPath.String)
+	case coverKindBackdrop:
+		return strings.TrimSpace(entry.BackdropPath.String)
+	default:
+		return ""
+	}
+}
+
+func (s *service) loadCoverSourcePath(
+	ctx context.Context,
+	db *gorm.DB,
+	mediaID string,
+	kind coverKind,
+) (string, error) {
+	entry, err := s.loadOrCreateMediaEntry(ctx, db, mediaID)
+	if err != nil {
+		return "", err
+	}
+	return coverSourcePath(entry, kind), nil
+}
+
 func (s *service) entryNeedsCoverCacheKind(mediaID string, kind coverKind, sourcePath string) bool {
 	if strings.TrimSpace(sourcePath) == "" {
 		return false
@@ -102,21 +126,10 @@ func (s *service) Cover(ctx context.Context, id string, kind string, size string
 	}
 
 	db := q.TorrentContent.WithContext(ctx).UnderlyingDB()
-	entry, err := s.loadOrCreateMediaEntry(ctx, db, mediaID)
+	sourcePath, err := s.loadCoverSourcePath(ctx, db, mediaID, coverKindValue)
 	if err != nil {
 		return CoverResult{}, err
 	}
-
-	var sourcePath string
-	switch coverKindValue {
-	case coverKindPoster:
-		sourcePath = strings.TrimSpace(entry.PosterPath.String)
-	case coverKindBackdrop:
-		sourcePath = strings.TrimSpace(entry.BackdropPath.String)
-	default:
-		return CoverResult{}, ErrCoverNotFound
-	}
-
 	if sourcePath == "" {
 		return CoverResult{}, ErrCoverNotFound
 	}
@@ -147,12 +160,12 @@ func (s *service) GenerateCover(ctx context.Context, input GenerateCoverInput) e
 		return nil
 	}
 
-	coverKindValue, err := parseCoverKind(strings.TrimSpace(input.Kind))
+	coverKindValue, err := parseCoverKind(input.Kind)
 	if err != nil {
 		return nil
 	}
 
-	coverSizeValue, err := parseCoverSize(strings.TrimSpace(input.Size))
+	coverSizeValue, err := parseCoverSize(input.Size)
 	if err != nil {
 		return nil
 	}
@@ -165,16 +178,9 @@ func (s *service) GenerateCover(ctx context.Context, input GenerateCoverInput) e
 		}
 
 		db := q.TorrentContent.WithContext(ctx).UnderlyingDB()
-		entry, entryErr := s.loadOrCreateMediaEntry(ctx, db, mediaID)
-		if entryErr != nil {
-			return entryErr
-		}
-
-		switch coverKindValue {
-		case coverKindPoster:
-			sourcePath = strings.TrimSpace(entry.PosterPath.String)
-		case coverKindBackdrop:
-			sourcePath = strings.TrimSpace(entry.BackdropPath.String)
+		sourcePath, err = s.loadCoverSourcePath(ctx, db, mediaID, coverKindValue)
+		if err != nil {
+			return err
 		}
 	}
 

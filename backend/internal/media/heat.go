@@ -3,8 +3,6 @@ package media
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/nigowl/bitmagnet/internal/model"
 	"github.com/nigowl/bitmagnet/internal/runtimeconfig"
@@ -51,8 +49,8 @@ func loadHomeHotDays(ctx context.Context, db *gorm.DB) int {
 		return defaultHomeHotDays
 	}
 
-	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil {
+	parsed, ok := parseRuntimeInt(raw)
+	if !ok {
 		return defaultHomeHotDays
 	}
 

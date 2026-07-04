@@ -90,6 +90,7 @@ export function useTorrentPlayerHlsSession({
     }
 
     let cancelled = false;
+    let cacheMonitorTimer: number | null = null;
     const applyNativeHLS = () => {
       if (userPausedRef.current || hlsSuspendedRef.current) return;
       video.src = streamUrl;
@@ -116,7 +117,8 @@ export function useTorrentPlayerHlsSession({
           startPosition: 0,
           maxBufferLength: Math.max(30, transcodePrebufferSeconds),
           maxMaxBufferLength: Math.max(60, transcodePrebufferSeconds),
-          backBufferLength: 30,
+          maxBufferSize: player.HLS_MAX_BUFFER_SIZE_BYTES,
+          backBufferLength: 0,
           appendErrorMaxRetry: 8,
           xhrSetup: (xhr: XMLHttpRequest) => {
             const token = getAuthToken();
@@ -127,6 +129,7 @@ export function useTorrentPlayerHlsSession({
           }
         }) as HlsLike;
         hlsRef.current = hls;
+        let hlsLoadActive = false;
         hlsStartupAtRef.current = Date.now();
         hlsLastActivityAtRef.current = hlsStartupAtRef.current;
         hlsLastFragmentBufferedAtRef.current = 0;
@@ -140,18 +143,41 @@ export function useTorrentPlayerHlsSession({
           startSeconds: transcodeStartOffsetRef.current
         });
 
-        const refreshHLSCacheState = () => {
-          hlsLastActivityAtRef.current = Date.now();
+        const ensureHLSBufferTarget = () => {
+          const maxBufferLength = Math.max(30, transcodePrebufferSeconds);
+          const maxMaxBufferLength = Math.max(60, transcodePrebufferSeconds);
+          if (hls.config) {
+            hls.config.maxBufferLength = Math.max(hls.config.maxBufferLength || 0, maxBufferLength);
+            hls.config.maxMaxBufferLength = Math.max(hls.config.maxMaxBufferLength || 0, maxMaxBufferLength);
+          }
+        };
+
+        const refreshHLSCacheState = (markActivity = true, adjustLoading = false) => {
+          if (markActivity) {
+            hlsLastActivityAtRef.current = Date.now();
+          }
+          ensureHLSBufferTarget();
           const ahead = resolveHLSNetworkCacheAheadSeconds();
           const displayAhead = player.hlsNetworkCacheDisplaySeconds(ahead, transcodePrebufferSeconds);
           setNetworkCacheSeconds((current) => (Math.abs(current - displayAhead) < 0.25 ? current : displayAhead));
           setPlayableCacheAheadSeconds((current) => (Math.abs(current - ahead) < 0.25 ? current : ahead));
+          if (!adjustLoading || userPausedRef.current || hlsSuspendedRef.current) return;
+
+          const catchupThreshold = transcodePrebufferSeconds * player.HLS_NETWORK_CACHE_CATCHUP_RATIO;
+          if (ahead < catchupThreshold) {
+            hls.startLoad?.();
+            hlsLoadActive = true;
+          } else if (ahead >= transcodePrebufferSeconds && hlsLoadActive) {
+            hls.stopLoad?.();
+            hlsLoadActive = false;
+          }
         };
         const startHLSLoad = () => {
           if (cancelled) return;
           if (userPausedRef.current || hlsSuspendedRef.current) return;
           hlsLastActivityAtRef.current = Date.now();
           hls.startLoad?.(0);
+          hlsLoadActive = true;
           if (Number.isFinite(video.currentTime) && video.currentTime > 0.25) {
             try {
               video.currentTime = 0;
@@ -170,11 +196,11 @@ export function useTorrentPlayerHlsSession({
         hls.on(HlsCtor.Events.MANIFEST_PARSED, startHLSLoad);
         hls.on(HlsCtor.Events.LEVEL_LOADED, () => {
           if (cancelled) return;
-          refreshHLSCacheState();
+          refreshHLSCacheState(true, true);
         });
         hls.on(HlsCtor.Events.FRAG_BUFFERED, () => {
           hlsLastFragmentBufferedAtRef.current = Date.now();
-          refreshHLSCacheState();
+          refreshHLSCacheState(true, true);
         });
         hls.on(HlsCtor.Events.ERROR, (_event, data) => {
           if (cancelled) return;
@@ -213,6 +239,11 @@ export function useTorrentPlayerHlsSession({
           setPlayerError(tRef.current("media.player.playbackError"));
         });
         hls.attachMedia(video);
+        refreshHLSCacheState(false, true);
+        cacheMonitorTimer = window.setInterval(() => {
+          if (cancelled) return;
+          refreshHLSCacheState(false, true);
+        }, player.HLS_NETWORK_CACHE_MONITOR_MS);
       })
       .catch((error) => {
         if (cancelled) return;
@@ -222,6 +253,9 @@ export function useTorrentPlayerHlsSession({
 
     return () => {
       cancelled = true;
+      if (cacheMonitorTimer !== null) {
+        window.clearInterval(cacheMonitorTimer);
+      }
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };

@@ -23,6 +23,10 @@ import { DEFAULT_INVITE_FORM, formatDate } from "./users-page.helpers";
 
 type Translate = (key: string) => string;
 
+function numericInputValue(value: string | number, fallback: number): number {
+  return Number(value) || fallback;
+}
+
 type InviteManagerModalsProps = {
   t: Translate;
   modalOpened: boolean;
@@ -225,8 +229,8 @@ export function InviteManagerModals({
       >
         <Stack gap="sm">
           <Text c="dimmed" size="sm">{t("users.inviteBatchModalHint")}</Text>
-          <NumberInput label={t("users.inviteBatchCount")} min={1} max={200} value={batchCount} onChange={(v) => onChangeBatchCount(Number(v) || 1)} />
-          <NumberInput label={t("users.inviteBatchLength")} min={6} max={32} value={batchLength} onChange={(v) => onChangeBatchLength(Number(v) || 10)} />
+          <NumberInput label={t("users.inviteBatchCount")} min={1} max={200} value={batchCount} onChange={(v) => onChangeBatchCount(numericInputValue(v, 1))} />
+          <NumberInput label={t("users.inviteBatchLength")} min={6} max={32} value={batchLength} onChange={(v) => onChangeBatchLength(numericInputValue(v, 10))} />
           <TextInput label={t("users.inviteBatchPrefix")} value={batchPrefix} onChange={(e) => onChangeBatchPrefix(e.currentTarget.value)} />
           <TextInput
             label={t("users.inviteNote")}
@@ -238,7 +242,7 @@ export function InviteManagerModals({
             min={0}
             max={999999}
             value={batchOptions.maxUses}
-            onChange={(value) => onChangeBatchOptions((current) => ({ ...current, maxUses: Number(value) || 0 }))}
+            onChange={(value) => onChangeBatchOptions((current) => ({ ...current, maxUses: numericInputValue(value, 0) }))}
           />
           <TextInput
             label={t("users.inviteExpiresAt")}
@@ -362,7 +366,7 @@ function InviteFormFields({
           min={0}
           max={999999}
           value={form.maxUses}
-          onChange={(value) => onChange((current) => ({ ...current, maxUses: Number(value) || 0 }))}
+          onChange={(value) => onChange((current) => ({ ...current, maxUses: numericInputValue(value, 0) }))}
         />
         <TextInput
           label={t("users.inviteExpiresAt")}

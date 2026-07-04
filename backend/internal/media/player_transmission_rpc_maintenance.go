@@ -3,9 +3,38 @@ package media
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 )
+
+func (s *service) playerTransmissionLoadSession(
+	ctx context.Context,
+	settings playerBootstrapSettings,
+) (playerTransmissionRPCSessionResponse, error) {
+	payload, _ := json.Marshal(playerTransmissionRPCRequest{
+		Method: "session-get",
+	})
+	raw, err := callTransmissionRPC(
+		ctx,
+		settings.TransmissionURL,
+		settings.TransmissionUsername,
+		settings.TransmissionPassword,
+		settings.TransmissionInsecureTLS,
+		settings.TransmissionTimeoutSeconds,
+		payload,
+	)
+	if err != nil {
+		return playerTransmissionRPCSessionResponse{}, err
+	}
+
+	var response playerTransmissionRPCSessionResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return playerTransmissionRPCSessionResponse{}, err
+	}
+	if err := playerTransmissionRPCResultError("session-get", response.Result); err != nil {
+		return playerTransmissionRPCSessionResponse{}, err
+	}
+	return response, nil
+}
 
 func (s *service) playerTransmissionLoadAllTorrents(
 	ctx context.Context,
@@ -48,8 +77,8 @@ func (s *service) playerTransmissionLoadAllTorrents(
 	if err := json.Unmarshal(raw, &response); err != nil {
 		return nil, err
 	}
-	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
-		return nil, fmt.Errorf("transmission torrent-get result=%q", strings.TrimSpace(response.Result))
+	if err := playerTransmissionRPCResultError("torrent-get", response.Result); err != nil {
+		return nil, err
 	}
 	return response.Arguments.Torrents, nil
 }
@@ -58,27 +87,9 @@ func (s *service) playerTransmissionLoadFreeSpace(
 	ctx context.Context,
 	settings playerBootstrapSettings,
 ) (int64, error) {
-	payload, _ := json.Marshal(playerTransmissionRPCRequest{
-		Method: "session-get",
-	})
-	raw, err := callTransmissionRPC(
-		ctx,
-		settings.TransmissionURL,
-		settings.TransmissionUsername,
-		settings.TransmissionPassword,
-		settings.TransmissionInsecureTLS,
-		settings.TransmissionTimeoutSeconds,
-		payload,
-	)
+	response, err := s.playerTransmissionLoadSession(ctx, settings)
 	if err != nil {
 		return 0, err
-	}
-	var response playerTransmissionRPCSessionResponse
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return 0, err
-	}
-	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
-		return 0, fmt.Errorf("transmission session-get result=%q", strings.TrimSpace(response.Result))
 	}
 	return response.Arguments.DownloadDirFreeSpace, nil
 }
@@ -87,27 +98,9 @@ func (s *service) playerTransmissionLoadSessionDirs(
 	ctx context.Context,
 	settings playerBootstrapSettings,
 ) ([]string, error) {
-	payload, _ := json.Marshal(playerTransmissionRPCRequest{
-		Method: "session-get",
-	})
-	raw, err := callTransmissionRPC(
-		ctx,
-		settings.TransmissionURL,
-		settings.TransmissionUsername,
-		settings.TransmissionPassword,
-		settings.TransmissionInsecureTLS,
-		settings.TransmissionTimeoutSeconds,
-		payload,
-	)
+	response, err := s.playerTransmissionLoadSession(ctx, settings)
 	if err != nil {
 		return nil, err
-	}
-	var response playerTransmissionRPCSessionResponse
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return nil, err
-	}
-	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
-		return nil, fmt.Errorf("transmission session-get result=%q", strings.TrimSpace(response.Result))
 	}
 
 	dirs := make([]string, 0, 2)
@@ -157,8 +150,8 @@ func (s *service) playerTransmissionRemoveTorrents(
 	if err := json.Unmarshal(raw, &response); err != nil {
 		return err
 	}
-	if !strings.EqualFold(strings.TrimSpace(response.Result), "success") {
-		return fmt.Errorf("transmission torrent-remove result=%q", strings.TrimSpace(response.Result))
+	if err := playerTransmissionRPCResultError("torrent-remove", response.Result); err != nil {
+		return err
 	}
 	return nil
 }

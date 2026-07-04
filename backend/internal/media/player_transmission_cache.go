@@ -10,15 +10,27 @@ import (
 	"gorm.io/gorm"
 )
 
+func normalizePlayerInfoHash(raw string) (string, error) {
+	infoHash := normalizePlayerInfoHashKey(raw)
+	if infoHash == "" {
+		return "", ErrInvalidInfoHash
+	}
+	if _, err := protocol.ParseID(infoHash); err != nil {
+		return "", ErrInvalidInfoHash
+	}
+	return infoHash, nil
+}
+
+func normalizePlayerInfoHashKey(raw string) string {
+	return strings.TrimSpace(strings.ToLower(raw))
+}
+
 func normalizePlayerInfoHashList(values []string) []string {
 	result := make([]string, 0, len(values))
 	seen := make(map[string]struct{}, len(values))
 	for _, raw := range values {
-		infoHash := strings.TrimSpace(strings.ToLower(raw))
-		if infoHash == "" {
-			continue
-		}
-		if _, err := protocol.ParseID(infoHash); err != nil {
+		infoHash, err := normalizePlayerInfoHash(raw)
+		if err != nil {
 			continue
 		}
 		if _, ok := seen[infoHash]; ok {
@@ -108,7 +120,7 @@ func (s *service) syncMediaCacheFlagsForInfoHashes(
 	allHashes := make([]string, 0, len(rows))
 	allSeen := make(map[string]struct{}, len(rows))
 	for _, row := range rows {
-		infoHash := strings.TrimSpace(strings.ToLower(row.InfoHash.String()))
+		infoHash := normalizePlayerInfoHashKey(row.InfoHash.String())
 		if infoHash == "" {
 			continue
 		}
@@ -125,7 +137,7 @@ func (s *service) syncMediaCacheFlagsForInfoHashes(
 
 	cachedByHash := make(map[string]struct{}, len(cachedSnapshots))
 	for infoHash := range cachedSnapshots {
-		normalizedHash := strings.TrimSpace(strings.ToLower(infoHash))
+		normalizedHash := normalizePlayerInfoHashKey(infoHash)
 		if normalizedHash != "" {
 			cachedByHash[normalizedHash] = struct{}{}
 			checked[normalizedHash] = struct{}{}
@@ -142,7 +154,7 @@ func (s *service) syncMediaCacheFlagsForInfoHashes(
 	if len(missing) > 0 {
 		if snapshots, err := s.playerTransmissionFetchTorrents(ctx, settings, missing); err == nil {
 			for infoHash := range snapshots {
-				normalizedHash := strings.TrimSpace(strings.ToLower(infoHash))
+				normalizedHash := normalizePlayerInfoHashKey(infoHash)
 				if normalizedHash != "" {
 					cachedByHash[normalizedHash] = struct{}{}
 				}

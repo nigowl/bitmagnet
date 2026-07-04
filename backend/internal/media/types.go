@@ -314,6 +314,42 @@ type PlayerTransmissionBatchStatusResult struct {
 	Items []PlayerTransmissionTaskStatus `json:"items"`
 }
 
+type PlayerTransmissionCacheQueueInput struct {
+	InfoHash string `json:"infoHash"`
+}
+
+type PlayerTransmissionCacheQueueResult struct {
+	InfoHash   string `json:"infoHash"`
+	QueueState string `json:"queueState"`
+	Position   int    `json:"position"`
+}
+
+type PlayerTransmissionCacheQueueListResult struct {
+	Items []PlayerTransmissionCacheQueueItem `json:"items"`
+}
+
+type PlayerTransmissionCacheQueueItem struct {
+	InfoHash      string    `json:"infoHash"`
+	QueueState    string    `json:"queueState"`
+	QueuePosition int       `json:"queuePosition,omitempty"`
+	ErrorMessage  string    `json:"errorMessage,omitempty"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+	Exists        bool      `json:"exists"`
+	TorrentID     int64     `json:"torrentId"`
+	Name          string    `json:"name,omitempty"`
+	State         string    `json:"state"`
+	Progress      float64   `json:"progress"`
+}
+
+type PlayerTransmissionCacheQueueActionInput struct {
+	InfoHash string `json:"infoHash"`
+}
+
+type PlayerTransmissionCacheQueueDeleteResult struct {
+	InfoHash string `json:"infoHash"`
+	Removed  bool   `json:"removed"`
+}
+
 type PlayerTransmissionClearCacheInput struct {
 	InfoHashes []string `json:"infoHashes"`
 }
@@ -323,11 +359,13 @@ type PlayerTransmissionClearCacheResult struct {
 }
 
 type PlayerTransmissionTaskStatus struct {
-	InfoHash  string  `json:"infoHash"`
-	Exists    bool    `json:"exists"`
-	TorrentID int64   `json:"torrentId"`
-	State     string  `json:"state"`
-	Progress  float64 `json:"progress"`
+	InfoHash      string  `json:"infoHash"`
+	Exists        bool    `json:"exists"`
+	TorrentID     int64   `json:"torrentId"`
+	State         string  `json:"state"`
+	Progress      float64 `json:"progress"`
+	QueueState    string  `json:"queueState,omitempty"`
+	QueuePosition int     `json:"queuePosition,omitempty"`
 }
 
 type PlayerTransmissionStatusResult struct {

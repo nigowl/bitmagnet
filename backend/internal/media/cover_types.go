@@ -44,8 +44,12 @@ var coverVariants = map[coverKind][]coverVariant{
 	},
 }
 
+func normalizeCoverToken(raw string) string {
+	return strings.TrimSpace(strings.ToLower(raw))
+}
+
 func parseCoverKind(raw string) (coverKind, error) {
-	switch strings.TrimSpace(strings.ToLower(raw)) {
+	switch normalizeCoverToken(raw) {
 	case string(coverKindPoster):
 		return coverKindPoster, nil
 	case string(coverKindBackdrop):
@@ -56,7 +60,7 @@ func parseCoverKind(raw string) (coverKind, error) {
 }
 
 func parseCoverSize(raw string) (coverSize, error) {
-	switch strings.TrimSpace(strings.ToLower(raw)) {
+	switch normalizeCoverToken(raw) {
 	case string(coverSizeSM):
 		return coverSizeSM, nil
 	case string(coverSizeMD):

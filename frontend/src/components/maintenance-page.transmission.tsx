@@ -2,6 +2,7 @@
 
 import { ActionIcon, Button, Group, Loader, ScrollArea, Stack, Table, Text, Tooltip } from "@mantine/core";
 import { Trash2 } from "lucide-react";
+import { formatBytes } from "@/lib/format";
 import type { TransmissionTaskItem } from "./maintenance-page.types";
 
 type Translate = (key: string, ...args: unknown[]) => string;
@@ -112,21 +113,9 @@ function formatUnixDateTime(unixSeconds: number): string {
   return parsed.toLocaleString();
 }
 
-function formatBytesCompact(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let size = value;
-  let unit = 0;
-  while (size >= 1024 && unit < units.length - 1) {
-    size /= 1024;
-    unit += 1;
-  }
-  const fixed = size >= 10 ? size.toFixed(0) : size.toFixed(1);
-  return `${fixed} ${units[unit]}`;
-}
-
 function formatRateCompact(value: number): string {
-  return `${formatBytesCompact(value)}/s`;
+  if (!Number.isFinite(value) || value <= 0) return "0 B/s";
+  return `${formatBytes(value)}/s`;
 }
 
 function transmissionStatusLabel(status: number, t: Translate): string {

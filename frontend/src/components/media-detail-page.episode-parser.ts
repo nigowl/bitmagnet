@@ -1,21 +1,6 @@
 import type { MediaDetailTorrent } from "@/lib/media-api";
-
-const VIDEO_FILE_EXTENSIONS = new Set([
-  "3gp",
-  "avi",
-  "flv",
-  "m2ts",
-  "m4v",
-  "mkv",
-  "mov",
-  "mp4",
-  "mpeg",
-  "mpg",
-  "rmvb",
-  "ts",
-  "webm",
-  "wmv"
-]);
+import { normalizeInfoHash, normalizeInfoHashList } from "@/lib/info-hash";
+import { isVideoFile } from "@/lib/video-file";
 
 export type TorrentFileItem = {
   infoHash: string;
@@ -111,7 +96,7 @@ export function groupFilesByInfoHash(items: TorrentFileItem[]): Record<string, T
 }
 
 export function uniqueInfoHashes(torrents: MediaDetailTorrent[]): string[] {
-  return Array.from(new Set(torrents.map((torrent) => normalizeInfoHash(torrent.infoHash)).filter(Boolean)));
+  return normalizeInfoHashList(torrents.map((torrent) => torrent.infoHash));
 }
 
 function collectTorrentEpisodeMatches(
@@ -200,8 +185,7 @@ function parseChineseNumber(value: string): number | null {
 
 function isEpisodeFileCandidate(file: TorrentFileItem): boolean {
   const extension = getExtension(file.path);
-  if (extension && VIDEO_FILE_EXTENSIONS.has(extension)) return true;
-  if (file.fileType?.toLowerCase().includes("video")) return true;
+  if (isVideoFile(file.path, file.fileType)) return true;
   return !extension && !file.fileType;
 }
 
@@ -235,8 +219,4 @@ function getExtension(path: string): string {
 
 function normalizeDigits(value: string): string {
   return value.replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
-}
-
-function normalizeInfoHash(value: string): string {
-  return value.trim().toLowerCase();
 }

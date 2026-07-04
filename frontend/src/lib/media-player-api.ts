@@ -1,4 +1,5 @@
 import { apiBaseURL, apiRequest } from "@/lib/api";
+import { normalizeInfoHash as normalizePlayerInfoHash, normalizeInfoHashList as normalizePlayerInfoHashList } from "@/lib/info-hash";
 
 export type PlayerTransmissionFile = {
   index: number;
@@ -43,6 +44,8 @@ export type PlayerTransmissionTaskStatus = {
   torrentId: number;
   state: string;
   progress: number;
+  queueState?: string;
+  queuePosition?: number;
 };
 
 export type PlayerTransmissionBatchStatusResponse = {
@@ -51,6 +54,34 @@ export type PlayerTransmissionBatchStatusResponse = {
 
 export type PlayerTransmissionClearCacheResponse = {
   removed: number;
+};
+
+export type PlayerTransmissionCacheQueueResponse = {
+  infoHash: string;
+  queueState: string;
+  position: number;
+};
+
+export type PlayerTransmissionCacheQueueItem = {
+  infoHash: string;
+  queueState: string;
+  queuePosition?: number;
+  errorMessage?: string;
+  updatedAt: string;
+  exists: boolean;
+  torrentId: number;
+  name?: string;
+  state: string;
+  progress: number;
+};
+
+export type PlayerTransmissionCacheQueueListResponse = {
+  items: PlayerTransmissionCacheQueueItem[];
+};
+
+export type PlayerTransmissionCacheQueueDeleteResponse = {
+  infoHash: string;
+  removed: boolean;
 };
 
 export type PlayerTransmissionBootstrapResponse = {
@@ -105,7 +136,7 @@ export type PlayerSubtitleSingleResponse = {
 };
 
 export async function fetchPlayerTransmissionBootstrap(infoHash: string): Promise<PlayerTransmissionBootstrapResponse> {
-  const normalized = infoHash.trim().toLowerCase();
+  const normalized = normalizePlayerInfoHash(infoHash);
   if (!normalized) {
     throw new Error("Missing infoHash.");
   }
@@ -116,7 +147,7 @@ export async function fetchPlayerTransmissionBootstrap(infoHash: string): Promis
 }
 
 export async function fetchPlayerTransmissionStatus(infoHash: string): Promise<PlayerTransmissionStatusResponse> {
-  const normalized = infoHash.trim().toLowerCase();
+  const normalized = normalizePlayerInfoHash(infoHash);
   if (!normalized) {
     throw new Error("Missing infoHash.");
   }
@@ -127,9 +158,7 @@ export async function fetchPlayerTransmissionStatus(infoHash: string): Promise<P
 export async function fetchPlayerTransmissionBatchStatus(
   infoHashes: string[]
 ): Promise<PlayerTransmissionBatchStatusResponse> {
-  const normalized = Array.from(
-    new Set(infoHashes.map((item) => item.trim().toLowerCase()).filter((item) => item.length > 0))
-  );
+  const normalized = normalizePlayerInfoHashList(infoHashes);
   if (normalized.length === 0) {
     return { items: [] };
   }
@@ -141,9 +170,7 @@ export async function fetchPlayerTransmissionBatchStatus(
 }
 
 export async function clearPlayerTransmissionCache(infoHashes: string[]): Promise<PlayerTransmissionClearCacheResponse> {
-  const normalized = Array.from(
-    new Set(infoHashes.map((item) => item.trim().toLowerCase()).filter((item) => item.length > 0))
-  );
+  const normalized = normalizePlayerInfoHashList(infoHashes);
   if (normalized.length === 0) {
     return { removed: 0 };
   }
@@ -153,11 +180,54 @@ export async function clearPlayerTransmissionCache(infoHashes: string[]): Promis
   });
 }
 
+export async function enqueuePlayerTransmissionCache(infoHash: string): Promise<PlayerTransmissionCacheQueueResponse> {
+  const normalized = normalizePlayerInfoHash(infoHash);
+  if (!normalized) {
+    throw new Error("Missing infoHash.");
+  }
+  const result = await apiRequest<PlayerTransmissionCacheQueueResponse | null>("/api/media/player/transmission/cache/queue", {
+    method: "POST",
+    data: { infoHash: normalized }
+  });
+  return result || {
+    infoHash: normalized,
+    queueState: "pending",
+    position: 1
+  };
+}
+
+export async function fetchPlayerTransmissionCacheQueue(): Promise<PlayerTransmissionCacheQueueItem[]> {
+  const result = await apiRequest<PlayerTransmissionCacheQueueListResponse>("/api/media/player/transmission/cache/queue");
+  return Array.isArray(result.items) ? result.items : [];
+}
+
+export async function cancelPlayerTransmissionCache(infoHash: string): Promise<PlayerTransmissionCacheQueueItem> {
+  const normalized = normalizePlayerInfoHash(infoHash);
+  if (!normalized) {
+    throw new Error("Missing infoHash.");
+  }
+  return apiRequest<PlayerTransmissionCacheQueueItem>("/api/media/player/transmission/cache/cancel", {
+    method: "POST",
+    data: { infoHash: normalized }
+  });
+}
+
+export async function deletePlayerTransmissionCache(infoHash: string): Promise<PlayerTransmissionCacheQueueDeleteResponse> {
+  const normalized = normalizePlayerInfoHash(infoHash);
+  if (!normalized) {
+    throw new Error("Missing infoHash.");
+  }
+  return apiRequest<PlayerTransmissionCacheQueueDeleteResponse>("/api/media/player/transmission/cache/queue", {
+    method: "DELETE",
+    data: { infoHash: normalized }
+  });
+}
+
 export async function selectPlayerTransmissionFile(
   infoHash: string,
   fileIndex: number
 ): Promise<PlayerTransmissionSelectFileResponse> {
-  const normalized = infoHash.trim().toLowerCase();
+  const normalized = normalizePlayerInfoHash(infoHash);
   if (!normalized) {
     throw new Error("Missing infoHash.");
   }
@@ -171,7 +241,7 @@ export async function fetchPlayerTransmissionAudioTracks(
   infoHash: string,
   fileIndex: number
 ): Promise<PlayerTransmissionAudioTrack[]> {
-  const normalized = infoHash.trim().toLowerCase();
+  const normalized = normalizePlayerInfoHash(infoHash);
   if (!normalized) {
     throw new Error("Missing infoHash.");
   }
@@ -195,7 +265,7 @@ export function buildPlayerTransmissionStreamURL(
   options?: { transcode?: boolean; startSeconds?: number; startBytes?: number; audioTrackIndex?: number; outputResolution?: number }
 ): string {
   const query = new URLSearchParams({
-    infoHash: infoHash.trim().toLowerCase(),
+    infoHash: normalizePlayerInfoHash(infoHash),
     fileIndex: String(fileIndex)
   });
   if (cacheBust) {
@@ -226,7 +296,7 @@ export function buildPlayerTransmissionHLSPlaylistURL(
   options?: { startSeconds?: number; startBytes?: number; audioTrackIndex?: number; outputResolution?: number; prebufferSeconds?: number; durationSeconds?: number }
 ): string {
   const query = new URLSearchParams({
-    infoHash: infoHash.trim().toLowerCase(),
+    infoHash: normalizePlayerInfoHash(infoHash),
     fileIndex: String(fileIndex)
   });
   if (cacheBust) {
@@ -259,7 +329,7 @@ export function buildPlayerTransmissionHLSStopURL(
   options?: { audioTrackIndex?: number; outputResolution?: number }
 ): string {
   const query = new URLSearchParams({
-    infoHash: infoHash.trim().toLowerCase(),
+    infoHash: normalizePlayerInfoHash(infoHash),
     fileIndex: String(fileIndex)
   });
   if (Number.isInteger(options?.audioTrackIndex) && (options?.audioTrackIndex || -1) >= 0) {
@@ -277,7 +347,7 @@ export function buildPlayerTransmissionHLSHeartbeatURL(
   options?: { audioTrackIndex?: number; outputResolution?: number }
 ): string {
   const query = new URLSearchParams({
-    infoHash: infoHash.trim().toLowerCase(),
+    infoHash: normalizePlayerInfoHash(infoHash),
     fileIndex: String(fileIndex)
   });
   if (Number.isInteger(options?.audioTrackIndex) && (options?.audioTrackIndex || -1) >= 0) {
@@ -297,7 +367,7 @@ export function buildPlayerTransmissionThumbnailURL(
   options?: { startBytes?: number }
 ): string {
   const query = new URLSearchParams({
-    infoHash: infoHash.trim().toLowerCase(),
+    infoHash: normalizePlayerInfoHash(infoHash),
     fileIndex: String(fileIndex),
     seconds: String(Math.max(0, Number.isFinite(seconds) ? seconds : 0))
   });
@@ -316,7 +386,7 @@ export function buildPlayerSubtitleContentURL(
   cacheBust?: string
 ): string {
   const query = new URLSearchParams({
-    infoHash: infoHash.trim().toLowerCase()
+    infoHash: normalizePlayerInfoHash(infoHash)
   });
   if (cacheBust) {
     query.set("t", cacheBust);
@@ -325,7 +395,7 @@ export function buildPlayerSubtitleContentURL(
 }
 
 export async function fetchPlayerSubtitles(infoHash: string): Promise<PlayerSubtitleItem[]> {
-  const normalized = infoHash.trim().toLowerCase();
+  const normalized = normalizePlayerInfoHash(infoHash);
   if (!normalized) {
     throw new Error("Missing infoHash.");
   }
@@ -335,7 +405,7 @@ export async function fetchPlayerSubtitles(infoHash: string): Promise<PlayerSubt
 }
 
 export async function fetchPlayerSubtitleContent(infoHash: string, subtitleId: number): Promise<string> {
-  const normalized = infoHash.trim().toLowerCase();
+  const normalized = normalizePlayerInfoHash(infoHash);
   if (!normalized) {
     throw new Error("Missing infoHash.");
   }
@@ -354,7 +424,7 @@ export async function createPlayerSubtitle(input: {
   language?: string;
   contentVtt: string;
 }): Promise<PlayerSubtitleItem> {
-  const normalized = input.infoHash.trim().toLowerCase();
+  const normalized = normalizePlayerInfoHash(input.infoHash);
   if (!normalized) {
     throw new Error("Missing infoHash.");
   }
@@ -377,7 +447,7 @@ export async function updatePlayerSubtitle(input: {
   language?: string;
   offsetSeconds?: number;
 }): Promise<PlayerSubtitleItem> {
-  const normalized = input.infoHash.trim().toLowerCase();
+  const normalized = normalizePlayerInfoHash(input.infoHash);
   if (!normalized) {
     throw new Error("Missing infoHash.");
   }
@@ -397,7 +467,7 @@ export async function updatePlayerSubtitle(input: {
 }
 
 export async function deletePlayerSubtitle(input: { infoHash: string; subtitleId: number }): Promise<void> {
-  const normalized = input.infoHash.trim().toLowerCase();
+  const normalized = normalizePlayerInfoHash(input.infoHash);
   if (!normalized) {
     throw new Error("Missing infoHash.");
   }

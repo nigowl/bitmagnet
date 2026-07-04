@@ -13,6 +13,7 @@ import {
 import { notifications } from "@mantine/notifications";
 import { useI18n } from "@/languages/provider";
 import { fetchMediaList, type MediaListItem } from "@/lib/media-api";
+import { parsePositiveIntParam } from "@/lib/url-params";
 import {
   MEDIA_FILTER_KEYS_BY_CATEGORY,
   MEDIA_LIST_TARGET_COUNT,
@@ -66,7 +67,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
   const awards = normalizeSimpleValue(searchParams.get("awards"), "all");
   const cache = normalizeSimpleValue(searchParams.get("cache"), "all");
   const sort = normalizeSimpleValue(searchParams.get("sort"), "popular");
-  const page = Math.max(1, Number(searchParams.get("page") || "1") || 1);
+  const page = parsePositiveIntParam(searchParams.get("page"), 1);
   const searchValue = searchParams.get("search") || "";
   const enabledFilterKeys = useMemo(
     () => new Set<FilterRowKey>(MEDIA_FILTER_KEYS_BY_CATEGORY[fixedCategory]),

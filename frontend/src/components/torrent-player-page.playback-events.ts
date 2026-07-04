@@ -175,6 +175,20 @@ export function useTorrentPlayerPlaybackEvents({
       lastAutoRecoveryAtRef.current = now;
       setPlaybackLoading(true);
       setPlayerStatus("buffering");
+      if (activePreferTranscodeRef.current && hlsRef.current) {
+        autoResumeWhenPlayableRef.current = true;
+        pendingResumeTargetRef.current = seconds;
+        hlsRef.current.startLoad?.();
+        logWarn("stream", "hls playback is waiting for cache", {
+          trigger,
+          noProgressMs,
+          stallMs,
+          bufferedAhead,
+          readyState: video.readyState,
+          currentSeconds: seconds
+        });
+        return;
+      }
       logWarn("stream", "playback stalled, retry stream", {
         trigger,
         noProgressMs,
@@ -293,6 +307,11 @@ export function useTorrentPlayerPlaybackEvents({
       }
       setPlaybackLoading(true);
       setPlayerStatus("buffering");
+      if (activePreferTranscodeRef.current) {
+        autoResumeWhenPlayableRef.current = true;
+        pendingResumeTargetRef.current = Math.max(0, resolveAbsoluteCurrent());
+        hlsRef.current?.startLoad?.();
+      }
     };
 
     const onCanPlay = () => {
@@ -392,10 +411,12 @@ export function useTorrentPlayerPlaybackEvents({
     autoResumeWhenPlayableRef,
     fileSwitchingRef,
     hlsReleasedForPauseRef,
+    hlsRef,
     hlsSuspendedRef,
     pendingResumeTargetRef,
     pendingTranscodeSeekDisplayRef,
     releaseCurrentHLSRef,
+    resolveAbsoluteCurrent,
     resolveCachedAheadSeconds,
     resolveHLSNetworkCacheAheadSeconds,
     retryCurrentStreamRef,

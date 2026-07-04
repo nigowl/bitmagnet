@@ -41,72 +41,83 @@ export function TorrentDetailModal({
   onDelete
 }: TorrentDetailModalProps) {
   return (
-    <Modal opened={opened} onClose={onClose} title={activeItem?.title || activeItem?.torrent.name} size="xl">
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={activeItem?.title || activeItem?.torrent.name}
+      size="xl"
+      classNames={{
+        content: "torrent-detail-modal-content",
+        body: "torrent-detail-modal-body"
+      }}
+    >
       {!activeItem ? null : (
-        <Stack gap="md">
-          <Text c="dimmed">{activeItem.content?.overview || "-"}</Text>
-          <Group gap={6}>
-            {renderContentType(activeItem.contentType) ? (
-              <Badge variant="light">{renderContentType(activeItem.contentType)}</Badge>
-            ) : null}
-            <Badge variant="light">{t("torrents.table.seeders")}: {activeItem.seeders ?? "-"}</Badge>
-            <Badge variant="light">{t("torrents.table.leechers")}: {activeItem.leechers ?? "-"}</Badge>
-            <Badge variant="light">{formatBytes(activeItem.torrent.size)}</Badge>
-          </Group>
-          <Text ff="monospace" size="sm">{activeItem.infoHash}</Text>
+        <div className="torrent-detail-modal-shell">
+          <Stack gap="md" className="torrent-detail-modal-scroll">
+            <Text c="dimmed">{activeItem.content?.overview || "-"}</Text>
+            <Group gap={6}>
+              {renderContentType(activeItem.contentType) ? (
+                <Badge variant="light">{renderContentType(activeItem.contentType)}</Badge>
+              ) : null}
+              <Badge variant="light">{t("torrents.table.seeders")}: {activeItem.seeders ?? "-"}</Badge>
+              <Badge variant="light">{t("torrents.table.leechers")}: {activeItem.leechers ?? "-"}</Badge>
+              <Badge variant="light">{formatBytes(activeItem.torrent.size)}</Badge>
+            </Group>
+            <Text ff="monospace" size="sm">{activeItem.infoHash}</Text>
 
-          <TextInput
-            label={t("torrents.tagsInput")}
-            value={detailTagInput}
-            onChange={(event) => onChangeTags(event.currentTarget.value)}
-            rightSection={<Tags size={16} />}
-          />
-          <Group>
-            <Button size="xs" onClick={() => onMutateTags("set")}>{t("torrents.setTags")}</Button>
-            <Button size="xs" variant="light" onClick={() => onMutateTags("put")}>{t("torrents.putTags")}</Button>
-            <Button size="xs" variant="light" color="orange" onClick={() => onMutateTags("delete")}>{t("torrents.deleteTags")}</Button>
-          </Group>
+            <TextInput
+              label={t("torrents.tagsInput")}
+              value={detailTagInput}
+              onChange={(event) => onChangeTags(event.currentTarget.value)}
+              rightSection={<Tags size={16} />}
+            />
+            <Group>
+              <Button size="xs" onClick={() => onMutateTags("set")}>{t("torrents.setTags")}</Button>
+              <Button size="xs" variant="light" onClick={() => onMutateTags("put")}>{t("torrents.putTags")}</Button>
+              <Button size="xs" variant="light" color="orange" onClick={() => onMutateTags("delete")}>{t("torrents.deleteTags")}</Button>
+            </Group>
 
-          <Table striped withTableBorder>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>#</Table.Th>
-                <Table.Th>{t("torrents.table.path")}</Table.Th>
-                <Table.Th>{t("torrents.table.type")}</Table.Th>
-                <Table.Th>{t("torrents.table.size")}</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {loadingFiles ? (
+            <Table striped withTableBorder>
+              <Table.Thead>
                 <Table.Tr>
-                  <Table.Td colSpan={4}>
-                    <Group justify="center" py="md">
-                      <Loader size="sm" />
-                    </Group>
-                  </Table.Td>
+                  <Table.Th>#</Table.Th>
+                  <Table.Th>{t("torrents.table.path")}</Table.Th>
+                  <Table.Th>{t("torrents.table.type")}</Table.Th>
+                  <Table.Th>{t("torrents.table.size")}</Table.Th>
                 </Table.Tr>
-              ) : detailFiles.length === 0 ? (
-                <Table.Tr>
-                  <Table.Td colSpan={4}>
-                    <Text c="dimmed" ta="center" py="md">
-                      {t("torrents.noFiles")}
-                    </Text>
-                  </Table.Td>
-                </Table.Tr>
-              ) : (
-                detailFiles.map((file) => (
-                  <Table.Tr key={`${file.index}:${file.path}`}>
-                    <Table.Td>{file.index}</Table.Td>
-                    <Table.Td>{file.path}</Table.Td>
-                    <Table.Td>{file.fileType || "-"}</Table.Td>
-                    <Table.Td>{formatBytes(file.size)}</Table.Td>
+              </Table.Thead>
+              <Table.Tbody>
+                {loadingFiles ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={4}>
+                      <Group justify="center" py="md">
+                        <Loader size="sm" />
+                      </Group>
+                    </Table.Td>
                   </Table.Tr>
-                ))
-              )}
-            </Table.Tbody>
-          </Table>
+                ) : detailFiles.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={4}>
+                      <Text c="dimmed" ta="center" py="md">
+                        {t("torrents.noFiles")}
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ) : (
+                  detailFiles.map((file) => (
+                    <Table.Tr key={`${file.index}:${file.path}`}>
+                      <Table.Td>{file.index}</Table.Td>
+                      <Table.Td>{file.path}</Table.Td>
+                      <Table.Td>{file.fileType || "-"}</Table.Td>
+                      <Table.Td>{formatBytes(file.size)}</Table.Td>
+                    </Table.Tr>
+                  ))
+                )}
+              </Table.Tbody>
+            </Table>
+          </Stack>
 
-          <Group justify="space-between" className="modal-footer">
+          <Group justify="space-between" className="modal-footer torrent-detail-modal-footer">
             <Group>
               <Button size="xs" leftSection={<Copy size={14} />} variant="light" onClick={() => onCopyHash(activeItem.infoHash)}>
                 {t("torrents.copyHash")}
@@ -125,7 +136,7 @@ export function TorrentDetailModal({
               {t("common.cancel")}
             </Button>
           </Group>
-        </Stack>
+        </div>
       )}
     </Modal>
   );

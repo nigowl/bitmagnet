@@ -23,6 +23,7 @@ type UseTorrentPlayerHlsHeartbeatArgs = {
   userPausedRef: MutableRefObject<boolean>;
   videoRef: MutableRefObject<HTMLVideoElement | null>;
   resolveAbsoluteCurrent: () => number;
+  resolveHLSNetworkCacheAheadSeconds: () => number;
   logWarn: LogFn;
 };
 
@@ -41,6 +42,7 @@ export function useTorrentPlayerHlsHeartbeat({
   userPausedRef,
   videoRef,
   resolveAbsoluteCurrent,
+  resolveHLSNetworkCacheAheadSeconds,
   logWarn
 }: UseTorrentPlayerHlsHeartbeatArgs) {
   const sendHLSHeartbeat = useCallback((stateOverride?: "playing" | "paused" | "idle", keepalive = false) => {
@@ -75,7 +77,9 @@ export function useTorrentPlayerHlsHeartbeat({
       body: JSON.stringify({
         state,
         visible,
-        currentSeconds: Math.max(0, resolveAbsoluteCurrent())
+        currentSeconds: Math.max(0, resolveAbsoluteCurrent()),
+        networkCacheSeconds: Math.max(0, resolveHLSNetworkCacheAheadSeconds()),
+        playbackRate: video && Number.isFinite(video.playbackRate) ? Math.max(1, video.playbackRate) : 1
       })
     }).catch((error) => {
       if (!keepalive) {
@@ -94,6 +98,7 @@ export function useTorrentPlayerHlsHeartbeat({
     playbackLoadingRef,
     playerStatusRef,
     resolveAbsoluteCurrent,
+    resolveHLSNetworkCacheAheadSeconds,
     selectedAudioTrackQueryIndexRef,
     selectedFileIndexRef,
     transcodeOutputResolution,

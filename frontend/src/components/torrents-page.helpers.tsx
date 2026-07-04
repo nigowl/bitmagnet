@@ -1,4 +1,8 @@
 import type { ReactNode } from "react";
+import { resolveInternalHref } from "@/lib/navigation";
+export { formatBytes } from "@/lib/format";
+export { normalizeContentType as normalizeTorrentContentType } from "@/lib/media";
+export { parseBooleanParam, parsePositiveIntParam } from "@/lib/url-params";
 
 export type TorrentRow = {
   infoHash: string;
@@ -68,17 +72,6 @@ export function parseTags(input: string): string[] {
   );
 }
 
-export function formatBytes(size: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = size;
-  let index = 0;
-  while (value >= 1024 && index < units.length - 1) {
-    value /= 1024;
-    index += 1;
-  }
-  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[index]}`;
-}
-
 export function parseListParam(raw: string | null): string[] {
   if (!raw) return [];
   return raw
@@ -87,30 +80,10 @@ export function parseListParam(raw: string | null): string[] {
     .filter(Boolean);
 }
 
-export function parseBooleanParam(raw: string | null, fallback: boolean): boolean {
-  if (!raw) return fallback;
-  const normalized = raw.trim().toLowerCase();
-  if (normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on") return true;
-  if (normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off") return false;
-  return fallback;
-}
-
-export function parsePositiveIntParam(raw: string | null, fallback: number): number {
-  const parsed = Number(raw || "");
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return Math.trunc(parsed);
-}
-
-export function normalizeTorrentContentType(type?: string | null): string {
-  const normalized = typeof type === "string" ? type.trim().toLowerCase() : "";
-  if (!normalized || normalized === "0") return "";
-  return normalized;
-}
-
 export function buildTorrentDetailHref(infoHash: string, sourceHref: string): string {
   const baseHref = `/torrents/${encodeURIComponent(infoHash)}`;
-  const normalizedSource = sourceHref.trim();
-  if (!normalizedSource || !normalizedSource.startsWith("/") || normalizedSource.startsWith("//")) {
+  const normalizedSource = resolveInternalHref(sourceHref, "");
+  if (!normalizedSource) {
     return baseHref;
   }
 

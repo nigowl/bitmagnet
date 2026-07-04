@@ -1,4 +1,11 @@
+import { formatBytes } from "@/lib/format";
 import type { PlayerStatus, NativeAudioTrack, NativeAudioTrackList, SubtitleCue, VideoWithAudioTracks } from "./torrent-player-helpers.types";
+
+export { formatBytes };
+
+function normalizeLookupKey(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
+}
 
 export function normalizeLookupAttributeText(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -27,9 +34,9 @@ export function findLookupAttributeValue(
   attributes: Array<{ source?: string | null; key?: string | null; value?: unknown }>,
   keys: string[]
 ): string {
-  const normalizedKeys = new Set(keys.map((item) => item.trim().toLowerCase()).filter(Boolean));
+  const normalizedKeys = new Set(keys.map(normalizeLookupKey).filter(Boolean));
   for (const attr of attributes) {
-    const key = String(attr?.key || "").trim().toLowerCase();
+    const key = normalizeLookupKey(attr?.key);
     if (!key || !normalizedKeys.has(key)) continue;
     const text = normalizeLookupAttributeText(attr?.value);
     if (text) return text;
@@ -67,7 +74,7 @@ export function resolveMediaTitlesFromLookup(item: {
     else en = primary;
   }
 
-  if (zh && en && zh.trim().toLowerCase() === en.trim().toLowerCase()) {
+  if (zh && en && normalizeLookupKey(zh) === normalizeLookupKey(en)) {
     en = "";
   }
 
@@ -87,7 +94,7 @@ export function toErrorMessage(error: unknown, fallback: string): string {
 }
 
 export function normalizePlayerErrorMessage(message: string, t: (key: string) => string): string {
-  const normalized = message.trim().toLowerCase();
+  const normalized = normalizeLookupKey(message);
   if (normalized.includes("player disabled")) {
     return t("media.player.disabled");
   }
@@ -102,17 +109,6 @@ export function stringifyDetails(details: unknown): string | undefined {
   } catch {
     return String(details);
   }
-}
-
-export function formatBytes(size: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = size;
-  let index = 0;
-  while (value >= 1024 && index < units.length - 1) {
-    value /= 1024;
-    index += 1;
-  }
-  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[index]}`;
 }
 
 export function formatSpeed(bytesPerSecond: number): string {
@@ -178,14 +174,14 @@ export function formatSubtitleOffsetLabel(raw: number): string {
 }
 
 export function fileExtension(name: string): string {
-  const target = String(name || "").trim().toLowerCase();
+  const target = normalizeLookupKey(name);
   if (!target.includes(".")) return "";
   const ext = target.slice(target.lastIndexOf("."));
   return ext.length <= 12 ? ext : "";
 }
 
 export function normalizeSubtitleLanguage(language: string): string {
-  const trimmed = String(language || "").trim().toLowerCase();
+  const trimmed = normalizeLookupKey(language);
   if (!trimmed) return "und";
   const normalized = trimmed.replace(/[^a-z]/g, "");
   if (!normalized) return "und";

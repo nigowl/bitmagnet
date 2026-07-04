@@ -122,7 +122,7 @@ func deriveStructuredMetadata(entry model.MediaEntry) model.MediaEntry {
 	if imdbID == "" && entry.ContentSource == model.SourceImdb {
 		imdbID = entry.ContentID
 	}
-	imdbID = normalizeIMDbID(imdbID)
+	imdbID = model.NormalizeIMDbID(imdbID)
 	if imdbID != "" {
 		result.IMDbID = model.NewNullString(imdbID)
 	} else {

@@ -262,20 +262,25 @@ func (s *service) GetAccessSettings(ctx context.Context) (AccessSettings, error)
 		RegistrationEnabled: s.config.AllowRegistration,
 		InviteRequired:      false,
 	}
-	if raw, ok := values[runtimeconfig.KeyAuthMembershipEnabled]; ok {
-		if parsed, parseErr := strconv.ParseBool(strings.TrimSpace(raw)); parseErr == nil {
-			result.MembershipEnabled = parsed
-		}
-	}
-	if raw, ok := values[runtimeconfig.KeyAuthRegistrationEnabled]; ok {
-		if parsed, parseErr := strconv.ParseBool(strings.TrimSpace(raw)); parseErr == nil {
-			result.RegistrationEnabled = parsed
-		}
-	}
-	if raw, ok := values[runtimeconfig.KeyAuthInviteRequired]; ok {
-		if parsed, parseErr := strconv.ParseBool(strings.TrimSpace(raw)); parseErr == nil {
-			result.InviteRequired = parsed
-		}
-	}
+	applyRuntimeBool(values, runtimeconfig.KeyAuthMembershipEnabled, func(v bool) {
+		result.MembershipEnabled = v
+	})
+	applyRuntimeBool(values, runtimeconfig.KeyAuthRegistrationEnabled, func(v bool) {
+		result.RegistrationEnabled = v
+	})
+	applyRuntimeBool(values, runtimeconfig.KeyAuthInviteRequired, func(v bool) {
+		result.InviteRequired = v
+	})
 	return result, nil
+}
+
+func applyRuntimeBool(values map[string]string, key string, setter func(bool)) {
+	raw, ok := values[key]
+	if !ok {
+		return
+	}
+	parsed, err := strconv.ParseBool(strings.TrimSpace(raw))
+	if err == nil {
+		setter(parsed)
+	}
 }

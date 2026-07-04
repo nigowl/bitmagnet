@@ -26,7 +26,7 @@ func (s *service) playerTransmissionAutoCleanup(
 		return nil
 	}
 
-	preserveHash := strings.TrimSpace(strings.ToLower(preserveInfoHash))
+	preserveHash := normalizePlayerInfoHashKey(preserveInfoHash)
 	toRemove := make(map[int64]struct{})
 	estimatedFreeGain := int64(0)
 	totalSizeHint := int64(0)
@@ -80,15 +80,7 @@ func (s *service) playerTransmissionAutoCleanup(
 			currentTotal := totalSizeHint - estimatedFreeGain
 			if currentTotal > threshold {
 				needTrim := currentTotal - threshold
-				ordered := append([]playerTransmissionRPCTorrent(nil), torrents...)
-				sort.Slice(ordered, func(i, j int) bool {
-					left := maxInt64(ordered[i].ActivityDate, ordered[i].AddedDate)
-					right := maxInt64(ordered[j].ActivityDate, ordered[j].AddedDate)
-					if left == right {
-						return ordered[i].ID < ordered[j].ID
-					}
-					return left < right
-				})
+				ordered := orderedPlayerTransmissionTorrents(torrents, false)
 				trimmed := int64(0)
 				for _, item := range ordered {
 					if trimmed >= needTrim {
@@ -108,15 +100,7 @@ func (s *service) playerTransmissionAutoCleanup(
 	if storageCleanupEnabled && settings.TransmissionCleanupMaxTasks > 0 {
 		remainingCount := len(torrents) - len(toRemove)
 		if remainingCount > settings.TransmissionCleanupMaxTasks {
-			ordered := append([]playerTransmissionRPCTorrent(nil), torrents...)
-			sort.Slice(ordered, func(i, j int) bool {
-				left := maxInt64(ordered[i].ActivityDate, ordered[i].AddedDate)
-				right := maxInt64(ordered[j].ActivityDate, ordered[j].AddedDate)
-				if left == right {
-					return ordered[i].ID < ordered[j].ID
-				}
-				return left < right
-			})
+			ordered := orderedPlayerTransmissionTorrents(torrents, false)
 			need := remainingCount - settings.TransmissionCleanupMaxTasks
 			for _, item := range ordered {
 				if need <= 0 {
@@ -140,20 +124,7 @@ func (s *service) playerTransmissionAutoCleanup(
 			threshold := int64(settings.TransmissionCleanupMinFreeSpaceGB) * 1024 * 1024 * 1024
 			if freeBytes+estimatedFreeGain < threshold {
 				needGain := threshold - (freeBytes + estimatedFreeGain)
-				ordered := append([]playerTransmissionRPCTorrent(nil), torrents...)
-				sort.Slice(ordered, func(i, j int) bool {
-					iFinished := ordered[i].IsFinished || ordered[i].LeftUntilDone <= 0
-					jFinished := ordered[j].IsFinished || ordered[j].LeftUntilDone <= 0
-					if iFinished != jFinished {
-						return iFinished
-					}
-					left := maxInt64(ordered[i].ActivityDate, ordered[i].AddedDate)
-					right := maxInt64(ordered[j].ActivityDate, ordered[j].AddedDate)
-					if left == right {
-						return ordered[i].ID < ordered[j].ID
-					}
-					return left < right
-				})
+				ordered := orderedPlayerTransmissionTorrents(torrents, true)
 				collected := int64(0)
 				for _, item := range ordered {
 					if collected >= needGain {
@@ -182,4 +153,24 @@ func (s *service) playerTransmissionAutoCleanup(
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	return s.playerTransmissionRemoveTorrents(ctx, settings, ids)
+}
+
+func orderedPlayerTransmissionTorrents(torrents []playerTransmissionRPCTorrent, finishedFirst bool) []playerTransmissionRPCTorrent {
+	ordered := append([]playerTransmissionRPCTorrent(nil), torrents...)
+	sort.Slice(ordered, func(i, j int) bool {
+		if finishedFirst {
+			iFinished := ordered[i].IsFinished || ordered[i].LeftUntilDone <= 0
+			jFinished := ordered[j].IsFinished || ordered[j].LeftUntilDone <= 0
+			if iFinished != jFinished {
+				return iFinished
+			}
+		}
+		left := maxInt64(ordered[i].ActivityDate, ordered[i].AddedDate)
+		right := maxInt64(ordered[j].ActivityDate, ordered[j].AddedDate)
+		if left == right {
+			return ordered[i].ID < ordered[j].ID
+		}
+		return left < right
+	})
+	return ordered
 }

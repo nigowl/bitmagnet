@@ -2,6 +2,7 @@
 
 import { Fragment } from "react";
 import { Badge, Card, Group, Loader, ScrollArea, SimpleGrid, Stack, Table, Text } from "@mantine/core";
+import { formatDateTime } from "@/lib/datetime";
 import type { QueueJob } from "./queue-page.helpers";
 
 type QueueJobsTableProps = {
@@ -76,8 +77,8 @@ export function QueueJobsTable({
                   <Table.Td>
                     {job.retries}/{job.maxRetries}
                   </Table.Td>
-                  <Table.Td>{new Date(job.createdAt).toLocaleString()}</Table.Td>
-                  <Table.Td>{job.ranAt ? new Date(job.ranAt).toLocaleString() : "-"}</Table.Td>
+                  <Table.Td>{formatDateTime(job.createdAt)}</Table.Td>
+                  <Table.Td>{formatDateTime(job.ranAt)}</Table.Td>
                 </Table.Tr>
                 {expandedJobId === job.id ? (
                   <Table.Tr>
@@ -92,7 +93,7 @@ export function QueueJobsTable({
                             </div>
                             <div>
                               <Text c="dimmed" size="xs">{t("queue.details.nextRun")}</Text>
-                              <Text size="sm">{new Date(job.runAfter).toLocaleString()}</Text>
+                              <Text size="sm">{formatDateTime(job.runAfter)}</Text>
                             </div>
                           </SimpleGrid>
                           <div>

@@ -3,6 +3,7 @@
 import { ActionIcon, Badge, Card, Checkbox, Group, Loader, Pagination, ScrollArea, Table, Text, Tooltip } from "@mantine/core";
 import { Trash2 } from "lucide-react";
 import type { MediaDetailResponse, MediaDetailTorrent, PlayerTransmissionTaskStatus } from "@/lib/media-api";
+import { normalizeInfoHash } from "./media-detail-page.helpers";
 import { TorrentRow } from "./media-detail-page.torrent-row";
 
 type MediaDetailTorrentsSectionProps = {
@@ -17,12 +18,14 @@ type MediaDetailTorrentsSectionProps = {
   torrentCachedOnly: boolean;
   cachedTaskInfoHashes: string[];
   cacheClearing: boolean;
+  cacheQueueing: Record<string, boolean>;
   torrentTotalPages: number;
   normalizedTorrentPage: number;
   payload: MediaDetailResponse;
   onChangeResolutionFilter: (value: string) => void;
   onChangeCachedOnly: (checked: boolean) => void;
   onClearCache: () => void;
+  onCacheTorrent: (item: MediaDetailTorrent) => void;
   onChangePage: (value: number) => void;
 };
 
@@ -38,12 +41,14 @@ export function MediaDetailTorrentsSection({
   torrentCachedOnly,
   cachedTaskInfoHashes,
   cacheClearing,
+  cacheQueueing,
   torrentTotalPages,
   normalizedTorrentPage,
   payload,
   onChangeResolutionFilter,
   onChangeCachedOnly,
   onClearCache,
+  onCacheTorrent,
   onChangePage
 }: MediaDetailTorrentsSectionProps) {
   return (
@@ -105,10 +110,8 @@ export function MediaDetailTorrentsSection({
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>{t("torrents.table.title")}</Table.Th>
-                  <Table.Th>{t("torrents.table.seeders")}</Table.Th>
-                  <Table.Th>{t("torrents.table.leechers")}</Table.Th>
-                  <Table.Th>{t("torrents.table.size")}</Table.Th>
-                  <Table.Th>{t("torrents.table.filesCount")}</Table.Th>
+                  <Table.Th>{t("torrents.table.seeders")} / {t("torrents.table.leechers")}</Table.Th>
+                  <Table.Th>{t("torrents.table.size")} / {t("torrents.table.filesCount")}</Table.Th>
                   <Table.Th>{t("media.detail.resolution")}</Table.Th>
                   <Table.Th>{t("torrents.table.actions")}</Table.Th>
                 </Table.Tr>
@@ -119,8 +122,10 @@ export function MediaDetailTorrentsSection({
                     key={torrent.infoHash}
                     item={torrent}
                     t={t}
-                    playerStatus={playerStatusMap[torrent.infoHash.trim().toLowerCase()]}
+                    playerStatus={playerStatusMap[normalizeInfoHash(torrent.infoHash)]}
                     playerEnabled={Boolean(payload.playerEnabled && playerEnabled)}
+                    cacheQueuing={Boolean(cacheQueueing[normalizeInfoHash(torrent.infoHash)])}
+                    onCache={onCacheTorrent}
                   />
                 ))}
               </Table.Tbody>
