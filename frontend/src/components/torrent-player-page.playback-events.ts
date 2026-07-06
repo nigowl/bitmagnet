@@ -30,7 +30,7 @@ type UseTorrentPlayerPlaybackEventsArgs = {
   lastPlaybackProgressRef: MutableRefObject<{ at: number; seconds: number }>;
   pendingResumeTargetRef: MutableRefObject<number | null>;
   pendingTranscodeSeekDisplayRef: MutableRefObject<{ target: number; at: number } | null>;
-  releaseCurrentHLSRef: MutableRefObject<(reason: string, keepalive?: boolean) => void>;
+  pauseCurrentHLSLoadRef: MutableRefObject<(paused: boolean) => void>;
   retryCurrentStreamRef: MutableRefObject<(reason: string) => boolean>;
   seekingSwitchingRef: MutableRefObject<boolean>;
   stallStartedAtRef: MutableRefObject<number>;
@@ -69,7 +69,7 @@ export function useTorrentPlayerPlaybackEvents({
   lastPlaybackProgressRef,
   pendingResumeTargetRef,
   pendingTranscodeSeekDisplayRef,
-  releaseCurrentHLSRef,
+  pauseCurrentHLSLoadRef,
   retryCurrentStreamRef,
   seekingSwitchingRef,
   stallStartedAtRef,
@@ -343,6 +343,9 @@ export function useTorrentPlayerPlaybackEvents({
         return;
       }
       autoResumeWhenPlayableRef.current = false;
+      if (activePreferTranscodeRef.current) {
+        pauseCurrentHLSLoadRef.current(false);
+      }
       pendingResumeTargetRef.current = null;
       streamRetryRef.current = { key: "", attempts: 0 };
       syncSelectedAudioTrack();
@@ -354,14 +357,14 @@ export function useTorrentPlayerPlaybackEvents({
     const onPause = () => {
       if (userPausedRef.current) {
         if (activePreferTranscodeRef.current && !hlsReleasedForPauseRef.current && !seekingSwitchingRef.current && !fileSwitchingRef.current) {
-          releaseCurrentHLSRef.current("pause");
+          pauseCurrentHLSLoadRef.current(true);
         }
         settlePausedPlayback();
         return;
       }
       if (!autoResumeWhenPlayableRef.current) {
         if (activePreferTranscodeRef.current && !hlsReleasedForPauseRef.current && !seekingSwitchingRef.current && !fileSwitchingRef.current) {
-          releaseCurrentHLSRef.current("pause");
+          pauseCurrentHLSLoadRef.current(true);
         }
         settlePausedPlayback();
       }
@@ -415,7 +418,7 @@ export function useTorrentPlayerPlaybackEvents({
     hlsSuspendedRef,
     pendingResumeTargetRef,
     pendingTranscodeSeekDisplayRef,
-    releaseCurrentHLSRef,
+    pauseCurrentHLSLoadRef,
     resolveAbsoluteCurrent,
     resolveCachedAheadSeconds,
     resolveHLSNetworkCacheAheadSeconds,

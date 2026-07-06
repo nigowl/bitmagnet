@@ -22,6 +22,7 @@ type UseTorrentPlayerHlsSessionArgs = {
   hlsStartupAtRef: MutableRefObject<number>;
   hlsSuspendedRef: MutableRefObject<boolean>;
   logWarnRef: MutableRefObject<LogFn>;
+  pauseCurrentHLSLoadRef: MutableRefObject<(paused: boolean) => void>;
   retryCurrentStreamRef: MutableRefObject<(reason: string) => boolean>;
   selectedAudioTrackQueryIndexRef: MutableRefObject<number>;
   selectedFileIndexRef: MutableRefObject<number>;
@@ -32,6 +33,7 @@ type UseTorrentPlayerHlsSessionArgs = {
   resolveHLSNetworkCacheAheadSeconds: () => number;
   settlePausedPlayback: (status?: PlayerStatus) => void;
   setNetworkCacheSeconds: Dispatch<SetStateAction<number>>;
+  setNetworkCacheLoading: Dispatch<SetStateAction<boolean>>;
   setPlayableCacheAheadSeconds: Dispatch<SetStateAction<number>>;
   setPlaybackLoading: Dispatch<SetStateAction<boolean>>;
   setPlayerError: Dispatch<SetStateAction<string | null>>;
@@ -52,6 +54,7 @@ export function useTorrentPlayerHlsSession({
   hlsStartupAtRef,
   hlsSuspendedRef,
   logWarnRef,
+  pauseCurrentHLSLoadRef,
   retryCurrentStreamRef,
   selectedAudioTrackQueryIndexRef,
   selectedFileIndexRef,
@@ -62,6 +65,7 @@ export function useTorrentPlayerHlsSession({
   resolveHLSNetworkCacheAheadSeconds,
   settlePausedPlayback,
   setNetworkCacheSeconds,
+  setNetworkCacheLoading,
   setPlayableCacheAheadSeconds,
   setPlaybackLoading,
   setPlayerError,
@@ -111,7 +115,7 @@ export function useTorrentPlayerHlsSession({
           return;
         }
         const hls = new HlsCtor({
-          autoStartLoad: true,
+          autoStartLoad: false,
           enableWorker: true,
           lowLatencyMode: false,
           startPosition: 0,
@@ -152,6 +156,18 @@ export function useTorrentPlayerHlsSession({
           }
         };
 
+        const startHLSLoad = (startPosition?: number) => {
+          if (hlsLoadActive || cancelled) return;
+          hls.startLoad?.(startPosition);
+          hlsLoadActive = true;
+          setNetworkCacheLoading(true);
+        };
+        const stopHLSLoad = () => {
+          if (!hlsLoadActive) return;
+          hls.stopLoad?.();
+          hlsLoadActive = false;
+          setNetworkCacheLoading(false);
+        };
         const refreshHLSCacheState = (markActivity = true, adjustLoading = false) => {
           if (markActivity) {
             hlsLastActivityAtRef.current = Date.now();
@@ -165,19 +181,23 @@ export function useTorrentPlayerHlsSession({
 
           const catchupThreshold = transcodePrebufferSeconds * player.HLS_NETWORK_CACHE_CATCHUP_RATIO;
           if (ahead < catchupThreshold) {
-            hls.startLoad?.();
-            hlsLoadActive = true;
+            startHLSLoad();
           } else if (ahead >= transcodePrebufferSeconds && hlsLoadActive) {
-            hls.stopLoad?.();
-            hlsLoadActive = false;
+            stopHLSLoad();
           }
         };
-        const startHLSLoad = () => {
+        pauseCurrentHLSLoadRef.current = (paused: boolean) => {
+          if (paused) {
+            stopHLSLoad();
+            return;
+          }
+          refreshHLSCacheState(true, true);
+        };
+        const startInitialHLSLoad = () => {
           if (cancelled) return;
           if (userPausedRef.current || hlsSuspendedRef.current) return;
           hlsLastActivityAtRef.current = Date.now();
-          hls.startLoad?.(0);
-          hlsLoadActive = true;
+          startHLSLoad(0);
           if (Number.isFinite(video.currentTime) && video.currentTime > 0.25) {
             try {
               video.currentTime = 0;
@@ -193,7 +213,7 @@ export function useTorrentPlayerHlsSession({
           hlsLastActivityAtRef.current = Date.now();
           hls.loadSource(streamUrl);
         });
-        hls.on(HlsCtor.Events.MANIFEST_PARSED, startHLSLoad);
+        hls.on(HlsCtor.Events.MANIFEST_PARSED, startInitialHLSLoad);
         hls.on(HlsCtor.Events.LEVEL_LOADED, () => {
           if (cancelled) return;
           refreshHLSCacheState(true, true);
@@ -256,6 +276,8 @@ export function useTorrentPlayerHlsSession({
       if (cacheMonitorTimer !== null) {
         window.clearInterval(cacheMonitorTimer);
       }
+      setNetworkCacheLoading(false);
+      pauseCurrentHLSLoadRef.current = () => {};
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
@@ -270,11 +292,13 @@ export function useTorrentPlayerHlsSession({
     hlsStartupAtRef,
     hlsSuspendedRef,
     logWarnRef,
+    pauseCurrentHLSLoadRef,
     resolveHLSNetworkCacheAheadSeconds,
     retryCurrentStreamRef,
     selectedAudioTrackQueryIndexRef,
     selectedFileIndexRef,
     setNetworkCacheSeconds,
+    setNetworkCacheLoading,
     setPlayableCacheAheadSeconds,
     setPlaybackLoading,
     setPlayerError,

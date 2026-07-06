@@ -72,7 +72,7 @@ export function useTorrentPlayerResumePrompt({
       try {
         window.localStorage.setItem(storageKey, JSON.stringify(payload));
       } catch { }
-    }, 5000);
+    }, player.PLAYBACK_PROGRESS_SAVE_MS);
     return () => {
       window.clearInterval(timer);
     };

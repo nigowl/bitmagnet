@@ -19,7 +19,7 @@ type PlaybackFileOption = player.PlaybackFileOption;
 type LogFn = (step: string, message: string, details?: unknown) => void;
 type ApplyStreamUrl = (
   url: string,
-  options?: { resumeAt?: number; autoplay?: boolean; recovery?: boolean; preload?: boolean }
+  options?: { resumeAt?: number; autoplay?: boolean; recovery?: boolean }
 ) => void;
 type BuildHLSPlaylistOptions = (overrides?: {
   audioTrackIndex?: number;
@@ -294,7 +294,7 @@ export function useTorrentPlayerBootstrap({
           prebufferSeconds: transcodePrebufferSeconds,
           startSeconds: preferTranscode ? effectiveStartSeconds : 0
         });
-        applyStreamUrl(nextUrl, { autoplay: false, preload: preferTranscode });
+        applyStreamUrl(nextUrl, { autoplay: false });
 
         setBootstrapped(true);
         setPlayerStatus("ready");

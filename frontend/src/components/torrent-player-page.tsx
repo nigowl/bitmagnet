@@ -1,9 +1,11 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/auth/provider";
 import { useI18n } from "@/languages/provider";
+import type { PlayerTransmissionTaskStatus } from "@/lib/media-api";
+import { MediaDetailCacheStatusModal } from "./media-detail-page.cache-modal";
 import * as player from "./torrent-player/torrent-player-helpers";
 import { useTorrentPlayerAudioTracks } from "./torrent-player-page.audio-tracks";
 import { useTorrentPlayerBootstrap } from "./torrent-player-page.bootstrap";
@@ -40,6 +42,7 @@ const formatSubtitleOffsetLabel = player.formatSubtitleOffsetLabel;
 export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: string }) {
   const { t, locale } = useI18n();
   const { user } = useAuth();
+  const [cacheStatusOpened, setCacheStatusOpened] = useState(false);
   const searchParams = useSearchParams();
   const infoHash = player.normalizeInfoHash(routeInfoHash);
   const requestedFileIndex = useMemo(() => {
@@ -77,6 +80,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     lastStreamRetryAtRef,
     retryCurrentStreamRef,
     releaseCurrentHLSRef,
+    pauseCurrentHLSLoadRef,
     stageClickTimerRef,
     streamApplyOptionsRef,
     activePreferTranscodeRef,
@@ -170,6 +174,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     setPrebufferProgressSeconds,
     networkCacheSeconds,
     setNetworkCacheSeconds,
+    networkCacheLoading,
+    setNetworkCacheLoading,
     playableCacheAheadSeconds,
     setPlayableCacheAheadSeconds
   } = useTorrentPlayerState();
@@ -447,6 +453,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     pendingTranscodeSeekDisplayRef,
     playbackLoadingRef,
     playerStatusRef,
+    pauseCurrentHLSLoadRef,
     releaseCurrentHLSRef,
     retryCurrentStreamRef,
     selectedAudioTrackQueryIndexRef,
@@ -466,6 +473,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     setAbsoluteCurrentSeconds,
     setIsVideoPaused,
     setNetworkCacheSeconds,
+    setNetworkCacheLoading,
     setPlayableCacheAheadSeconds,
     setPlaybackLoading,
     setPlayerError,
@@ -634,7 +642,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     lastPlaybackProgressRef,
     pendingResumeTargetRef,
     pendingTranscodeSeekDisplayRef,
-    releaseCurrentHLSRef,
+    pauseCurrentHLSLoadRef,
     retryCurrentStreamRef,
     seekingSwitchingRef,
     stallStartedAtRef,
@@ -734,7 +742,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     pendingResumeTargetRef,
     pendingTranscodeSeekDisplayRef,
     playerStageRef,
-    releaseCurrentHLSRef,
+    pauseCurrentHLSLoadRef,
     revealControlsTimerRef,
     revealInlineControlsRef,
     selectedAudioTrackQueryIndexRef,
@@ -845,19 +853,18 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     stageBootstrapLoading,
     downloadedRatio,
     contiguousRatio,
-    playableRatio,
     availableRanges,
     playedRatio,
     sourceResolutionLabel,
     outputResolutionLabel,
     networkCacheLabel,
+    networkCachePercent,
+    networkCacheLoading: displayedNetworkCacheLoading,
     playbackStatusLabel,
-    downloadTaskProgress,
     isDownloadComplete,
     isDownloading,
     transferStatusLabel,
     playbackPositionLabel,
-    detailPublishedLabel,
     detailTagPreview,
     detailSourceLabel,
     mediaTitleDisplay,
@@ -876,6 +883,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     activePreferTranscode,
     networkCacheSeconds,
     prebufferProgressSeconds,
+    networkCacheLoading,
+    transcodePrebufferSeconds,
     playerStatus,
     isVideoPaused,
     displayedCurrentSeconds,
@@ -905,22 +914,61 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     revealInlineControlsRef.current = revealInlineControls;
   }, [revealInlineControls, revealInlineControlsRef]);
   const inlineControlsVisible = !isFullscreenActive || shouldKeepInlineControlsVisible || controlsActive;
+  const audioFormatLabel = useMemo(() => {
+    if (selectedAudioTrackId.startsWith("srv:")) {
+      const trackIndex = Number(selectedAudioTrackId.slice(4));
+      const track = serverAudioTracks.find((item) => item.index === trackIndex);
+      if (track) {
+        const codec = String(track.codec || "").trim().toUpperCase();
+        const channels = Number.isFinite(track.channels) && track.channels > 0 ? `${track.channels}ch` : "";
+        const label = [codec, channels].filter(Boolean).join(" · ");
+        if (label) return label;
+      }
+    }
+    return audioTrackOptions.find((item) => item.value === selectedAudioTrackId)?.label || "";
+  }, [audioTrackOptions, selectedAudioTrackId, serverAudioTracks]);
+  const cacheStatusItem = detail
+    ? {
+        infoHash: detail.infoHash,
+        title: mediaTitleDisplay || detail.title,
+        torrent: { name: statusSnapshot?.name || detail.title }
+      }
+    : null;
+  const cacheStatus = statusSnapshot
+    ? ({
+        infoHash: statusSnapshot.infoHash || infoHash,
+        exists: statusSnapshot.torrentId > 0,
+        torrentId: statusSnapshot.torrentId,
+        state: statusSnapshot.state,
+        progress: statusSnapshot.progress
+      } satisfies PlayerTransmissionTaskStatus)
+    : undefined;
 
   return (
-    <TorrentPlayerPageRender
+    <>
+      <MediaDetailCacheStatusModal
+        t={t}
+        item={cacheStatusItem}
+        status={cacheStatus}
+        opened={cacheStatusOpened}
+        onClose={() => setCacheStatusOpened(false)}
+      />
+      <TorrentPlayerPageRender
       base={{ t, detail, infoHash, playerError, formatClock, formatBytes, formatSpeed }}
       state={{
         canInitializePlayer, isVideoPaused, isFullscreenActive, inlineControlsVisible, isPipActive,
         settingsOpen, activePreferTranscode, streamUrl, selectedFileIndex, fileSwitching, fileOptions,
+        selectedFileOption,
         seekHoverSeconds, seekHoverRatio, seekPreviewLoadedKey, seekPreviewFailedKey, videoFitMode,
         videoPlaybackRate, transcodeOutputResolution, transcodePrebufferSeconds, audioTrackSelectionAvailable,
         audioTrackOptions, selectedAudioTrackId, selectedSubtitleId, subtitleTrackOptions, statusSnapshot
       }}
       viewModel={{
         playbackStatusLabel, transferStatusLabel, playbackPositionLabel, stageBootstrapLoading,
-        showPlaybackBusyOverlay, networkCacheLabel, isDownloadComplete, isDownloading, downloadTaskProgress,
-        downloadedRatio, playableRatio, contiguousRatio, playedRatio, sourceResolutionLabel, outputResolutionLabel,
-        detailPublishedLabel, detailTagPreview, detailSourceLabel, mediaTitleDisplay, playerStageStyle,
+        showPlaybackBusyOverlay, networkCacheLabel, isDownloadComplete, isDownloading,
+        networkCachePercent, networkCacheLoading: displayedNetworkCacheLoading,
+        downloadedRatio, contiguousRatio, playedRatio, sourceResolutionLabel, outputResolutionLabel,
+        audioFormatLabel, detailTagPreview, detailSourceLabel, mediaTitleDisplay, playerStageStyle,
         subtitleOverlayStyle, availableRanges
       }}
       refs={{ playerStageRef, inlineSettingsRef, videoRef }}
@@ -928,6 +976,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       options={{ playbackRateOptions, transcodeResolutionOptions }}
       handlers={{
         onOpenDiagnostics: handleOpenDiagnostics,
+        onOpenCacheStatus: () => setCacheStatusOpened(true),
         onStageClickTogglePlayback: handleStageClickTogglePlayback,
         onStageDoubleClickToggleFullscreen: handleStageDoubleClickToggleFullscreen,
         onTogglePlayback: handleTogglePlaybackButton,
@@ -979,6 +1028,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         onCopyLogs: handleCopyLogs,
         onCloseDiagnostics: () => setDiagnosticsOpened(false)
       }}
-    />
+      />
+    </>
   );
 }

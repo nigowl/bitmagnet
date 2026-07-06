@@ -15,7 +15,7 @@ type PlaybackFileOption = player.PlaybackFileOption;
 type LogFn = (step: string, message: string, details?: unknown) => void;
 type ApplyStreamUrl = (
   url: string,
-  options?: { resumeAt?: number; autoplay?: boolean; recovery?: boolean; preload?: boolean }
+  options?: { resumeAt?: number; autoplay?: boolean; recovery?: boolean }
 ) => void;
 type BuildHLSPlaylistOptions = (overrides?: {
   audioTrackIndex?: number;
@@ -63,7 +63,7 @@ type UseTorrentPlayerPlaybackControlsArgs = {
   pendingResumeTargetRef: MutableRefObject<number | null>;
   pendingTranscodeSeekDisplayRef: MutableRefObject<{ target: number; at: number } | null>;
   playerStageRef: MutableRefObject<HTMLDivElement | null>;
-  releaseCurrentHLSRef: MutableRefObject<(reason: string, keepalive?: boolean) => void>;
+  pauseCurrentHLSLoadRef: MutableRefObject<(paused: boolean) => void>;
   revealControlsTimerRef: MutableRefObject<number | null>;
   revealInlineControlsRef: MutableRefObject<(delayMs?: number) => void>;
   selectedAudioTrackQueryIndexRef: MutableRefObject<number>;
@@ -106,7 +106,7 @@ export function useTorrentPlayerPlaybackControls({
   pendingResumeTargetRef,
   pendingTranscodeSeekDisplayRef,
   playerStageRef,
-  releaseCurrentHLSRef,
+  pauseCurrentHLSLoadRef,
   revealControlsTimerRef,
   revealInlineControlsRef,
   selectedAudioTrackQueryIndexRef,
@@ -175,6 +175,9 @@ export function useTorrentPlayerPlaybackControls({
         return;
       }
       userPausedRef.current = false;
+      if (activePreferTranscode) {
+        pauseCurrentHLSLoadRef.current(false);
+      }
       setIsVideoPaused(false);
       attemptResumePlayback("toggle_play");
       return;
@@ -186,7 +189,7 @@ export function useTorrentPlayerPlaybackControls({
     setIsVideoPaused(true);
     pauseNativeVideo(video);
     if (activePreferTranscode && !hlsReleasedForPauseRef.current) {
-      releaseCurrentHLSRef.current("manual_pause");
+      pauseCurrentHLSLoadRef.current(true);
     }
   }, [
     activePreferTranscode,
@@ -202,7 +205,7 @@ export function useTorrentPlayerPlaybackControls({
     pendingTranscodeSeekDisplayRef,
     resolveAbsoluteCurrent,
     resolvePlayableTranscodeStartForFile,
-    releaseCurrentHLSRef,
+    pauseCurrentHLSLoadRef,
     selectedFileOption,
     selectedAudioTrackQueryIndexRef,
     setAbsoluteCurrentSeconds,

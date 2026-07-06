@@ -1,17 +1,25 @@
 "use client";
 
 import { Badge, Button, Group, Modal, Progress, SimpleGrid, Stack, Text } from "@mantine/core";
-import type { MediaDetailTorrent, PlayerTransmissionTaskStatus } from "@/lib/media-api";
+import type { PlayerTransmissionTaskStatus } from "@/lib/media-api";
+
+type CacheStatusModalItem = {
+  infoHash?: string;
+  title?: string;
+  torrent?: {
+    name?: string;
+  };
+};
 
 type MediaDetailCacheStatusModalProps = {
   t: (key: string) => string;
-  item: MediaDetailTorrent | null;
+  item: CacheStatusModalItem | null;
   status?: PlayerTransmissionTaskStatus;
   opened: boolean;
   loading?: boolean;
   onClose: () => void;
-  onCancel: () => void;
-  onDelete: () => void;
+  onCancel?: () => void;
+  onDelete?: () => void;
 };
 
 export function MediaDetailCacheStatusModal({
@@ -27,15 +35,15 @@ export function MediaDetailCacheStatusModal({
   const queueState = status?.queueState?.trim().toLowerCase() || "";
   const queuePosition = status?.queuePosition || 0;
   const progress = Math.max(0, Math.min(1, status?.progress || 0));
-  const canCancel = queueState === "pending" || queueState === "running";
-  const canDelete = Boolean(status?.exists || queueState);
+  const canCancel = Boolean(onCancel) && (queueState === "pending" || queueState === "running");
+  const canDelete = Boolean(onDelete) && Boolean(status?.exists || queueState);
 
   return (
     <Modal opened={opened} onClose={onClose} title={t("media.detail.cacheStatusTitle")} centered size={560}>
       <Stack gap="md">
         <div>
-          <Text fw={600} size="sm" lineClamp={2} title={item?.title || item?.torrent.name}>
-            {item?.title || item?.torrent.name || "-"}
+          <Text fw={600} size="sm" lineClamp={2} title={item?.title || item?.torrent?.name}>
+            {item?.title || item?.torrent?.name || "-"}
           </Text>
           <Text size="xs" c="dimmed" ff="monospace">{item?.infoHash || "-"}</Text>
         </div>

@@ -17,7 +17,7 @@ type PlaybackFileOption = player.PlaybackFileOption;
 type LogFn = (step: string, message: string, details?: unknown) => void;
 type ApplyStreamUrl = (
   url: string,
-  options?: { resumeAt?: number; autoplay?: boolean; recovery?: boolean; preload?: boolean }
+  options?: { resumeAt?: number; autoplay?: boolean; recovery?: boolean }
 ) => void;
 type BuildHLSPlaylistOptions = (overrides?: {
   audioTrackIndex?: number;

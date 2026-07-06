@@ -50,6 +50,7 @@ export function useTorrentPlayerState() {
   const [transcodePrebufferSeconds, setTranscodePrebufferSeconds] = useState(TRANSCODE_PREBUFFER_DEFAULT_SECONDS);
   const [prebufferProgressSeconds, setPrebufferProgressSeconds] = useState(0);
   const [networkCacheSeconds, setNetworkCacheSeconds] = useState(0);
+  const [networkCacheLoading, setNetworkCacheLoading] = useState(false);
   const [playableCacheAheadSeconds, setPlayableCacheAheadSeconds] = useState(0);
 
   return {
@@ -119,6 +120,8 @@ export function useTorrentPlayerState() {
     setPrebufferProgressSeconds,
     networkCacheSeconds,
     setNetworkCacheSeconds,
+    networkCacheLoading,
+    setNetworkCacheLoading,
     playableCacheAheadSeconds,
     setPlayableCacheAheadSeconds
   };

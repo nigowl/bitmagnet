@@ -31,28 +31,37 @@ export function SettingsAccessTab({ t, settings, setSettings }: SettingsAccessTa
                   <Switch
                     label={t("settings.authMembershipEnabled")}
                     checked={settings.auth.membershipEnabled}
-                    onChange={(event) => setSettings((current) => ({
-                      ...current,
-                      auth: { ...current.auth, membershipEnabled: event.currentTarget.checked }
-                    }))}
+                    onChange={(event) => {
+                      const checked = event.currentTarget.checked;
+                      setSettings((current) => ({
+                        ...current,
+                        auth: { ...current.auth, membershipEnabled: checked }
+                      }));
+                    }}
                   />
                   <Switch
                     label={t("settings.authRegistrationEnabled")}
                     checked={settings.auth.registrationEnabled}
-                    onChange={(event) => setSettings((current) => ({
-                      ...current,
-                      auth: { ...current.auth, registrationEnabled: event.currentTarget.checked }
-                    }))}
+                    onChange={(event) => {
+                      const checked = event.currentTarget.checked;
+                      setSettings((current) => ({
+                        ...current,
+                        auth: { ...current.auth, registrationEnabled: checked }
+                      }));
+                    }}
                   />
                   {settings.auth.registrationEnabled ? (
                     <div className="settings-toggle-panel">
                       <Switch
                         label={t("settings.authInviteRequired")}
                         checked={settings.auth.inviteRequired}
-                        onChange={(event) => setSettings((current) => ({
-                          ...current,
-                          auth: { ...current.auth, inviteRequired: event.currentTarget.checked }
-                        }))}
+                        onChange={(event) => {
+                          const checked = event.currentTarget.checked;
+                          setSettings((current) => ({
+                            ...current,
+                            auth: { ...current.auth, inviteRequired: checked }
+                          }));
+                        }}
                       />
                     </div>
                   ) : null}

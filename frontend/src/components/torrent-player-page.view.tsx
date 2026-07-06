@@ -34,17 +34,18 @@ export type TorrentPlayerPageViewProps = {
   formatClock: (seconds: number) => string;
   isDownloadComplete: boolean;
   isDownloading: boolean;
-  downloadTaskProgress: number;
+  networkCachePercent: number;
+  networkCacheLoading: boolean;
   downloadedRatio: number;
-  playableRatio: number;
   contiguousRatio: number;
   playedRatio: number;
   selectedFileIndex: number;
+  selectedFileOption: PlaybackFileOption | null;
   fileSwitching: boolean;
   fileOptions: PlaybackFileOption[];
   sourceResolutionLabel: string;
   outputResolutionLabel: string;
-  detailPublishedLabel: string;
+  audioFormatLabel: string;
   detailTagPreview: string[];
   detailSourceLabel: string;
   mediaTitleDisplay: string;
@@ -76,6 +77,7 @@ export type TorrentPlayerPageViewProps = {
   statusSnapshot: PlayerTransmissionStatusResponse | null;
   formatBytes: (bytes: number) => string;
   formatSpeed: (bytesPerSecond: number) => string;
+  onOpenCacheStatus: () => void;
   onOpenDiagnostics: () => void;
   onStageClickTogglePlayback: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onStageDoubleClickToggleFullscreen: (event: ReactMouseEvent<HTMLDivElement>) => void;
@@ -125,17 +127,18 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
     formatClock,
     isDownloadComplete,
     isDownloading,
-    downloadTaskProgress,
+    networkCachePercent,
+    networkCacheLoading,
     downloadedRatio,
-    playableRatio,
     contiguousRatio,
     playedRatio,
     selectedFileIndex,
+    selectedFileOption,
     fileSwitching,
     fileOptions,
     sourceResolutionLabel,
     outputResolutionLabel,
-    detailPublishedLabel,
+    audioFormatLabel,
     detailTagPreview,
     detailSourceLabel,
     mediaTitleDisplay,
@@ -167,6 +170,7 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
     statusSnapshot,
     formatBytes,
     formatSpeed,
+    onOpenCacheStatus,
     onOpenDiagnostics,
     onStageClickTogglePlayback,
     onStageDoubleClickToggleFullscreen,
@@ -211,11 +215,11 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
             <ActionIcon
               className="app-icon-btn torrent-player-diagnostics-btn"
               variant="default"
-              size={36}
+              size={32}
               aria-label={t("media.player.diagnosticsTitle")}
               onClick={onOpenDiagnostics}
             >
-              <Settings2 size={16} />
+              <Settings2 size={14} />
             </ActionIcon>
           </Tooltip>
         </Group>
@@ -258,7 +262,7 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
                 className="torrent-player-video torrent-native-video"
                 autoPlay={false}
                 playsInline
-                preload="auto"
+                preload="metadata"
                 crossOrigin="anonymous"
               />
               {activeSubtitleCue ? (
@@ -450,20 +454,21 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
                 detail={detail}
                 mediaTitleDisplay={mediaTitleDisplay}
                 sourceResolutionLabel={sourceResolutionLabel}
-                detailPublishedLabel={detailPublishedLabel}
-                isDownloadComplete={isDownloadComplete}
-                downloadTaskProgress={downloadTaskProgress}
+                networkCachePercent={networkCachePercent}
+                networkCacheLoading={networkCacheLoading}
                 downloadedRatio={downloadedRatio}
-                playableRatio={playableRatio}
-                contiguousRatio={contiguousRatio}
                 streamUrl={streamUrl}
                 networkCacheLabel={networkCacheLabel}
                 outputResolutionLabel={outputResolutionLabel}
+                audioFormatLabel={audioFormatLabel}
+                selectedFileOption={selectedFileOption}
                 statusSnapshot={statusSnapshot}
                 detailSourceLabel={detailSourceLabel}
                 detailTagPreview={detailTagPreview}
                 formatBytes={formatBytes}
                 formatSpeed={formatSpeed}
+                formatClock={formatClock}
+                onOpenCacheStatus={onOpenCacheStatus}
               />
             ) : null}
 

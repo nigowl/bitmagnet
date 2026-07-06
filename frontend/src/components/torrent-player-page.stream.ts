@@ -67,12 +67,13 @@ type UseTorrentPlayerStreamArgs = {
   pendingTranscodeSeekDisplayRef: MutableRefObject<{ target: number; at: number } | null>;
   playbackLoadingRef: MutableRefObject<boolean>;
   playerStatusRef: MutableRefObject<PlayerStatus>;
+  pauseCurrentHLSLoadRef: MutableRefObject<(paused: boolean) => void>;
   releaseCurrentHLSRef: MutableRefObject<(reason: string, keepalive?: boolean) => void>;
   retryCurrentStreamRef: MutableRefObject<(reason: string) => boolean>;
   selectedAudioTrackQueryIndexRef: MutableRefObject<number>;
   selectedFileIndexRef: MutableRefObject<number>;
   statusSnapshotRef: MutableRefObject<PlayerTransmissionStatusResponse | null>;
-  streamApplyOptionsRef: MutableRefObject<{ resumeAt?: number; autoplay?: boolean; recovery?: boolean; preload?: boolean }>;
+  streamApplyOptionsRef: MutableRefObject<{ resumeAt?: number; autoplay?: boolean; recovery?: boolean }>;
   streamRetryRef: MutableRefObject<{ key: string; attempts: number }>;
   streamRetryTimerRef: MutableRefObject<number | null>;
   streamUrlRef: MutableRefObject<string>;
@@ -86,6 +87,7 @@ type UseTorrentPlayerStreamArgs = {
   setAbsoluteCurrentSeconds: Dispatch<SetStateAction<number>>;
   setIsVideoPaused: Dispatch<SetStateAction<boolean>>;
   setNetworkCacheSeconds: Dispatch<SetStateAction<number>>;
+  setNetworkCacheLoading: Dispatch<SetStateAction<boolean>>;
   setPlayableCacheAheadSeconds: Dispatch<SetStateAction<number>>;
   setPlaybackLoading: Dispatch<SetStateAction<boolean>>;
   setPlayerError: Dispatch<SetStateAction<string | null>>;
@@ -124,6 +126,7 @@ export function useTorrentPlayerStream({
   pendingTranscodeSeekDisplayRef,
   playbackLoadingRef,
   playerStatusRef,
+  pauseCurrentHLSLoadRef,
   releaseCurrentHLSRef,
   retryCurrentStreamRef,
   selectedAudioTrackQueryIndexRef,
@@ -143,6 +146,7 @@ export function useTorrentPlayerStream({
   setAbsoluteCurrentSeconds,
   setIsVideoPaused,
   setNetworkCacheSeconds,
+  setNetworkCacheLoading,
   setPlayableCacheAheadSeconds,
   setPlaybackLoading,
   setPlayerError,
@@ -151,7 +155,7 @@ export function useTorrentPlayerStream({
   setStreamUrl,
   setTranscodeStartOffsetSeconds
 }: UseTorrentPlayerStreamArgs) {
-  const applyStreamUrl = useCallback((url: string, options?: { resumeAt?: number; autoplay?: boolean; recovery?: boolean; preload?: boolean }) => {
+  const applyStreamUrl = useCallback((url: string, options?: { resumeAt?: number; autoplay?: boolean; recovery?: boolean }) => {
     if (!options?.recovery && streamRetryTimerRef.current !== null) {
       window.clearTimeout(streamRetryTimerRef.current);
       streamRetryTimerRef.current = null;
@@ -159,7 +163,7 @@ export function useTorrentPlayerStream({
     }
     const isHLS = url.includes("/api/media/player/transmission/hls/playlist");
     if (isHLS) {
-      hlsSuspendedRef.current = !options?.autoplay && !options?.preload;
+      hlsSuspendedRef.current = !options?.autoplay;
       if (options?.autoplay) {
         hlsReleasedForPauseRef.current = false;
       }
@@ -203,7 +207,8 @@ export function useTorrentPlayerStream({
     streamUrlRef.current = streamUrl;
     setPrebufferProgressSeconds(0);
     setNetworkCacheSeconds(0);
-  }, [setNetworkCacheSeconds, setPrebufferProgressSeconds, streamUrl, streamUrlRef]);
+    setNetworkCacheLoading(false);
+  }, [setNetworkCacheLoading, setNetworkCacheSeconds, setPrebufferProgressSeconds, streamUrl, streamUrlRef]);
 
   useTorrentPlayerHlsSession({
     activePreferTranscode,
@@ -219,6 +224,7 @@ export function useTorrentPlayerStream({
     hlsStartupAtRef,
     hlsSuspendedRef,
     logWarnRef,
+    pauseCurrentHLSLoadRef,
     retryCurrentStreamRef,
     selectedAudioTrackQueryIndexRef,
     selectedFileIndexRef,
@@ -229,6 +235,7 @@ export function useTorrentPlayerStream({
     resolveHLSNetworkCacheAheadSeconds,
     settlePausedPlayback,
     setNetworkCacheSeconds,
+    setNetworkCacheLoading,
     setPlayableCacheAheadSeconds,
     setPlaybackLoading,
     setPlayerError,
@@ -253,6 +260,7 @@ export function useTorrentPlayerStream({
     }
     if (!keepalive) {
       setNetworkCacheSeconds(0);
+      setNetworkCacheLoading(false);
       setPlayableCacheAheadSeconds(0);
     }
 
@@ -283,6 +291,7 @@ export function useTorrentPlayerStream({
     logWarn,
     selectedAudioTrackQueryIndexRef,
     selectedFileIndexRef,
+    setNetworkCacheLoading,
     setNetworkCacheSeconds,
     setPlayableCacheAheadSeconds,
     transcodeOutputResolution

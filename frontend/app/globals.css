@@ -899,20 +899,34 @@ body {
   border-radius: 8px;
   color: var(--text-primary);
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--brand-muted) 42%, transparent), transparent 74%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--brand-muted) 42%, transparent),
+      transparent 74%
+    ),
     color-mix(in srgb, var(--surface-strong) 92%, var(--brand-muted));
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 42%, transparent);
   cursor: pointer;
   font: inherit;
-  transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
 }
 
 .media-episode-tile:hover {
   border-color: var(--brand-orange);
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--brand-orange) 18%, transparent), transparent 72%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--brand-orange) 18%, transparent),
+      transparent 72%
+    ),
     var(--brand-muted);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, white 54%, transparent), 0 8px 18px color-mix(in srgb, var(--brand-orange) 12%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 54%, transparent),
+    0 8px 18px color-mix(in srgb, var(--brand-orange) 12%, transparent);
   transform: translateY(-1px);
 }
 
@@ -2563,9 +2577,9 @@ body {
 }
 
 .torrent-player-diagnostics-btn.mantine-ActionIcon-root {
-  width: 36px;
-  min-width: 36px;
-  height: 36px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
   border-radius: 999px;
   color: color-mix(in srgb, var(--page-text) 84%, #dbe7ff);
   background: color-mix(in srgb, var(--card-bg) 62%, rgba(55, 74, 112, 0.22));
@@ -2592,15 +2606,15 @@ body {
 .torrent-player-info-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1.05fr);
-  gap: 10px;
+  gap: 8px;
 }
 
 .torrent-player-info-card {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 9px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px;
   border: 0;
   border-radius: var(--radius-md);
   background: linear-gradient(
@@ -2662,16 +2676,11 @@ body {
   gap: 6px;
   align-items: center;
   padding: 8px 9px;
-  border: 1px solid
-    color-mix(in srgb, var(--card-border) 76%, rgba(72, 104, 160, 0.22));
-  border-radius: var(--radius-xs);
   color: color-mix(in srgb, var(--page-text) 84%, #cddaf2);
-  background: color-mix(in srgb, var(--card-bg) 62%, rgba(72, 104, 160, 0.12));
   text-decoration: none;
 }
 
 .torrent-player-hash-link:hover {
-  border-color: color-mix(in srgb, var(--brand-orange) 42%, var(--card-border));
   color: var(--brand-orange-deep);
 }
 
@@ -2707,6 +2716,114 @@ body {
   flex-wrap: wrap;
   gap: 7px;
   align-items: center;
+}
+
+.torrent-player-info-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.torrent-player-info-metric {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  min-height: 30px;
+  padding: 6px 9px;
+  border-radius: var(--radius-xs);
+}
+
+.torrent-player-info-metric-wide {
+  grid-column: 1 / -1;
+}
+
+.torrent-player-info-metric-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+}
+
+.torrent-player-info-metric-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  border: 0;
+  color: color-mix(in srgb, var(--page-text) 72%, #cddaf2);
+  background: transparent;
+  cursor: pointer;
+}
+
+.torrent-player-info-metric-action:hover {
+  color: var(--brand-orange-deep);
+}
+
+.torrent-player-info-metric-row span {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--page-text) 56%, var(--muted-text));
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.torrent-player-info-metric-row strong {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  color: color-mix(in srgb, var(--page-text) 92%, #e8eef9);
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.torrent-player-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+.torrent-player-tag-list span {
+  max-width: 100%;
+  min-height: 24px;
+  padding: 4px 9px;
+  overflow: hidden;
+  border: 1px solid
+    color-mix(in srgb, var(--card-border) 78%, rgba(72, 104, 160, 0.18));
+  border-radius: var(--radius-xs);
+  color: color-mix(in srgb, var(--page-text) 78%, #cddaf2);
+  background: color-mix(in srgb, var(--card-bg) 54%, transparent);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.torrent-player-info-meter {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card-border) 56%, transparent);
+}
+
+.torrent-player-info-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--brand-orange), #42d392);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--brand-orange) 24%, transparent);
 }
 
 .torrent-player-info-panel .mantine-Badge-root {
@@ -2861,7 +2978,12 @@ body {
     opacity 180ms ease,
     transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
   background:
-    linear-gradient(180deg, rgba(4, 8, 15, 0), rgba(4, 8, 15, 0.52) 34%, rgba(4, 8, 15, 0.9) 100%),
+    linear-gradient(
+      180deg,
+      rgba(4, 8, 15, 0),
+      rgba(4, 8, 15, 0.52) 34%,
+      rgba(4, 8, 15, 0.9) 100%
+    ),
     radial-gradient(70% 110% at 50% 100%, rgba(4, 8, 15, 0.82), transparent 72%);
 }
 
@@ -2871,7 +2993,12 @@ body {
   inset: -46px 0 0;
   z-index: -1;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(4, 8, 15, 0), rgba(4, 8, 15, 0.5) 58%, rgba(4, 8, 15, 0.84));
+  background: linear-gradient(
+    180deg,
+    rgba(4, 8, 15, 0),
+    rgba(4, 8, 15, 0.5) 58%,
+    rgba(4, 8, 15, 0.84)
+  );
   filter: blur(10px);
   opacity: 0.78;
 }
@@ -3054,19 +3181,13 @@ body {
   position: absolute;
   left: 0;
   right: 0;
-  height: 10px;
+  height: 8px;
   border-radius: 999px;
   overflow: visible;
-  background:
-    linear-gradient(
-      180deg,
-      rgba(10, 15, 25, 0.92) 0%,
-      rgba(20, 25, 37, 0.96) 100%
-    ),
-    #0a0f19;
-  border: 1px solid rgba(174, 190, 220, 0.22);
+  background: rgba(255, 255, 255, 0.13);
+  border: 1px solid rgba(224, 231, 242, 0.18);
   box-shadow:
-    inset 0 1px 3px rgba(0, 0, 0, 0.68),
+    inset 0 1px 2px rgba(0, 0, 0, 0.54),
     0 1px 0 rgba(255, 255, 255, 0.04);
   isolation: isolate;
 }
@@ -3074,23 +3195,36 @@ body {
 .torrent-inline-seek-track::before {
   content: "";
   position: absolute;
-  inset: -3px 0;
+  inset: -4px 0;
   border-radius: inherit;
   background: linear-gradient(
     90deg,
-    rgba(10, 132, 255, 0.18),
-    rgba(100, 210, 255, 0.2),
-    rgba(94, 92, 230, 0.15),
-    rgba(191, 90, 242, 0.16),
-    rgba(94, 92, 230, 0.15),
-    rgba(100, 210, 255, 0.2),
-    rgba(10, 132, 255, 0.18)
+    rgba(255, 122, 0, 0.22),
+    rgba(66, 211, 146, 0.3),
+    rgba(255, 184, 77, 0.24),
+    rgba(66, 211, 146, 0.3),
+    rgba(255, 122, 0, 0.22)
   );
   background-size: 240% 100%;
   filter: blur(8px);
-  opacity: 0.62;
+  opacity: 0;
   pointer-events: none;
-  animation: torrentSeekAuraFlow 9s linear infinite;
+  transition: opacity 0.18s ease;
+}
+
+.torrent-inline-seek-shell:hover .torrent-inline-seek-track::before {
+  opacity: 0.74;
+  animation: torrentSeekHoverGlow 5.5s linear infinite;
+}
+
+@keyframes torrentSeekHoverGlow {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  100% {
+    background-position: 240% 50%;
+  }
 }
 
 .torrent-inline-seek-available-segment,
@@ -3108,10 +3242,9 @@ body {
   border-radius: 999px;
   background: linear-gradient(
     90deg,
-    rgba(120, 120, 128, 0.28),
-    rgba(174, 174, 178, 0.36)
+    rgba(148, 163, 184, 0.34),
+    rgba(203, 213, 225, 0.42)
   );
-  box-shadow: inset 0 0 0 1px rgba(245, 245, 247, 0.08);
 }
 
 .torrent-inline-seek-available-segment {
@@ -3119,14 +3252,12 @@ body {
   z-index: 2;
   background: linear-gradient(
     90deg,
-    rgba(255, 204, 0, 0.78),
-    rgba(255, 149, 0, 0.82)
+    rgba(250, 204, 21, 0.72),
+    rgba(251, 146, 60, 0.8)
   );
   border-radius: 999px;
   min-width: 2px;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.13),
-    0 0 8px rgba(255, 159, 10, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 
 .torrent-inline-seek-contiguous {
@@ -3135,38 +3266,20 @@ body {
   border-radius: 999px;
   background: linear-gradient(
     90deg,
-    rgba(48, 209, 88, 0.62),
-    rgba(100, 210, 255, 0.72),
-    rgba(125, 122, 255, 0.62),
-    rgba(100, 210, 255, 0.72),
-    rgba(48, 209, 88, 0.62)
+    rgba(34, 197, 94, 0.74),
+    rgba(45, 212, 191, 0.78)
   );
-  background-size: 240% 100%;
-  box-shadow:
-    inset 0 0 0 1px rgba(220, 255, 244, 0.12),
-    0 0 10px rgba(100, 210, 255, 0.18);
-  animation: torrentSeekCacheFlow 8s linear infinite;
+  box-shadow: inset 0 0 0 1px rgba(220, 255, 244, 0.12);
 }
 
 .torrent-inline-seek-played {
   left: 0;
   z-index: 4;
   border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    #0a84ff 0%,
-    #64d2ff 20%,
-    #5e5ce6 45%,
-    #bf5af2 68%,
-    #5e5ce6 84%,
-    #0a84ff 100%
-  );
-  background-size: 260% 100%;
+  background: linear-gradient(90deg, #ff7a00 0%, #ffb84d 48%, #42d392 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
-    0 0 14px rgba(10, 132, 255, 0.28),
-    0 0 22px rgba(191, 90, 242, 0.18);
-  animation: torrentSeekFlow 8.5s linear infinite;
+    inset 0 0 0 1px rgba(255, 255, 255, 0.2),
+    0 0 13px rgba(255, 122, 0, 0.22);
 }
 
 .torrent-inline-seek-played::after {
@@ -3174,103 +3287,16 @@ body {
   position: absolute;
   right: 0;
   top: 50%;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   transform: translate(50%, -50%);
   border-radius: 50%;
-  background: radial-gradient(
-    circle at 34% 30%,
-    #ffffff 0%,
-    #f5f5f7 34%,
-    #64d2ff 58%,
-    #5e5ce6 82%,
-    #0a84ff 100%
-  );
+  background: #fff7ed;
   box-shadow:
     0 0 0 2px rgba(5, 8, 14, 0.96),
-    0 0 0 5px rgba(10, 132, 255, 0.22),
-    0 0 18px rgba(100, 210, 255, 0.54),
-    0 0 30px rgba(191, 90, 242, 0.3),
+    0 0 0 5px rgba(255, 122, 0, 0.18),
+    0 0 18px rgba(255, 122, 0, 0.34),
     0 3px 9px rgba(0, 0, 0, 0.52);
-  animation: torrentSeekKnobBreath 2.8s ease-in-out infinite;
-}
-
-@keyframes torrentSeekFlow {
-  0% {
-    background-position: 0% 50%;
-  }
-  100% {
-    background-position: 260% 50%;
-  }
-}
-
-@keyframes torrentSeekCacheFlow {
-  0% {
-    background-position: 0% 50%;
-  }
-  100% {
-    background-position: 240% 50%;
-  }
-}
-
-@keyframes torrentSeekAuraFlow {
-  0% {
-    background-position: 0% 50%;
-  }
-  100% {
-    background-position: 240% 50%;
-  }
-}
-
-@keyframes torrentSeekKnobBreath {
-  0% {
-    background: radial-gradient(
-      circle at 34% 30%,
-      #ffffff 0%,
-      #f5f5f7 34%,
-      #64d2ff 58%,
-      #5e5ce6 82%,
-      #0a84ff 100%
-    );
-    box-shadow:
-      0 0 0 2px rgba(5, 8, 14, 0.96),
-      0 0 0 4px rgba(10, 132, 255, 0.18),
-      0 0 14px rgba(100, 210, 255, 0.45),
-      0 0 24px rgba(191, 90, 242, 0.22),
-      0 3px 9px rgba(0, 0, 0, 0.52);
-  }
-  50% {
-    background: radial-gradient(
-      circle at 34% 30%,
-      #ffffff 0%,
-      #ffffff 30%,
-      #9be5ff 54%,
-      #bf5af2 78%,
-      #5e5ce6 100%
-    );
-    box-shadow:
-      0 0 0 2px rgba(5, 8, 14, 0.96),
-      0 0 0 7px rgba(10, 132, 255, 0.3),
-      0 0 24px rgba(100, 210, 255, 0.7),
-      0 0 42px rgba(191, 90, 242, 0.42),
-      0 3px 9px rgba(0, 0, 0, 0.52);
-  }
-  100% {
-    background: radial-gradient(
-      circle at 34% 30%,
-      #ffffff 0%,
-      #f5f5f7 34%,
-      #64d2ff 58%,
-      #5e5ce6 82%,
-      #0a84ff 100%
-    );
-    box-shadow:
-      0 0 0 2px rgba(5, 8, 14, 0.96),
-      0 0 0 4px rgba(10, 132, 255, 0.18),
-      0 0 14px rgba(100, 210, 255, 0.45),
-      0 0 24px rgba(191, 90, 242, 0.22),
-      0 3px 9px rgba(0, 0, 0, 0.52);
-  }
 }
 
 .torrent-inline-seek-input {

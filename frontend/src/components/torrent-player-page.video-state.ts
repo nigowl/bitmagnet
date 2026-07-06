@@ -23,7 +23,7 @@ type UseTorrentPlayerVideoStateArgs = {
   isSeekingDragRef: MutableRefObject<boolean>;
   pendingTranscodeSeekDisplayRef: MutableRefObject<{ target: number; at: number } | null>;
   seekingSwitchingRef: MutableRefObject<boolean>;
-  streamApplyOptionsRef: MutableRefObject<{ resumeAt?: number; autoplay?: boolean; recovery?: boolean; preload?: boolean }>;
+  streamApplyOptionsRef: MutableRefObject<{ resumeAt?: number; autoplay?: boolean; recovery?: boolean }>;
   streamRetryRef: MutableRefObject<{ key: string; attempts: number }>;
   transcodeSeekInFlightRef: MutableRefObject<boolean>;
   transcodeStartOffsetRef: MutableRefObject<number>;

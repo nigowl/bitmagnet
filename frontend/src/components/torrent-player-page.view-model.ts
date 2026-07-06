@@ -22,6 +22,8 @@ type UseTorrentPlayerViewModelArgs = {
   activePreferTranscode: boolean;
   networkCacheSeconds: number;
   prebufferProgressSeconds: number;
+  networkCacheLoading: boolean;
+  transcodePrebufferSeconds: number;
   playerStatus: PlayerStatus;
   isVideoPaused: boolean;
   displayedCurrentSeconds: number;
@@ -54,6 +56,8 @@ export function useTorrentPlayerViewModel({
   activePreferTranscode,
   networkCacheSeconds,
   prebufferProgressSeconds,
+  networkCacheLoading,
+  transcodePrebufferSeconds,
   playerStatus,
   isVideoPaused,
   displayedCurrentSeconds,
@@ -112,7 +116,9 @@ export function useTorrentPlayerViewModel({
   const playedRatio = Math.max(0, Math.min(1, seekMax > 0 ? displayedCurrentSeconds / seekMax : 0));
   const sourceResolutionLabel = selectedFileOption?.resolutionLabel || "-";
   const outputResolutionLabel = transcodeOutputResolution > 0 ? `${transcodeOutputResolution}p` : t("media.player.resolutionOutputOriginal");
-  const networkCacheLabel = `${player.formatSecondsCounter(activePreferTranscode ? networkCacheSeconds : prebufferProgressSeconds)} ${t("media.player.prebufferSeconds")}`;
+  const activeCacheSeconds = activePreferTranscode ? networkCacheSeconds : prebufferProgressSeconds;
+  const networkCacheLabel = `${player.formatSecondsCounter(activeCacheSeconds)} ${t("media.player.prebufferSeconds")}`;
+  const networkCachePercent = Math.round(Math.min(1, Math.max(0, activeCacheSeconds / Math.max(1, transcodePrebufferSeconds))) * 100);
   const playbackStatusLabel =
     isVideoPaused && (playerStatus === "playing" || playerStatus === "ready")
       ? t("media.player.statusPaused")
@@ -188,6 +194,8 @@ export function useTorrentPlayerViewModel({
     sourceResolutionLabel,
     outputResolutionLabel,
     networkCacheLabel,
+    networkCachePercent,
+    networkCacheLoading,
     playbackStatusLabel,
     downloadTaskProgress,
     isDownloadComplete,
