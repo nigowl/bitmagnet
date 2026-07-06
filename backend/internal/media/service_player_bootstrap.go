@@ -35,8 +35,8 @@ const defaultPlayerTransmissionCleanupSlowWindowMinutes = 30
 const defaultPlayerTransmissionCleanupSlowRateKbps = 100
 const defaultPlayerFFmpegBinaryPath = "ffmpeg"
 const defaultPlayerFFmpegPreset = "veryfast"
-const defaultPlayerFFmpegCRF = 23
-const defaultPlayerFFmpegAudioBitrateKbps = 128
+const defaultPlayerFFmpegCRF = 21
+const defaultPlayerFFmpegAudioBitrateKbps = 192
 const defaultPlayerFFmpegThreads = 0
 const transmissionSessionHeader = "X-Transmission-Session-Id"
 

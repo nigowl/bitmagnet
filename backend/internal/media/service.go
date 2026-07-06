@@ -112,6 +112,7 @@ type service struct {
 	coverCache        *coverCache
 	coverFailures     sync.Map
 	playerDurations   sync.Map
+	playerVideoColors sync.Map
 	playerSelections  sync.Map
 	playerCacheQueue  playerTransmissionCacheQueue
 	logger            *zap.Logger

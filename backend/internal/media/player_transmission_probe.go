@@ -12,13 +12,18 @@ import (
 )
 
 type playerFFprobeStream struct {
-	Index       int               `json:"index"`
-	CodecType   string            `json:"codec_type"`
-	CodecName   string            `json:"codec_name"`
-	Duration    string            `json:"duration"`
-	Channels    int               `json:"channels"`
-	Tags        map[string]string `json:"tags"`
-	Disposition struct {
+	Index          int               `json:"index"`
+	CodecType      string            `json:"codec_type"`
+	CodecName      string            `json:"codec_name"`
+	Duration       string            `json:"duration"`
+	PixelFormat    string            `json:"pix_fmt"`
+	ColorSpace     string            `json:"color_space"`
+	ColorTransfer  string            `json:"color_transfer"`
+	ColorPrimaries string            `json:"color_primaries"`
+	ColorRange     string            `json:"color_range"`
+	Channels       int               `json:"channels"`
+	Tags           map[string]string `json:"tags"`
+	Disposition    struct {
 		Default int `json:"default"`
 	} `json:"disposition"`
 }
@@ -111,6 +116,55 @@ func playerTransmissionProbeAudioTracks(
 		})
 	}
 	return result, nil
+}
+
+func playerTransmissionProbeVideoColorInfo(
+	ctx context.Context,
+	ffmpegBinaryPath string,
+	filePath string,
+) (PlayerVideoColorInfo, error) {
+	ffprobePath := playerTransmissionResolveFFprobePath(ffmpegBinaryPath)
+	cmd := exec.CommandContext(
+		ctx,
+		ffprobePath,
+		"-v", "error",
+		"-print_format", "json",
+		"-show_entries", "stream=pix_fmt,color_space,color_transfer,color_primaries,color_range",
+		"-select_streams", "v:0",
+		filePath,
+	)
+	output, err := cmd.Output()
+	if err != nil {
+		return PlayerVideoColorInfo{}, err
+	}
+	var payload playerFFprobeResult
+	if err := json.Unmarshal(output, &payload); err != nil {
+		return PlayerVideoColorInfo{}, err
+	}
+	if len(payload.Streams) == 0 {
+		return PlayerVideoColorInfo{}, fmt.Errorf("ffprobe video color unavailable")
+	}
+	stream := payload.Streams[0]
+	info := PlayerVideoColorInfo{
+		PixelFormat:    strings.TrimSpace(stream.PixelFormat),
+		ColorSpace:     strings.TrimSpace(stream.ColorSpace),
+		ColorTransfer:  strings.TrimSpace(stream.ColorTransfer),
+		ColorPrimaries: strings.TrimSpace(stream.ColorPrimaries),
+		ColorRange:     strings.TrimSpace(stream.ColorRange),
+	}
+	info.NeedsToneMap = playerVideoColorNeedsToneMap(info)
+	return info, nil
+}
+
+func playerVideoColorNeedsToneMap(info PlayerVideoColorInfo) bool {
+	transfer := strings.ToLower(strings.TrimSpace(info.ColorTransfer))
+	primaries := strings.ToLower(strings.TrimSpace(info.ColorPrimaries))
+	space := strings.ToLower(strings.TrimSpace(info.ColorSpace))
+	return strings.Contains(transfer, "smpte2084") ||
+		strings.Contains(transfer, "arib-std-b67") ||
+		strings.Contains(transfer, "bt2020") ||
+		strings.Contains(primaries, "bt2020") ||
+		strings.Contains(space, "bt2020")
 }
 
 func playerTransmissionResolveFFprobePath(ffmpegBinaryPath string) string {

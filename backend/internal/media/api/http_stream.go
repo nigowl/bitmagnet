@@ -195,6 +195,7 @@ func (b *builder) playerTransmissionStreamTranscoded(c *gin.Context, resolveResu
 		transcodeStartSeconds,
 		resolveResult.AudioTrackIndex,
 		resolveResult.OutputResolution,
+		resolveResult.VideoColor,
 		!resolveResult.Completed,
 	)
 	cmd := exec.CommandContext(c.Request.Context(), binaryPath, args...)
@@ -215,6 +216,7 @@ func (b *builder) playerTransmissionStreamTranscoded(c *gin.Context, resolveResu
 	c.Header("X-Bitmagnet-Transcode-Seek-Bytes", strconv.FormatInt(transcodeSeekStartBytes, 10))
 	c.Header("X-Bitmagnet-Transcode-Audio-Track", strconv.Itoa(resolveResult.AudioTrackIndex))
 	c.Header("X-Bitmagnet-Transcode-Resolution", strconv.Itoa(resolveResult.OutputResolution))
+	c.Header("X-Bitmagnet-Transcode-Tonemap", strconv.FormatBool(resolveResult.VideoColor.NeedsToneMap))
 	c.Header("X-Bitmagnet-Transcode-Realtime-Input", strconv.FormatBool(!resolveResult.Completed))
 	c.Header("X-Bitmagnet-Stream-Source", streamSource)
 	if streamPath != "" {

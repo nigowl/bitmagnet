@@ -23,11 +23,11 @@ func normalizedPlayerFFmpegOptions(options media.PlayerFFmpegTranscodeSettings) 
 	}
 	crf := options.CRF
 	if crf < 16 || crf > 38 {
-		crf = 23
+		crf = 21
 	}
 	audioBitrate := options.AudioBitrateKbps
 	if audioBitrate < 64 || audioBitrate > 320 {
-		audioBitrate = 128
+		audioBitrate = 192
 	}
 	return preset, crf, audioBitrate
 }
@@ -38,6 +38,7 @@ func buildPlayerFFmpegArgs(
 	startSeconds float64,
 	audioTrackIndex int,
 	outputResolution int,
+	videoColor media.PlayerVideoColorInfo,
 	realTimeInput bool,
 ) []string {
 	preset, crf, audioBitrate := normalizedPlayerFFmpegOptions(options)
@@ -74,7 +75,7 @@ func buildPlayerFFmpegArgs(
 		"-preset", preset,
 		"-crf", strconv.Itoa(crf),
 		"-pix_fmt", "yuv420p",
-		"-profile:v", "main",
+		"-profile:v", "high",
 		"-level", playerFFmpegH264Level(outputResolution),
 		"-g", "48",
 		"-keyint_min", "48",
@@ -88,8 +89,11 @@ func buildPlayerFFmpegArgs(
 		"-max_interleave_delta", "0",
 		"-max_muxing_queue_size", "4096",
 	)
-	if outputResolution > 0 {
-		args = append(args, "-vf", fmt.Sprintf("scale=w=-2:h=%d:force_original_aspect_ratio=decrease:force_divisible_by=2", outputResolution))
+	if filterChain := playerFFmpegVideoFilterChain(outputResolution, videoColor); filterChain != "" {
+		args = append(args, "-vf", filterChain)
+	}
+	if videoColor.NeedsToneMap {
+		args = append(args, "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", "-color_range", "tv")
 	}
 	if options.Threads > 0 {
 		args = append(args, "-threads", strconv.Itoa(options.Threads))
@@ -107,6 +111,7 @@ func buildPlayerHLSFFmpegArgs(
 	startSeconds float64,
 	audioTrackIndex int,
 	outputResolution int,
+	videoColor media.PlayerVideoColorInfo,
 	_ int,
 	outputDir string,
 ) []string {
@@ -140,7 +145,7 @@ func buildPlayerHLSFFmpegArgs(
 		"-preset", preset,
 		"-crf", strconv.Itoa(crf),
 		"-pix_fmt", "yuv420p",
-		"-profile:v", "main",
+		"-profile:v", "high",
 		"-level", playerFFmpegH264Level(outputResolution),
 		"-g", "48",
 		"-keyint_min", "48",
@@ -155,8 +160,11 @@ func buildPlayerHLSFFmpegArgs(
 		"-max_interleave_delta", "0",
 		"-max_muxing_queue_size", "4096",
 	)
-	if outputResolution > 0 {
-		args = append(args, "-vf", fmt.Sprintf("scale=w=-2:h=%d:force_original_aspect_ratio=decrease:force_divisible_by=2", outputResolution))
+	if filterChain := playerFFmpegVideoFilterChain(outputResolution, videoColor); filterChain != "" {
+		args = append(args, "-vf", filterChain)
+	}
+	if videoColor.NeedsToneMap {
+		args = append(args, "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", "-color_range", "tv")
 	}
 	if options.Threads > 0 {
 		args = append(args, "-threads", strconv.Itoa(options.Threads))
@@ -175,6 +183,20 @@ func buildPlayerHLSFFmpegArgs(
 		playlistPath,
 	)
 	return args
+}
+
+func playerFFmpegVideoFilterChain(outputResolution int, videoColor media.PlayerVideoColorInfo) string {
+	filters := make([]string, 0, 3)
+	if videoColor.NeedsToneMap {
+		filters = append(filters, "tonemap=tonemap=mobius:peak=1000:desat=1.5")
+	}
+	if outputResolution > 0 {
+		filters = append(filters, fmt.Sprintf("scale=w=-2:h=%d:force_original_aspect_ratio=decrease:force_divisible_by=2", outputResolution))
+	}
+	if videoColor.NeedsToneMap {
+		filters = append(filters, "format=yuv420p")
+	}
+	return strings.Join(filters, ",")
 }
 
 func buildPlayerFFmpegThumbnailArgs(filePath string, seconds float64) []string {

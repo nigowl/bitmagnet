@@ -26,6 +26,13 @@ type playerFileDurationCacheEntry struct {
 	failed          bool
 }
 
+type playerVideoColorCacheEntry struct {
+	color    PlayerVideoColorInfo
+	size     int64
+	probedAt time.Time
+	failed   bool
+}
+
 func (s *service) PlayerTransmissionBootstrap(
 	ctx context.Context,
 	input PlayerTransmissionBootstrapInput,
@@ -395,6 +402,7 @@ func (s *service) PlayerTransmissionResolveStream(
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
+	videoColor := s.playerTransmissionCachedProbeVideoColor(ctx, settings.FFmpeg.BinaryPath, targetPath, completed)
 
 	return PlayerTransmissionResolveStreamResult{
 		FilePath:    targetPath,
@@ -413,6 +421,7 @@ func (s *service) PlayerTransmissionResolveStream(
 			Threads:          settings.FFmpeg.Threads,
 			ExtraArgs:        settings.FFmpeg.ExtraArgs,
 		},
+		VideoColor:       videoColor,
 		AudioTrackIndex:  input.AudioTrackIndex,
 		OutputResolution: input.OutputResolution,
 		StartSeconds:     input.StartSeconds,

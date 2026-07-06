@@ -18,12 +18,12 @@ func TestBuildPlayerFFmpegArgsUsesRealtimeInputOnlyForIncompleteFiles(t *testing
 		AudioBitrateKbps: 128,
 	}
 
-	incompleteArgs := buildPlayerFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 0, true)
+	incompleteArgs := buildPlayerFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 0, media.PlayerVideoColorInfo{}, true)
 	if !containsArg(incompleteArgs, "-re") {
 		t.Fatalf("expected incomplete local input to include -re, args=%s", strings.Join(incompleteArgs, " "))
 	}
 
-	completedArgs := buildPlayerFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 0, false)
+	completedArgs := buildPlayerFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 0, media.PlayerVideoColorInfo{}, false)
 	if containsArg(completedArgs, "-re") {
 		t.Fatalf("expected completed local input to skip -re, args=%s", strings.Join(completedArgs, " "))
 	}
@@ -36,7 +36,7 @@ func TestBuildPlayerHLSFFmpegArgsWritesSegmentedPlaylist(t *testing.T) {
 		AudioBitrateKbps: 128,
 	}
 
-	args := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 12.5, -1, 1080, 60, "/tmp/hls-cache")
+	args := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 12.5, -1, 1080, media.PlayerVideoColorInfo{}, 60, "/tmp/hls-cache")
 	joined := strings.Join(args, " ")
 	for _, expected := range []string{
 		"-f hls",
@@ -60,6 +60,31 @@ func TestBuildPlayerHLSFFmpegArgsWritesSegmentedPlaylist(t *testing.T) {
 	}
 	if containsArg(args, "-readrate") || containsArg(args, "-readrate_initial_burst") || containsArg(args, "-readrate_catchup") {
 		t.Fatalf("expected HLS input rate to be controlled by session pause/resume, args=%s", joined)
+	}
+}
+
+func TestBuildPlayerHLSFFmpegArgsToneMapsHDR(t *testing.T) {
+	settings := media.PlayerFFmpegTranscodeSettings{Preset: "veryfast"}
+	args := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 0, media.PlayerVideoColorInfo{
+		NeedsToneMap: true,
+	}, 60, "/tmp/hls-cache")
+	joined := strings.Join(args, " ")
+	for _, expected := range []string{
+		"tonemap=tonemap=mobius:peak=1000:desat=1.5",
+		"format=yuv420p",
+		"-color_primaries bt709",
+		"-color_trc bt709",
+		"-colorspace bt709",
+		"-color_range tv",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("expected HDR HLS args to contain %q, args=%s", expected, joined)
+		}
+	}
+
+	sdrArgs := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 0, media.PlayerVideoColorInfo{}, 60, "/tmp/hls-cache")
+	if strings.Contains(strings.Join(sdrArgs, " "), "tonemap=") {
+		t.Fatalf("expected SDR HLS args to skip tonemap, args=%s", strings.Join(sdrArgs, " "))
 	}
 }
 

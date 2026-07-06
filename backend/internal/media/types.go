@@ -302,6 +302,15 @@ type PlayerFFmpegTranscodeSettings struct {
 	ExtraArgs        string `json:"extraArgs"`
 }
 
+type PlayerVideoColorInfo struct {
+	PixelFormat    string `json:"pixelFormat"`
+	ColorSpace     string `json:"colorSpace"`
+	ColorTransfer  string `json:"colorTransfer"`
+	ColorPrimaries string `json:"colorPrimaries"`
+	ColorRange     string `json:"colorRange"`
+	NeedsToneMap   bool   `json:"needsToneMap"`
+}
+
 type PlayerTransmissionStatusInput struct {
 	InfoHash string `json:"infoHash"`
 }
@@ -433,6 +442,7 @@ type PlayerTransmissionResolveStreamResult struct {
 	Partial          bool                          `json:"partial"`
 	Completed        bool                          `json:"completed"`
 	Transcode        PlayerFFmpegTranscodeSettings `json:"transcode"`
+	VideoColor       PlayerVideoColorInfo          `json:"videoColor"`
 	AudioTrackIndex  int                           `json:"audioTrackIndex"`
 	OutputResolution int                           `json:"outputResolution"`
 	StartSeconds     float64                       `json:"startSeconds"`

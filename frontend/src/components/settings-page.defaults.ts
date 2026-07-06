@@ -162,8 +162,8 @@ export const DEFAULT_PLAYER_SETTINGS: SystemSettings["player"] = {
     enabled: true,
     binaryPath: "ffmpeg",
     preset: "veryfast",
-    crf: 23,
-    audioBitrateKbps: 128,
+    crf: 21,
+    audioBitrateKbps: 192,
     threads: 0,
     extraArgs: ""
   }

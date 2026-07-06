@@ -236,3 +236,47 @@ func (s *service) playerTransmissionCachedProbeDuration(
 	}
 	return duration
 }
+
+func (s *service) playerTransmissionCachedProbeVideoColor(
+	ctx context.Context,
+	ffmpegBinaryPath string,
+	filePath string,
+	forceRetry bool,
+) PlayerVideoColorInfo {
+	trimmedPath := strings.TrimSpace(filePath)
+	if trimmedPath == "" {
+		return PlayerVideoColorInfo{}
+	}
+	stat, err := os.Stat(trimmedPath)
+	if err != nil || stat.IsDir() {
+		return PlayerVideoColorInfo{}
+	}
+
+	cacheKey := trimmedPath
+	now := time.Now()
+	if cachedValue, ok := s.playerVideoColors.Load(cacheKey); ok {
+		if cached, ok := cachedValue.(playerVideoColorCacheEntry); ok && cached.size == stat.Size() {
+			if !cached.failed {
+				return cached.color
+			}
+			if !forceRetry && now.Sub(cached.probedAt) < 60*time.Second {
+				return PlayerVideoColorInfo{}
+			}
+		}
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	color, err := playerTransmissionProbeVideoColorInfo(probeCtx, ffmpegBinaryPath, trimmedPath)
+	entry := playerVideoColorCacheEntry{
+		color:    color,
+		size:     stat.Size(),
+		probedAt: now,
+		failed:   err != nil,
+	}
+	s.playerVideoColors.Store(cacheKey, entry)
+	if err != nil {
+		return PlayerVideoColorInfo{}
+	}
+	return color
+}
