@@ -1,6 +1,6 @@
 "use client";
 
-import { ActionIcon, Card, Group, TextInput, Tooltip } from "@mantine/core";
+import { ActionIcon, Card, Group, RangeSlider, Text, TextInput, Tooltip } from "@mantine/core";
 import { ChevronDown, FilterX, HardDriveDownload, RefreshCw, Search } from "lucide-react";
 import { FilterRow } from "./media-page.filter-row";
 import type { FilterOption, FilterRowKey } from "./media-page.helpers";
@@ -23,6 +23,7 @@ type MediaToolbarProps = {
     awards: string;
     sort: string;
   };
+  scoreRange: [number, number];
   options: {
     quality: FilterOption[];
     year: FilterOption[];
@@ -42,6 +43,8 @@ type MediaToolbarProps = {
   onToggleAdvancedFilters: () => void;
   onToggleExpanded: (key: FilterRowKey) => void;
   onSelectFilter: (key: FilterRowKey, value: string) => void;
+  onScoreRangeChange: (value: [number, number]) => void;
+  onScoreRangeCommit: (value: [number, number]) => void;
 };
 
 export function MediaToolbar({
@@ -52,6 +55,7 @@ export function MediaToolbar({
   expandedRows,
   enabledFilterKeys,
   values,
+  scoreRange,
   options,
   onSearchChange,
   onCommitSearch,
@@ -60,7 +64,9 @@ export function MediaToolbar({
   onRefresh,
   onToggleAdvancedFilters,
   onToggleExpanded,
-  onSelectFilter
+  onSelectFilter,
+  onScoreRangeChange,
+  onScoreRangeCommit
 }: MediaToolbarProps) {
   return (
     <Card className="glass-card media-toolbar media-toolbar-rich" withBorder>
@@ -214,6 +220,25 @@ export function MediaToolbar({
               onToggleExpand={() => onToggleExpanded("sort")}
               onSelect={(value) => onSelectFilter("sort", value)}
             />
+            <div className="media-filter-row media-score-filter-row">
+              <div className="media-filter-label">{t("media.filters.rating")}</div>
+              <div className="media-score-filter">
+                <RangeSlider
+                  className="media-score-filter-slider"
+                  min={0}
+                  max={10}
+                  step={0.1}
+                  minRange={0}
+                  value={scoreRange}
+                  onChange={onScoreRangeChange}
+                  onChangeEnd={onScoreRangeCommit}
+                  label={(value) => value.toFixed(1)}
+                />
+                <Text className="media-score-filter-value" size="xs" c="dimmed">
+                  {scoreRange[0].toFixed(1)} - {scoreRange[1].toFixed(1)}
+                </Text>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}

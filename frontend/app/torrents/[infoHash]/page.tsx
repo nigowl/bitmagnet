@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { TorrentDetailPage } from "@/components/torrent-detail-page";
 import { buildMetadata } from "@/lib/seo";
+import { fetchTorrentSEOInfo } from "@/lib/server-torrent-seo";
 
 type TorrentDetailRouteProps = {
   params: Promise<{
@@ -10,11 +11,12 @@ type TorrentDetailRouteProps = {
 
 export async function generateMetadata({ params }: TorrentDetailRouteProps): Promise<Metadata> {
   const resolved = await params;
+  const seo = await fetchTorrentSEOInfo(resolved.infoHash);
 
   return buildMetadata({
-    title: `种子详情 ${resolved.infoHash.slice(0, 10)}`,
-    description: "查看影视库中的种子详情、文件信息、标签元数据与播放入口。",
-    keywords: ["bitmagnet", "比特磁铁", "种子详情", "影视库", "InfoHash", "在线播放"],
+    title: seo ? `种子详情 ${seo.title}` : `种子详情 ${resolved.infoHash.slice(0, 10)}`,
+    description: seo?.description || "查看影视库中的种子详情、文件信息、标签元数据与播放入口。",
+    keywords: ["bitmagnet", "比特磁铁", "种子详情", "影视库", "InfoHash", "在线播放", ...(seo?.keywords ?? [])],
     path: `/torrents/${resolved.infoHash}`
   });
 }

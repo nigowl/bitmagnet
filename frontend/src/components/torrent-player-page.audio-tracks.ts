@@ -9,6 +9,7 @@ import * as player from "./torrent-player/torrent-player-helpers";
 
 type TFunction = (key: string) => string;
 type VideoWithAudioTracks = player.VideoWithAudioTracks;
+type AudioTrackOption = { value: string; label: string; preference: number };
 
 type UseTorrentPlayerAudioTracksArgs = {
   t: TFunction;
@@ -85,8 +86,7 @@ export function useTorrentPlayerAudioTracks({
   const refreshAudioTracks = useCallback(() => {
     const tracks = player.getNativeAudioTracks(videoRef.current as VideoWithAudioTracks | null);
     if (serverAudioTracks.length > 0) {
-      const options: Array<{ value: string; label: string }> = [];
-      let defaultValue = "";
+      const options: AudioTrackOption[] = [];
       for (const track of serverAudioTracks) {
         const parts = [String(track.label || "").trim()];
         const language = String(track.language || "").trim();
@@ -103,17 +103,13 @@ export function useTorrentPlayerAudioTracks({
         const value = `srv:${track.index}`;
         options.push({
           value,
-          label: parts.filter((item) => item).join(" · ") || `${t("media.player.audioTrackDefault")} ${track.index + 1}`
+          label: parts.filter((item) => item).join(" · ") || `${t("media.player.audioTrackDefault")} ${track.index + 1}`,
+          preference: resolveAudioTrackPreference([track.language, track.label], track.default)
         });
-        if (track.default && !defaultValue) {
-          defaultValue = value;
-        }
       }
-      if (!defaultValue && options[0]) {
-        defaultValue = options[0].value;
-      }
+      const defaultValue = pickPreferredAudioTrackValue(options);
       setAudioTrackSelectionAvailable(options.length > 0);
-      setAudioTrackOptions(options);
+      setAudioTrackOptions(options.map(({ value, label }) => ({ value, label })));
       setSelectedAudioTrackId((current) => {
         if (current && options.some((item) => item.value === current)) {
           return current;
@@ -129,8 +125,7 @@ export function useTorrentPlayerAudioTracks({
       return;
     }
 
-    const nextOptions: Array<{ value: string; label: string }> = [];
-    let enabledKey = "";
+    const nextOptions: AudioTrackOption[] = [];
     for (let idx = 0; idx < tracks.length; idx += 1) {
       const track = tracks[idx];
       const key = player.audioTrackSelectionKey(track, idx);
@@ -145,17 +140,16 @@ export function useTorrentPlayerAudioTracks({
       }
       const cleanParts = labelParts.filter((item) => item);
       const label = cleanParts.length > 0 ? cleanParts.join(" · ") : `${t("media.player.audioTrackDefault")} ${idx + 1}`;
-      if (track?.enabled && !enabledKey) {
-        enabledKey = key;
-      }
-      nextOptions.push({ value: key, label });
+      nextOptions.push({
+        value: key,
+        label,
+        preference: resolveAudioTrackPreference([track?.language, track?.label, track?.kind], Boolean(track?.enabled))
+      });
     }
-    if (!enabledKey && nextOptions[0]) {
-      enabledKey = nextOptions[0].value;
-    }
+    const enabledKey = pickPreferredAudioTrackValue(nextOptions);
 
     setAudioTrackSelectionAvailable(nextOptions.length > 0);
-    setAudioTrackOptions(nextOptions);
+    setAudioTrackOptions(nextOptions.map(({ value, label }) => ({ value, label })));
     setSelectedAudioTrackId((current) => {
       if (current && nextOptions.some((item) => item.value === current)) {
         return current;
@@ -243,4 +237,15 @@ export function useTorrentPlayerAudioTracks({
     refreshAudioTracks,
     syncSelectedAudioTrack
   };
+}
+
+function pickPreferredAudioTrackValue(options: AudioTrackOption[]): string {
+  return [...options].sort((left, right) => left.preference - right.preference)[0]?.value || "";
+}
+
+function resolveAudioTrackPreference(values: Array<string | undefined>, isDefault: boolean): number {
+  const haystack = values.map((value) => String(value || "").toLowerCase()).join(" ");
+  if (/(^|[^a-z])(zh|zho|chi|cn|chinese|mandarin|cantonese|中文|国语|粤语)([^a-z]|$)/i.test(haystack)) return 0;
+  if (/(^|[^a-z])(en|eng|english|英文)([^a-z]|$)/i.test(haystack)) return 1;
+  return isDefault ? 2 : 3;
 }

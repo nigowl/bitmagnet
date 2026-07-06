@@ -34,8 +34,10 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [mediaLayoutElement, setMediaLayoutElement] = useState<HTMLDivElement | null>(null);
-  const [pageSize, setPageSize] = useState(MEDIA_LIST_TARGET_COUNT);
+  const pageSizeFromURL = parsePositiveIntParam(searchParams.get("limit"), 0);
+  const [pageSize, setPageSize] = useState(pageSizeFromURL || MEDIA_LIST_TARGET_COUNT);
   const [searchInput, setSearchInput] = useState("");
+  const [scoreInput, setScoreInput] = useState<[number, number]>([0, 10]);
   const [expandedRows, setExpandedRows] = useState<Record<FilterRowKey, boolean>>({
     quality: false,
     year: false,
@@ -68,6 +70,8 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
   const cache = normalizeSimpleValue(searchParams.get("cache"), "all");
   const sort = normalizeSimpleValue(searchParams.get("sort"), "popular");
   const page = parsePositiveIntParam(searchParams.get("page"), 1);
+  const scoreMin = parseScoreParam(searchParams.get("scoreMin"), 0);
+  const scoreMax = Math.max(scoreMin, parseScoreParam(searchParams.get("scoreMax"), 10));
   const searchValue = searchParams.get("search") || "";
   const enabledFilterKeys = useMemo(
     () => new Set<FilterRowKey>(MEDIA_FILTER_KEYS_BY_CATEGORY[fixedCategory]),
@@ -81,6 +85,16 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
   useEffect(() => {
     setSearchInput(searchValue);
   }, [searchValue]);
+
+  useEffect(() => {
+    setScoreInput([scoreMin, scoreMax]);
+  }, [scoreMax, scoreMin]);
+
+  useEffect(() => {
+    if (pageSizeFromURL > 0) {
+      setPageSize((current) => (current === pageSizeFromURL ? current : pageSizeFromURL));
+    }
+  }, [pageSizeFromURL]);
 
   const updateQuery = useCallback(
     (updates: Record<string, string | null>) => {
@@ -117,6 +131,11 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
     const updatePageSize = () => {
       const next = resolveAdaptiveMediaListCount(element.clientWidth, MEDIA_LIST_TARGET_COUNT);
       setPageSize((current) => (current === next ? current : next));
+      if (String(next) !== searchParams.get("limit")) {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set("limit", String(next));
+        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      }
     };
     const scheduleUpdate = () => {
       if (frameId !== null) {
@@ -149,7 +168,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
         window.removeEventListener("resize", scheduleUpdate);
       }
     };
-  }, [mediaLayoutElement, pathname]);
+  }, [mediaLayoutElement, pathname, router, searchParams]);
 
   const pageBoundsKey = useMemo(
     () =>
@@ -166,9 +185,11 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
         awards: enabledFilterKeys.has("awards") ? awards : "all",
         cache,
         sort,
+        scoreMin: scoreMin > 0 ? scoreMin : undefined,
+        scoreMax: scoreMax < 10 ? scoreMax : undefined,
         pageSize
       }),
-    [awards, cache, country, enabledFilterKeys, fixedCategory, genre, language, network, pageSize, quality, searchValue, sort, studio, year]
+    [awards, cache, country, enabledFilterKeys, fixedCategory, genre, language, network, pageSize, quality, scoreMax, scoreMin, searchValue, sort, studio, year]
   );
 
   const load = useCallback(async () => {
@@ -187,6 +208,8 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
         awards: enabledFilterKeys.has("awards") ? awards : "all",
         cache,
         sort,
+        scoreMin: scoreMin > 0 ? scoreMin : undefined,
+        scoreMax: scoreMax < 10 ? scoreMax : undefined,
         limit: pageSize,
         page
       });
@@ -199,7 +222,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
     } finally {
       setLoading(false);
     }
-  }, [awards, cache, country, enabledFilterKeys, fixedCategory, genre, language, network, page, pageBoundsKey, pageSize, quality, searchValue, sort, studio, year]);
+  }, [awards, cache, country, enabledFilterKeys, fixedCategory, genre, language, network, page, pageBoundsKey, pageSize, quality, scoreMax, scoreMin, searchValue, sort, studio, year]);
 
   useEffect(() => {
     void load();
@@ -449,6 +472,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
             expandedRows={expandedRows}
             enabledFilterKeys={enabledFilterKeys}
             values={{ quality, year, genre, language, country, network, studio, awards, sort }}
+            scoreRange={scoreInput}
             options={{
               quality: qualityOptions,
               year: yearOptions,
@@ -468,6 +492,15 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
             onToggleAdvancedFilters={() => setShowAdvancedFilters((value) => !value)}
             onToggleExpanded={setExpanded}
             onSelectFilter={(key, value) => updateQuery({ [key]: value, page: null })}
+            onScoreRangeChange={setScoreInput}
+            onScoreRangeCommit={(value) => {
+              const [min, max] = value;
+              updateQuery({
+                scoreMin: min <= 0 ? null : formatScoreParam(min),
+                scoreMax: max >= 10 ? null : formatScoreParam(max),
+                page: null
+              });
+            }}
           />
         </Stack>
       </Card>
@@ -485,4 +518,15 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
       />
     </div>
   );
+}
+
+function parseScoreParam(value: string | null, fallback: number): number {
+  if (!value?.trim()) return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.min(10, Math.round(parsed * 10) / 10));
+}
+
+function formatScoreParam(value: number): string {
+  return String(Math.max(0, Math.min(10, Math.round(value * 10) / 10)));
 }

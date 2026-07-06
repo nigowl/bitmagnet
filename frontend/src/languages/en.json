@@ -843,6 +843,7 @@
       "cache": "Cache",
       "language": "Language",
       "resolution": "Resolution",
+      "rating": "Rating",
       "year": "Year",
       "sort": "Sort"
     },
