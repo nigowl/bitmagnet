@@ -177,7 +177,7 @@ export function useTorrentPlayerHlsSession({
           const displayAhead = player.hlsNetworkCacheDisplaySeconds(ahead, transcodePrebufferSeconds);
           setNetworkCacheSeconds((current) => (Math.abs(current - displayAhead) < 0.25 ? current : displayAhead));
           setPlayableCacheAheadSeconds((current) => (Math.abs(current - ahead) < 0.25 ? current : ahead));
-          if (!adjustLoading || userPausedRef.current || hlsSuspendedRef.current) return;
+          if (!adjustLoading || hlsSuspendedRef.current || hlsReleasedForPauseRef.current) return;
 
           const catchupThreshold = transcodePrebufferSeconds * player.HLS_NETWORK_CACHE_CATCHUP_RATIO;
           if (ahead < catchupThreshold) {
@@ -187,10 +187,7 @@ export function useTorrentPlayerHlsSession({
           }
         };
         pauseCurrentHLSLoadRef.current = (paused: boolean) => {
-          if (paused) {
-            stopHLSLoad();
-            return;
-          }
+          void paused;
           refreshHLSCacheState(true, true);
         };
         const startInitialHLSLoad = () => {

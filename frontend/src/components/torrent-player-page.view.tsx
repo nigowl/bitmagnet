@@ -7,7 +7,7 @@ import { AlertTriangle, Maximize2, Minimize2, Pause, PictureInPicture2, Play, Se
 import type { PlayerTransmissionStatusResponse } from "@/lib/media-api";
 import type { PlaybackFileOption, SubtitleCue, TorrentDetailLite } from "./torrent-player/torrent-player-helpers";
 import { TorrentPlayerInfoPanel } from "./torrent-player-page.view-info";
-import { TorrentPlayerInlineSettings } from "./torrent-player-page.view-settings";
+import { TorrentPlayerInlineImageSettings, TorrentPlayerInlineSettings } from "./torrent-player-page.view-settings";
 
 type SelectOption = { value: string; label: string };
 type HoverThumbnail = { key: string; url: string } | null;
@@ -27,6 +27,7 @@ export type TorrentPlayerPageViewProps = {
   inlineControlsVisible: boolean;
   isPipActive: boolean;
   settingsOpen: boolean;
+  videoImageSettingsOpen: boolean;
   activePreferTranscode: boolean;
   streamUrl: string;
   showPlaybackBusyOverlay: boolean;
@@ -51,6 +52,7 @@ export type TorrentPlayerPageViewProps = {
   mediaTitleDisplay: string;
   playerStageRef: MutableRefObject<HTMLDivElement | null>;
   inlineSettingsRef: MutableRefObject<HTMLDivElement | null>;
+  inlineImageSettingsRef: MutableRefObject<HTMLDivElement | null>;
   videoRef: MutableRefObject<HTMLVideoElement | null>;
   playerStageStyle: CSSProperties;
   subtitleOverlayStyle: CSSProperties;
@@ -64,6 +66,10 @@ export type TorrentPlayerPageViewProps = {
   seekMax: number;
   displayedCurrentSeconds: number;
   videoFitMode: "contain" | "cover" | "fill";
+  videoBrightness: number;
+  videoContrast: number;
+  videoSaturation: number;
+  videoHue: number;
   videoPlaybackRate: number;
   transcodeOutputResolution: number;
   transcodePrebufferSeconds: number;
@@ -88,7 +94,12 @@ export type TorrentPlayerPageViewProps = {
   onSeekInput: (value: number) => void;
   onSeekChange: (value: number) => void;
   onSeekKeyUp: (value: number, key: string) => void;
-  onCycleVideoFitMode: () => void;
+  onImageSettingsButtonClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onSetVideoBrightness: (value: number) => void;
+  onSetVideoContrast: (value: number) => void;
+  onSetVideoSaturation: (value: number) => void;
+  onSetVideoHue: (value: number) => void;
+  onSetVideoFitMode: (value: "contain" | "cover" | "fill") => void;
   onSettingsButtonClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onSetPlaybackRate: (rate: number) => void;
   onSetTranscodeOutputResolution: (value: number) => void;
@@ -120,6 +131,7 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
     inlineControlsVisible,
     isPipActive,
     settingsOpen,
+    videoImageSettingsOpen,
     activePreferTranscode,
     streamUrl,
     showPlaybackBusyOverlay,
@@ -144,6 +156,7 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
     mediaTitleDisplay,
     playerStageRef,
     inlineSettingsRef,
+    inlineImageSettingsRef,
     videoRef,
     playerStageStyle,
     subtitleOverlayStyle,
@@ -157,6 +170,10 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
     seekMax,
     displayedCurrentSeconds,
     videoFitMode,
+    videoBrightness,
+    videoContrast,
+    videoSaturation,
+    videoHue,
     videoPlaybackRate,
     transcodeOutputResolution,
     transcodePrebufferSeconds,
@@ -181,7 +198,12 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
     onSeekInput,
     onSeekChange,
     onSeekKeyUp,
-    onCycleVideoFitMode,
+    onImageSettingsButtonClick,
+    onSetVideoBrightness,
+    onSetVideoContrast,
+    onSetVideoSaturation,
+    onSetVideoHue,
+    onSetVideoFitMode,
     onSettingsButtonClick,
     onSetPlaybackRate,
     onSetTranscodeOutputResolution,
@@ -370,43 +392,27 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
                 <div className="torrent-inline-time">{formatClock(seekMax)}</div>
 
                 <div className="torrent-inline-actions">
-                  <button
-                    type="button"
-                    className={`torrent-inline-icon-btn${videoFitMode !== "contain" ? " is-active" : ""}`}
-                    onClick={onCycleVideoFitMode}
-                    title={
-                      videoFitMode === "contain"
-                        ? t("media.player.fitModeContain")
-                        : videoFitMode === "cover"
-                          ? t("media.player.fitModeCover")
-                          : t("media.player.fitModeFill")
-                    }
-                  >
-                    {videoFitMode === "contain" ? (
-                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8">
-                        <rect x="3.5" y="4.5" width="17" height="15" rx="1.8" />
-                        <rect x="7.5" y="8.5" width="9" height="7" rx="1.2" />
-                      </svg>
-                    ) : videoFitMode === "cover" ? (
-                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8">
-                        <rect x="3.5" y="4.5" width="17" height="15" rx="1.8" />
-                        <rect x="5.5" y="6.5" width="13" height="11" rx="1.2" />
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8">
-                        <rect x="3.5" y="4.5" width="17" height="15" rx="1.8" />
-                        <path d="M8 12h8" />
-                        <path d="M8 12l2-2M8 12l2 2" />
-                        <path d="M16 12l-2-2M16 12l-2 2" />
-                      </svg>
-                    )}
-                  </button>
+                  <TorrentPlayerInlineImageSettings
+                    t={t}
+                    opened={videoImageSettingsOpen}
+                    inlineImageSettingsRef={inlineImageSettingsRef}
+                    videoBrightness={videoBrightness}
+                    videoContrast={videoContrast}
+                    videoSaturation={videoSaturation}
+                    videoHue={videoHue}
+                    onButtonClick={onImageSettingsButtonClick}
+                    onSetVideoBrightness={onSetVideoBrightness}
+                    onSetVideoContrast={onSetVideoContrast}
+                    onSetVideoSaturation={onSetVideoSaturation}
+                    onSetVideoHue={onSetVideoHue}
+                  />
 
                   <TorrentPlayerInlineSettings
                     t={t}
                     settingsOpen={settingsOpen}
                     inlineSettingsRef={inlineSettingsRef}
                     videoPlaybackRate={videoPlaybackRate}
+                    videoFitMode={videoFitMode}
                     transcodeOutputResolution={transcodeOutputResolution}
                     transcodePrebufferSeconds={transcodePrebufferSeconds}
                     playbackRateOptions={playbackRateOptions}
@@ -418,6 +424,7 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
                     subtitleTrackOptions={subtitleTrackOptions}
                     onSettingsButtonClick={onSettingsButtonClick}
                     onSetPlaybackRate={onSetPlaybackRate}
+                    onSetVideoFitMode={onSetVideoFitMode}
                     onSetTranscodeOutputResolution={onSetTranscodeOutputResolution}
                     onSetTranscodePrebufferSeconds={onSetTranscodePrebufferSeconds}
                     onSetAudioTrackId={onSetAudioTrackId}

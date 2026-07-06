@@ -57,6 +57,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     videoRef,
     playerStageRef,
     inlineSettingsRef,
+    inlineImageSettingsRef,
     transcodeSeekInFlightRef,
     pendingTranscodeSeekDisplayRef,
     isSeekingDragRef,
@@ -136,6 +137,16 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     setIsVideoPaused,
     videoPlaybackRate,
     setVideoPlaybackRate,
+    videoImageSettingsOpen,
+    setVideoImageSettingsOpen,
+    videoBrightness,
+    setVideoBrightness,
+    videoContrast,
+    setVideoContrast,
+    videoSaturation,
+    setVideoSaturation,
+    videoHue,
+    setVideoHue,
     settingsOpen,
     setSettingsOpen,
     isPipActive,
@@ -276,12 +287,20 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   useTorrentPlayerGlobalPreferences({
     userId: user?.id,
     videoPlaybackRate,
+    videoBrightness,
+    videoContrast,
+    videoSaturation,
+    videoHue,
     videoFitMode,
     transcodePrebufferSeconds,
     transcodeOutputResolution,
     subtitleStylePreset,
     hydratedRef: globalPreferencesHydratedRef,
     setVideoPlaybackRate,
+    setVideoBrightness,
+    setVideoContrast,
+    setVideoSaturation,
+    setVideoHue,
     setVideoFitMode,
     setTranscodePrebufferSeconds,
     setTranscodeOutputResolution,
@@ -672,13 +691,16 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   useTorrentPlayerDomEffects({
     streamUrl,
     settingsOpen,
+    videoImageSettingsOpen,
     inlineSettingsRef,
+    inlineImageSettingsRef,
     playerStageRef,
     stageClickTimerRef,
     videoRef,
     setIsFullscreenActive,
     setIsPipActive,
-    setSettingsOpen
+    setSettingsOpen,
+    setVideoImageSettingsOpen
   });
 
   const handleSeekCommit = useTorrentPlayerSeek({
@@ -762,7 +784,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   });
 
   const {
-    handleCycleVideoFitMode,
+    handleImageSettingsButtonClick,
     handleOpenDiagnostics,
     handleOpenSubtitleManager,
     handleSelectFilePanel,
@@ -772,9 +794,9 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     handleSelectFile,
     setDiagnosticsOpened,
     setSettingsOpen,
+    setVideoImageSettingsOpen,
     setSubtitleManagerOpened,
-    setSelectedSubtitleId,
-    setVideoFitMode
+    setSelectedSubtitleId
   });
 
   const authoritativeDurationSeconds =
@@ -896,11 +918,16 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
     playbackLoading,
     playableCacheAheadSeconds,
     settingsOpen,
+    videoImageSettingsOpen,
     subtitleManagerOpened,
     resumePromptOpened,
     isSeekingDrag,
     isFullscreenActive,
     subtitleStylePreset,
+    videoBrightness,
+    videoContrast,
+    videoSaturation,
+    videoHue,
     videoFitMode,
     videoAspectRatioCss,
     videoAspectRatioValue
@@ -957,10 +984,10 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       base={{ t, detail, infoHash, playerError, formatClock, formatBytes, formatSpeed }}
       state={{
         canInitializePlayer, isVideoPaused, isFullscreenActive, inlineControlsVisible, isPipActive,
-        settingsOpen, activePreferTranscode, streamUrl, selectedFileIndex, fileSwitching, fileOptions,
+        settingsOpen, videoImageSettingsOpen, activePreferTranscode, streamUrl, selectedFileIndex, fileSwitching, fileOptions,
         selectedFileOption,
         seekHoverSeconds, seekHoverRatio, seekPreviewLoadedKey, seekPreviewFailedKey, videoFitMode,
-        videoPlaybackRate, transcodeOutputResolution, transcodePrebufferSeconds, audioTrackSelectionAvailable,
+        videoBrightness, videoContrast, videoSaturation, videoHue, videoPlaybackRate, transcodeOutputResolution, transcodePrebufferSeconds, audioTrackSelectionAvailable,
         audioTrackOptions, selectedAudioTrackId, selectedSubtitleId, subtitleTrackOptions, statusSnapshot
       }}
       viewModel={{
@@ -971,7 +998,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         audioFormatLabel, detailTagPreview, detailSourceLabel, mediaTitleDisplay, playerStageStyle,
         subtitleOverlayStyle, availableRanges
       }}
-      refs={{ playerStageRef, inlineSettingsRef, videoRef }}
+      refs={{ playerStageRef, inlineSettingsRef, inlineImageSettingsRef, videoRef }}
       seek={{ activeSubtitleCue, seekHoverThumbnail, seekMax, displayedCurrentSeconds }}
       options={{ playbackRateOptions, transcodeResolutionOptions }}
       handlers={{
@@ -986,7 +1013,12 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         onSeekInput: handleSeekInput,
         onSeekChange: handleSeekChange,
         onSeekKeyUp: handleSeekKeyUp,
-        onCycleVideoFitMode: handleCycleVideoFitMode,
+        onImageSettingsButtonClick: handleImageSettingsButtonClick,
+        onSetVideoBrightness: (value) => setVideoBrightness(player.normalizeVideoBrightnessPreference(value)),
+        onSetVideoContrast: (value) => setVideoContrast(player.normalizeVideoContrastPreference(value)),
+        onSetVideoSaturation: (value) => setVideoSaturation(player.normalizeVideoSaturationPreference(value)),
+        onSetVideoHue: (value) => setVideoHue(player.normalizeVideoHuePreference(value)),
+        onSetVideoFitMode: setVideoFitMode,
         onSettingsButtonClick: handleSettingsButtonClick,
         onSetPlaybackRate: handleSetPlaybackRate,
         onSetTranscodeOutputResolution: handleSetTranscodeOutputResolution,

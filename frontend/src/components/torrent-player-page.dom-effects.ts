@@ -6,25 +6,31 @@ import { isElementFullscreen } from "@/lib/player/native-media";
 type UseTorrentPlayerDomEffectsArgs = {
   streamUrl: string;
   settingsOpen: boolean;
+  videoImageSettingsOpen: boolean;
   inlineSettingsRef: MutableRefObject<HTMLDivElement | null>;
+  inlineImageSettingsRef: MutableRefObject<HTMLDivElement | null>;
   playerStageRef: MutableRefObject<HTMLDivElement | null>;
   stageClickTimerRef: MutableRefObject<number | null>;
   videoRef: MutableRefObject<HTMLVideoElement | null>;
   setIsFullscreenActive: Dispatch<SetStateAction<boolean>>;
   setIsPipActive: Dispatch<SetStateAction<boolean>>;
   setSettingsOpen: Dispatch<SetStateAction<boolean>>;
+  setVideoImageSettingsOpen: Dispatch<SetStateAction<boolean>>;
 };
 
 export function useTorrentPlayerDomEffects({
   streamUrl,
   settingsOpen,
+  videoImageSettingsOpen,
   inlineSettingsRef,
+  inlineImageSettingsRef,
   playerStageRef,
   stageClickTimerRef,
   videoRef,
   setIsFullscreenActive,
   setIsPipActive,
-  setSettingsOpen
+  setSettingsOpen,
+  setVideoImageSettingsOpen
 }: UseTorrentPlayerDomEffectsArgs) {
   useEffect(() => {
     const updateFullscreenState = () => {
@@ -86,6 +92,30 @@ export function useTorrentPlayerDomEffects({
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [inlineSettingsRef, settingsOpen, setSettingsOpen]);
+
+  useEffect(() => {
+    if (!videoImageSettingsOpen) return;
+
+    const onPointerDown = (event: MouseEvent) => {
+      const node = inlineImageSettingsRef.current;
+      if (!node) return;
+      if (node.contains(event.target as Node)) return;
+      setVideoImageSettingsOpen(false);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setVideoImageSettingsOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [inlineImageSettingsRef, videoImageSettingsOpen, setVideoImageSettingsOpen]);
 
   useEffect(() => {
     return () => {

@@ -6,31 +6,30 @@ type UseTorrentPlayerPanelHandlersArgs = {
   handleSelectFile: (nextIndex: number, source: "panel" | "native", options?: { resumeAt?: number; autoplay?: boolean }) => Promise<void>;
   setDiagnosticsOpened: Dispatch<SetStateAction<boolean>>;
   setSettingsOpen: Dispatch<SetStateAction<boolean>>;
+  setVideoImageSettingsOpen: Dispatch<SetStateAction<boolean>>;
   setSubtitleManagerOpened: Dispatch<SetStateAction<boolean>>;
   setSelectedSubtitleId: Dispatch<SetStateAction<string>>;
-  setVideoFitMode: Dispatch<SetStateAction<"contain" | "cover" | "fill">>;
 };
 
 export function useTorrentPlayerPanelHandlers({
   handleSelectFile,
   setDiagnosticsOpened,
   setSettingsOpen,
+  setVideoImageSettingsOpen,
   setSubtitleManagerOpened,
-  setSelectedSubtitleId,
-  setVideoFitMode
+  setSelectedSubtitleId
 }: UseTorrentPlayerPanelHandlersArgs) {
   const handleSettingsButtonClick = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
+    setVideoImageSettingsOpen(false);
     setSettingsOpen((value) => !value);
-  }, [setSettingsOpen]);
+  }, [setSettingsOpen, setVideoImageSettingsOpen]);
 
-  const handleCycleVideoFitMode = useCallback(() => {
-    setVideoFitMode((current) => {
-      if (current === "contain") return "cover";
-      if (current === "cover") return "fill";
-      return "contain";
-    });
-  }, [setVideoFitMode]);
+  const handleImageSettingsButtonClick = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setSettingsOpen(false);
+    setVideoImageSettingsOpen((value) => !value);
+  }, [setSettingsOpen, setVideoImageSettingsOpen]);
 
   const handleOpenDiagnostics = useCallback(() => {
     setDiagnosticsOpened(true);
@@ -38,8 +37,9 @@ export function useTorrentPlayerPanelHandlers({
 
   const handleOpenSubtitleManager = useCallback(() => {
     setSettingsOpen(false);
+    setVideoImageSettingsOpen(false);
     setSubtitleManagerOpened(true);
-  }, [setSettingsOpen, setSubtitleManagerOpened]);
+  }, [setSettingsOpen, setSubtitleManagerOpened, setVideoImageSettingsOpen]);
 
   const handleSetSelectedSubtitleId = useCallback((value: string) => {
     setSelectedSubtitleId(value);
@@ -50,7 +50,7 @@ export function useTorrentPlayerPanelHandlers({
   }, [handleSelectFile]);
 
   return {
-    handleCycleVideoFitMode,
+    handleImageSettingsButtonClick,
     handleOpenDiagnostics,
     handleOpenSubtitleManager,
     handleSelectFilePanel,

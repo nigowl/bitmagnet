@@ -220,28 +220,6 @@ func TestWaitForPlayerHLSPrebufferReturnsReadyWhenTargetReached(t *testing.T) {
 	}
 }
 
-func TestPausePlayerHLSGroupKeepsPrebufferingSessions(t *testing.T) {
-	b := &builder{hlsSessions: map[string]*playerHLSSession{
-		"pending": {GroupKey: "group"},
-		"ready":   {GroupKey: "group", ReadyAt: time.Now()},
-		"other":   {GroupKey: "other", ReadyAt: time.Now()},
-	}}
-
-	stopped, pending := b.pausePlayerHLSGroup("group", false)
-	if stopped != 1 || pending != 1 {
-		t.Fatalf("expected one ready session stopped and one pending session kept, got stopped=%d pending=%d", stopped, pending)
-	}
-	if _, ok := b.hlsSessions["ready"]; ok {
-		t.Fatalf("expected ready session to be stopped")
-	}
-	if session := b.hlsSessions["pending"]; session == nil || session.LastAccessedAt.IsZero() || session.LastHeartbeatAt.IsZero() {
-		t.Fatalf("expected pending session to remain alive with refreshed heartbeat, session=%#v", session)
-	}
-	if _, ok := b.hlsSessions["other"]; !ok {
-		t.Fatalf("expected unrelated group session to remain")
-	}
-}
-
 func containsArg(args []string, target string) bool {
 	for _, arg := range args {
 		if arg == target {

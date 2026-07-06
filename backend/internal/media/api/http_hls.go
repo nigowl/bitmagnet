@@ -221,9 +221,8 @@ func (b *builder) playerTransmissionHLSHeartbeat(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"active": false, "stopped": stopped})
 		return
 	}
-	if state != "playing" {
-		stopped, pending := b.pausePlayerHLSGroup(groupKey, true)
-		c.JSON(http.StatusOK, gin.H{"active": false, "stopped": stopped, "pending": pending})
+	if state != "playing" && state != "paused" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid heartbeat state"})
 		return
 	}
 
@@ -234,7 +233,7 @@ func (b *builder) playerTransmissionHLSHeartbeat(c *gin.Context) {
 		if session == nil || session.GroupKey != groupKey {
 			continue
 		}
-		session.PlaybackActive = true
+		session.PlaybackActive = state == "playing"
 		session.LastHeartbeatAt = now
 		session.LastAccessedAt = now
 		cachedAhead, endList := playerHLSCachedAheadSeconds(session, input.CurrentSeconds)

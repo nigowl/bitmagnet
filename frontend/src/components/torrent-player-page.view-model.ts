@@ -35,11 +35,16 @@ type UseTorrentPlayerViewModelArgs = {
   playbackLoading: boolean;
   playableCacheAheadSeconds: number;
   settingsOpen: boolean;
+  videoImageSettingsOpen: boolean;
   subtitleManagerOpened: boolean;
   resumePromptOpened: boolean;
   isSeekingDrag: boolean;
   isFullscreenActive: boolean;
   subtitleStylePreset: SubtitleStylePreset;
+  videoBrightness: number;
+  videoContrast: number;
+  videoSaturation: number;
+  videoHue: number;
   videoFitMode: "contain" | "cover" | "fill";
   videoAspectRatioCss: string;
   videoAspectRatioValue: number;
@@ -69,11 +74,16 @@ export function useTorrentPlayerViewModel({
   playbackLoading,
   playableCacheAheadSeconds,
   settingsOpen,
+  videoImageSettingsOpen,
   subtitleManagerOpened,
   resumePromptOpened,
   isSeekingDrag,
   isFullscreenActive,
   subtitleStylePreset,
+  videoBrightness,
+  videoContrast,
+  videoSaturation,
+  videoHue,
   videoFitMode,
   videoAspectRatioCss,
   videoAspectRatioValue
@@ -162,6 +172,10 @@ export function useTorrentPlayerViewModel({
     ["--torrent-subtitle-color" as string]: subtitleStylePreset.textColor,
     ["--torrent-subtitle-bg" as string]: subtitleStylePreset.backgroundColor,
     ["--torrent-subtitle-vertical-percent" as string]: `${subtitleStylePreset.verticalPercent}%`,
+    ["--torrent-video-brightness" as string]: `${player.normalizeVideoBrightnessPreference(videoBrightness)}%`,
+    ["--torrent-video-contrast" as string]: `${player.normalizeVideoContrastPreference(videoContrast)}%`,
+    ["--torrent-video-saturation" as string]: `${player.normalizeVideoSaturationPreference(videoSaturation)}%`,
+    ["--torrent-video-hue" as string]: `${player.normalizeVideoHuePreference(videoHue)}deg`,
     ["--torrent-video-object-fit" as string]: videoFitMode,
     ["--torrent-player-aspect-ratio" as string]: videoAspectRatioCss,
     ["--torrent-player-aspect-ratio-value" as string]: String(videoAspectRatioValue),
@@ -182,7 +196,7 @@ export function useTorrentPlayerViewModel({
       ((playbackLoading || (playerStatus === "buffering" && !isVideoPaused)) && effectivePlaybackCacheAheadSeconds < 1.5)
     );
   const shouldKeepInlineControlsVisible =
-    settingsOpen || subtitleManagerOpened || resumePromptOpened || isSeekingDrag || showPlaybackBusyOverlay || isVideoPaused;
+    settingsOpen || videoImageSettingsOpen || subtitleManagerOpened || resumePromptOpened || isSeekingDrag || showPlaybackBusyOverlay || isVideoPaused;
 
   return {
     stageBootstrapLoading,

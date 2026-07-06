@@ -2934,6 +2934,11 @@ body {
   max-height: none;
   background: #000;
   display: block;
+  filter:
+    brightness(var(--torrent-video-brightness, 100%))
+    contrast(var(--torrent-video-contrast, 100%))
+    saturate(var(--torrent-video-saturation, 100%))
+    hue-rotate(var(--torrent-video-hue, 0deg));
 }
 
 .torrent-player-stage.is-fullscreen .torrent-player-video {
@@ -3763,6 +3768,25 @@ body {
 
 .torrent-inline-rate-grid-6 {
   grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.torrent-inline-range-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 48px;
+  align-items: center;
+  gap: 10px;
+}
+
+.torrent-inline-range-input {
+  width: 100%;
+  accent-color: var(--player-control-accent);
+}
+
+.torrent-inline-range-value {
+  text-align: right;
+  font-weight: 800;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .torrent-inline-rate-btn {

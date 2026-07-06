@@ -154,6 +154,10 @@ export type SubtitleStylePreset = {
 
 export type PlayerGlobalPreferences = {
   playbackRate?: number;
+  videoBrightness?: number;
+  videoContrast?: number;
+  videoSaturation?: number;
+  videoHue?: number;
   videoFitMode?: "contain" | "cover" | "fill";
   transcodePrebufferSeconds?: number;
   outputResolution?: number;

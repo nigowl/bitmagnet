@@ -208,29 +208,6 @@ func (b *builder) stopPlayerHLSGroup(groupKey string, removeFiles bool) int {
 	return stopped
 }
 
-func (b *builder) pausePlayerHLSGroup(groupKey string, removeFiles bool) (int, int) {
-	stopped := 0
-	pending := 0
-	now := time.Now()
-	b.hlsMu.Lock()
-	for key, session := range b.hlsSessions {
-		if session == nil || session.GroupKey != groupKey {
-			continue
-		}
-		session.PlaybackActive = false
-		session.LastHeartbeatAt = now
-		session.LastAccessedAt = now
-		if session.ReadyAt.IsZero() {
-			pending++
-			continue
-		}
-		b.stopPlayerHLSSessionLocked(key, session, removeFiles)
-		stopped++
-	}
-	b.hlsMu.Unlock()
-	return stopped, pending
-}
-
 func (b *builder) stopPlayerHLSSession(sessionKey string, removeFiles bool) {
 	b.hlsMu.Lock()
 	if session := b.hlsSessions[sessionKey]; session != nil {

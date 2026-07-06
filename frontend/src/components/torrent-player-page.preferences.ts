@@ -12,12 +12,20 @@ const TRANSCODE_PREBUFFER_DEFAULT_SECONDS = player.TRANSCODE_PREBUFFER_DEFAULT_S
 type UseTorrentPlayerGlobalPreferencesArgs = {
   userId?: number;
   videoPlaybackRate: number;
+  videoBrightness: number;
+  videoContrast: number;
+  videoSaturation: number;
+  videoHue: number;
   videoFitMode: "contain" | "cover" | "fill";
   transcodePrebufferSeconds: number;
   transcodeOutputResolution: number;
   subtitleStylePreset: SubtitleStylePreset;
   hydratedRef: MutableRefObject<boolean>;
   setVideoPlaybackRate: Dispatch<SetStateAction<number>>;
+  setVideoBrightness: Dispatch<SetStateAction<number>>;
+  setVideoContrast: Dispatch<SetStateAction<number>>;
+  setVideoSaturation: Dispatch<SetStateAction<number>>;
+  setVideoHue: Dispatch<SetStateAction<number>>;
   setVideoFitMode: Dispatch<SetStateAction<"contain" | "cover" | "fill">>;
   setTranscodePrebufferSeconds: Dispatch<SetStateAction<number>>;
   setTranscodeOutputResolution: Dispatch<SetStateAction<number>>;
@@ -45,12 +53,20 @@ const defaultSubtitleStylePreset: SubtitleStylePreset = {
 export function useTorrentPlayerGlobalPreferences({
   userId,
   videoPlaybackRate,
+  videoBrightness,
+  videoContrast,
+  videoSaturation,
+  videoHue,
   videoFitMode,
   transcodePrebufferSeconds,
   transcodeOutputResolution,
   subtitleStylePreset,
   hydratedRef,
   setVideoPlaybackRate,
+  setVideoBrightness,
+  setVideoContrast,
+  setVideoSaturation,
+  setVideoHue,
   setVideoFitMode,
   setTranscodePrebufferSeconds,
   setTranscodeOutputResolution,
@@ -64,6 +80,10 @@ export function useTorrentPlayerGlobalPreferences({
       const raw = window.localStorage.getItem(key) || (userId ? window.localStorage.getItem(player.buildPlayerGlobalPreferencesStorageKey()) : null);
       if (!raw) {
         setVideoPlaybackRate(1);
+        setVideoBrightness(100);
+        setVideoContrast(100);
+        setVideoSaturation(100);
+        setVideoHue(0);
         setVideoFitMode("contain");
         setTranscodePrebufferSeconds(TRANSCODE_PREBUFFER_DEFAULT_SECONDS);
         setTranscodeOutputResolution(0);
@@ -73,6 +93,10 @@ export function useTorrentPlayerGlobalPreferences({
 
       const parsed = JSON.parse(raw) as PlayerGlobalPreferences;
       setVideoPlaybackRate(player.normalizePlaybackRatePreference(Number(parsed?.playbackRate ?? 1)));
+      setVideoBrightness(player.normalizeVideoBrightnessPreference(Number(parsed?.videoBrightness ?? 100)));
+      setVideoContrast(player.normalizeVideoContrastPreference(Number(parsed?.videoContrast ?? 100)));
+      setVideoSaturation(player.normalizeVideoSaturationPreference(Number(parsed?.videoSaturation ?? 100)));
+      setVideoHue(player.normalizeVideoHuePreference(Number(parsed?.videoHue ?? 0)));
       setVideoFitMode(player.normalizeVideoFitModePreference(parsed?.videoFitMode));
       setTranscodePrebufferSeconds(player.normalizePrebufferPreference(Number(parsed?.transcodePrebufferSeconds ?? TRANSCODE_PREBUFFER_DEFAULT_SECONDS)));
       setTranscodeOutputResolution(player.normalizeTranscodeOutputResolution(Number(parsed?.outputResolution ?? 0)));
@@ -88,6 +112,10 @@ export function useTorrentPlayerGlobalPreferences({
       });
     } catch {
       setVideoPlaybackRate(1);
+      setVideoBrightness(100);
+      setVideoContrast(100);
+      setVideoSaturation(100);
+      setVideoHue(0);
       setVideoFitMode("contain");
       setTranscodePrebufferSeconds(TRANSCODE_PREBUFFER_DEFAULT_SECONDS);
       setTranscodeOutputResolution(0);
@@ -102,13 +130,17 @@ export function useTorrentPlayerGlobalPreferences({
         window.clearTimeout(hydrationTimer);
       }
     };
-  }, [hydratedRef, setSubtitleStylePreset, setTranscodeOutputResolution, setTranscodePrebufferSeconds, setVideoFitMode, setVideoPlaybackRate, userId]);
+  }, [hydratedRef, setSubtitleStylePreset, setTranscodeOutputResolution, setTranscodePrebufferSeconds, setVideoBrightness, setVideoContrast, setVideoFitMode, setVideoHue, setVideoPlaybackRate, setVideoSaturation, userId]);
 
   useEffect(() => {
     if (!hydratedRef.current) return;
     const key = player.buildPlayerGlobalPreferencesStorageKey(userId);
     const payload: PlayerGlobalPreferences = {
       playbackRate: player.normalizePlaybackRatePreference(videoPlaybackRate),
+      videoBrightness: player.normalizeVideoBrightnessPreference(videoBrightness),
+      videoContrast: player.normalizeVideoContrastPreference(videoContrast),
+      videoSaturation: player.normalizeVideoSaturationPreference(videoSaturation),
+      videoHue: player.normalizeVideoHuePreference(videoHue),
       videoFitMode: player.normalizeVideoFitModePreference(videoFitMode),
       transcodePrebufferSeconds: player.normalizePrebufferPreference(transcodePrebufferSeconds),
       outputResolution: player.normalizeTranscodeOutputResolution(transcodeOutputResolution),
@@ -122,7 +154,7 @@ export function useTorrentPlayerGlobalPreferences({
     } catch {
       // ignore storage failures
     }
-  }, [hydratedRef, subtitleStylePreset.backgroundColor, subtitleStylePreset.scale, subtitleStylePreset.textColor, subtitleStylePreset.verticalPercent, transcodeOutputResolution, transcodePrebufferSeconds, userId, videoFitMode, videoPlaybackRate]);
+  }, [hydratedRef, subtitleStylePreset.backgroundColor, subtitleStylePreset.scale, subtitleStylePreset.textColor, subtitleStylePreset.verticalPercent, transcodeOutputResolution, transcodePrebufferSeconds, userId, videoBrightness, videoContrast, videoFitMode, videoHue, videoPlaybackRate, videoSaturation]);
 }
 
 export function useTorrentPlayerTrackPreferences({

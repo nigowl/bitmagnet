@@ -117,6 +117,26 @@ export function normalizeVideoFitModePreference(raw: string | null | undefined):
   return "contain";
 }
 
+export function normalizeVideoBrightnessPreference(raw: number): number {
+  if (!Number.isFinite(raw)) return 100;
+  return Math.max(50, Math.min(200, Math.round(raw)));
+}
+
+export function normalizeVideoContrastPreference(raw: number): number {
+  if (!Number.isFinite(raw)) return 100;
+  return Math.max(50, Math.min(200, Math.round(raw)));
+}
+
+export function normalizeVideoSaturationPreference(raw: number): number {
+  if (!Number.isFinite(raw)) return 100;
+  return Math.max(50, Math.min(200, Math.round(raw)));
+}
+
+export function normalizeVideoHuePreference(raw: number): number {
+  if (!Number.isFinite(raw)) return 0;
+  return Math.max(-180, Math.min(180, Math.round(raw)));
+}
+
 export function normalizeSubtitleScalePreference(raw: number): number {
   if (!Number.isFinite(raw)) return 1.15;
   const matched = SUBTITLE_SCALE_OPTIONS.find((value) => Math.abs(value - raw) < 0.01);

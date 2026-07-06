@@ -16,6 +16,7 @@ type TorrentPlayerPageRenderProps = {
     | "inlineControlsVisible"
     | "isPipActive"
     | "settingsOpen"
+    | "videoImageSettingsOpen"
     | "activePreferTranscode"
     | "streamUrl"
     | "selectedFileIndex"
@@ -27,6 +28,10 @@ type TorrentPlayerPageRenderProps = {
     | "seekPreviewLoadedKey"
     | "seekPreviewFailedKey"
     | "videoFitMode"
+    | "videoBrightness"
+    | "videoContrast"
+    | "videoSaturation"
+    | "videoHue"
     | "videoPlaybackRate"
     | "transcodeOutputResolution"
     | "transcodePrebufferSeconds"
@@ -61,7 +66,7 @@ type TorrentPlayerPageRenderProps = {
     | "subtitleOverlayStyle"
     | "availableRanges"
   >;
-  refs: Pick<PlayerViewProps, "playerStageRef" | "inlineSettingsRef" | "videoRef">;
+  refs: Pick<PlayerViewProps, "playerStageRef" | "inlineSettingsRef" | "inlineImageSettingsRef" | "videoRef">;
   seek: Pick<PlayerViewProps, "activeSubtitleCue" | "seekHoverThumbnail" | "seekMax" | "displayedCurrentSeconds">;
   options: Pick<PlayerViewProps, "playbackRateOptions" | "transcodeResolutionOptions">;
   handlers: Pick<PlayerViewProps,
@@ -75,7 +80,12 @@ type TorrentPlayerPageRenderProps = {
     | "onSeekInput"
     | "onSeekChange"
     | "onSeekKeyUp"
-    | "onCycleVideoFitMode"
+    | "onImageSettingsButtonClick"
+    | "onSetVideoBrightness"
+    | "onSetVideoContrast"
+    | "onSetVideoSaturation"
+    | "onSetVideoHue"
+    | "onSetVideoFitMode"
     | "onSettingsButtonClick"
     | "onSetPlaybackRate"
     | "onSetTranscodeOutputResolution"
