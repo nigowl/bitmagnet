@@ -19,15 +19,18 @@ func (s *service) Block(ctx context.Context, userID int64, mediaID string) error
 	if err != nil {
 		return err
 	}
-	db := q.TorrentContent.WithContext(ctx).UnderlyingDB()
+	db := q.WriteDB().UnderlyingDB().Session(&gorm.Session{NewDB: true}).WithContext(ctx)
 	if err := ensureMediaEntryExists(ctx, db, mediaID); err != nil {
 		return err
 	}
-	return db.Clauses(clause.OnConflict{DoNothing: true}).Create(&model.UserMediaBlock{
+	block := model.UserMediaBlock{
 		UserID:    userID,
 		MediaID:   strings.TrimSpace(mediaID),
 		CreatedAt: time.Now(),
-	}).Error
+	}
+	return db.Table(model.TableNameUserMediaBlock).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&block).Error
 }
 
 func (s *service) Unblock(ctx context.Context, userID int64, mediaID string) error {
@@ -38,14 +41,16 @@ func (s *service) Unblock(ctx context.Context, userID int64, mediaID string) err
 	if err != nil {
 		return err
 	}
-	return q.TorrentContent.WithContext(ctx).UnderlyingDB().
+	return q.WriteDB().UnderlyingDB().Session(&gorm.Session{NewDB: true}).WithContext(ctx).
+		Table(model.TableNameUserMediaBlock).
 		Where("user_id = ? AND media_id = ?", userID, strings.TrimSpace(mediaID)).
 		Delete(&model.UserMediaBlock{}).Error
 }
 
 func (s *service) isBlocked(ctx context.Context, db *gorm.DB, userID int64, mediaID string) bool {
 	var count int64
-	if err := db.WithContext(ctx).Model(&model.UserMediaBlock{}).
+	if err := db.Session(&gorm.Session{NewDB: true}).WithContext(ctx).
+		Table(model.TableNameUserMediaBlock).
 		Where("user_id = ? AND media_id = ?", userID, mediaID).
 		Count(&count).Error; err != nil {
 		return false
