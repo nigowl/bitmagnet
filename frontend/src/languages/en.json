@@ -399,6 +399,8 @@
     "queueBackfillCoverCacheTimeoutSeconds": "Cover Backfill Timeout (seconds)",
     "mediaAutoCacheCover": "Auto Cache Covers",
     "mediaAutoFetchBilingual": "Auto Fetch Bilingual Metadata",
+    "mediaCoverCacheMaxSizeGB": "Cover Cache Limit (GB)",
+    "mediaCoverCacheCleanupHour": "Cover Cache Cleanup Hour",
     "mediaWarmupTimeoutSeconds": "Media Warmup Timeout (seconds)",
     "performanceImpact": {
       "dhtScheduleWeekdays": "Choose the weekdays when the DHT crawler is allowed to run. Saving is blocked if the enabled schedule has no weekday selected.",
@@ -426,6 +428,8 @@
       "queueBackfillCoverCacheTimeoutSeconds": "Timeout per cover-cache task. Increase when image sources are slower or unstable.",
       "mediaAutoCacheCover": "Controls whether cover images are pre-warmed automatically after content updates. Disable to reduce network/disk load.",
       "mediaAutoFetchBilingual": "Controls whether bilingual media metadata is enriched automatically after content updates. Disable to reduce external API/DB load.",
+      "mediaCoverCacheMaxSizeGB": "When the cover cache exceeds this size, the next scheduled check removes the least recently used files. Default: 10 GB.",
+      "mediaCoverCacheCleanupHour": "Checks the cover cache once per day at the server's local hour. Default: 03:00; allowed range is 0-23.",
       "mediaWarmupTimeoutSeconds": "Timeout used by media warmup jobs (covers and bilingual metadata). Increase when network latency is high."
     },
     "homeTitle": "Home Recommendation Rules",
@@ -876,6 +880,10 @@
       "backToAnimeList": "Back to Animation",
       "notFound": "Media item not found",
       "noFavoriteTarget": "No favorite target resource",
+      "block": "Block",
+      "unblock": "Unblock",
+      "blocked": "Blocked; it will be hidden from media lists",
+      "unblocked": "Unblocked",
       "highlights": "Highlights",
       "metadata": "Media Metadata",
       "titleLanguage": "Title Language",

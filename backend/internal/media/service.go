@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/nigowl/bitmagnet/internal/database/dao"
 	"github.com/nigowl/bitmagnet/internal/lazy"
@@ -66,6 +67,9 @@ type Service interface {
 	BackfillCoverCache(ctx context.Context, input BackfillCoverCacheInput) (BackfillCoverCacheResult, error)
 	CountPendingLocalizedMetadata(ctx context.Context) (int, error)
 	CountPendingCoverCache(ctx context.Context) (int, error)
+	RunScheduledCoverCacheCleanup(ctx context.Context, now time.Time) (CoverCacheCleanupResult, bool, error)
+	Block(ctx context.Context, userID int64, mediaID string) error
+	Unblock(ctx context.Context, userID int64, mediaID string) error
 	EnsureContentRefsReady(ctx context.Context, refs []model.ContentRef) error
 }
 
@@ -147,6 +151,12 @@ func (s *service) List(ctx context.Context, input ListInput) (ListResult, error)
 	db := q.TorrentContent.WithContext(ctx).UnderlyingDB().
 		Table(model.TableNameMediaEntry + " me").
 		Where("me.torrent_count > 0")
+	if input.ViewerID > 0 {
+		db = db.Where(
+			"NOT EXISTS (SELECT 1 FROM "+model.TableNameUserMediaBlock+" AS umb WHERE umb.user_id = ? AND umb.media_id = me.id)",
+			input.ViewerID,
+		)
+	}
 
 	switch category {
 	case categoryMovie:
@@ -322,6 +332,9 @@ func (s *service) Detail(ctx context.Context, id string, options ...DetailOption
 	result := DetailResult{
 		Item:          detailItemFromModel(entry),
 		PlayerEnabled: true,
+	}
+	if detailOptions.ViewerID > 0 {
+		result.Item.Blocked = s.isBlocked(ctx, db, detailOptions.ViewerID, entry.ID)
 	}
 	if playerSettings, settingsErr := s.loadPlayerBootstrapSettings(ctx, db); settingsErr == nil {
 		result.PlayerEnabled = playerSettings.PlayerEnabled

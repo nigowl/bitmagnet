@@ -155,6 +155,7 @@ export type MediaDetailResponse = {
     collections: MediaDetailCollection[];
     attributes: MediaDetailAttribute[];
     languages: MediaDetailLanguage[];
+    blocked?: boolean;
   };
   torrents: MediaDetailTorrent[];
   subtitleTemplates: MediaSubtitleTemplate[];
@@ -318,4 +319,12 @@ export async function fetchMediaDetail(id: string, options?: { refresh?: boolean
         }))
       : []
   };
+}
+
+export async function blockMedia(mediaID: string): Promise<void> {
+  await apiRequest<{ ok: boolean }>(`/api/media/${encodeURIComponent(mediaID)}/block`, { method: "POST" });
+}
+
+export async function unblockMedia(mediaID: string): Promise<void> {
+  await apiRequest<{ ok: boolean }>(`/api/media/${encodeURIComponent(mediaID)}/block`, { method: "DELETE" });
 }

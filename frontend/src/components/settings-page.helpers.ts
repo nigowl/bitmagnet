@@ -84,6 +84,8 @@ export function createDefaultSystemSettings(): SystemSettings {
       media: {
         autoCacheCover: true,
         autoFetchBilingual: true,
+        coverCacheMaxSizeGB: 10,
+        coverCacheCleanupHour: 3,
         warmupTimeoutSeconds: 90
       }
     },

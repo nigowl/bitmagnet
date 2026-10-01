@@ -20,6 +20,7 @@ type ListInput struct {
 	ScoreMax *float64
 	Limit    int
 	Page     int
+	ViewerID int64
 }
 
 type ListResult struct {
@@ -97,6 +98,7 @@ type DetailResult struct {
 type DetailOptions struct {
 	ForceRefresh bool
 	PluginKeys   []string
+	ViewerID     int64
 }
 
 type DetailItem struct {
@@ -148,6 +150,12 @@ type DetailItem struct {
 	Collections         []DetailCollection `json:"collections"`
 	Attributes          []DetailAttribute  `json:"attributes"`
 	Languages           []DetailLanguage   `json:"languages"`
+	Blocked             bool               `json:"blocked"`
+}
+
+type CoverCacheCleanupResult struct {
+	Removed int   `json:"removed"`
+	Bytes   int64 `json:"bytes"`
 }
 
 type DetailCollection struct {

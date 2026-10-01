@@ -16,6 +16,8 @@ const (
 	KeyMediaDoubanReferer                         = "system.media.douban.referer"
 	KeyMediaAutoCacheCover                        = "system.performance.media.auto_cache_cover"
 	KeyMediaAutoFetchBilingual                    = "system.performance.media.auto_fetch_bilingual"
+	KeyMediaCoverCacheMaxSizeGB                   = "system.performance.media.cover_cache.max_size_gb"
+	KeyMediaCoverCacheCleanupHour                 = "system.performance.media.cover_cache.cleanup_hour"
 	KeyMediaWarmupTimeoutSeconds                  = "system.performance.media.warmup_timeout_seconds"
 	KeyPlayerEnabled                              = "system.player.enabled"
 	KeyPlayerMetadataTimeoutSeconds               = "system.player.metadata_timeout_seconds"
@@ -167,6 +169,8 @@ func PerformanceKeys() []string {
 		KeyQueueCleanupCompletedMaxAgeDays,
 		KeyMediaAutoCacheCover,
 		KeyMediaAutoFetchBilingual,
+		KeyMediaCoverCacheMaxSizeGB,
+		KeyMediaCoverCacheCleanupHour,
 		KeyMediaWarmupTimeoutSeconds,
 	}
 }

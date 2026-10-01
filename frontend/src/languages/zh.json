@@ -399,6 +399,8 @@
     "queueBackfillCoverCacheTimeoutSeconds": "封面回填超时（秒）",
     "mediaAutoCacheCover": "自动缓存封面",
     "mediaAutoFetchBilingual": "自动获取影视信息（双语）",
+    "mediaCoverCacheMaxSizeGB": "封面缓存上限（GB）",
+    "mediaCoverCacheCleanupHour": "封面缓存清理时间（小时）",
     "mediaWarmupTimeoutSeconds": "媒体预热超时（秒）",
     "performanceImpact": {
       "dhtScheduleWeekdays": "选择允许运行 DHT 爬虫的星期。未选择任何星期时无法保存启用状态。",
@@ -426,6 +428,8 @@
       "queueBackfillCoverCacheTimeoutSeconds": "封面回填任务超时。封面来源较慢或不稳定时建议增大。",
       "mediaAutoCacheCover": "控制种子入库后是否自动预热封面缓存。关闭可降低网络/磁盘占用，但首次打开详情页可能更慢。",
       "mediaAutoFetchBilingual": "控制种子入库后是否自动抓取并补全双语影视信息。关闭可减少外站调用与数据库写入。",
+      "mediaCoverCacheMaxSizeGB": "封面缓存超过此容量后，在下一次定时检查时按最近最少使用顺序删除旧文件。默认 10 GB。",
+      "mediaCoverCacheCleanupHour": "按服务器本地时间每天检查一次封面缓存。默认凌晨 3 点，可设置为 0-23 点。",
       "mediaWarmupTimeoutSeconds": "控制媒体预热任务（封面/双语补全）的超时时间。网络较慢时建议调大。"
     },
     "homeTitle": "首页推荐规则",
@@ -876,6 +880,10 @@
       "backToAnimeList": "返回动画列表",
       "notFound": "未找到该影视条目",
       "noFavoriteTarget": "暂无可收藏的资源",
+      "block": "屏蔽",
+      "unblock": "取消屏蔽",
+      "blocked": "已屏蔽，返回列表后将不再显示",
+      "unblocked": "已取消屏蔽",
       "highlights": "重点信息",
       "metadata": "影视元数据",
       "titleLanguage": "标题语言",

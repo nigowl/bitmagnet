@@ -300,6 +300,28 @@ export function SettingsPerformanceTab({
                       />
                     </Stack>
                     <NumberInput
+                      label={renderPerformanceLabel(t("settings.mediaCoverCacheMaxSizeGB"), t("settings.performanceImpact.mediaCoverCacheMaxSizeGB"))}
+                      min={1}
+                      max={10240}
+                      value={settings.performance.media.coverCacheMaxSizeGB}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          onUpdateMediaPerformance({ coverCacheMaxSizeGB: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
+                      label={renderPerformanceLabel(t("settings.mediaCoverCacheCleanupHour"), t("settings.performanceImpact.mediaCoverCacheCleanupHour"))}
+                      min={0}
+                      max={23}
+                      value={settings.performance.media.coverCacheCleanupHour}
+                      onChange={(value) => {
+                        if (typeof value === "number" && Number.isFinite(value)) {
+                          onUpdateMediaPerformance({ coverCacheCleanupHour: value });
+                        }
+                      }}
+                    />
+                    <NumberInput
                       label={renderPerformanceLabel(t("settings.mediaWarmupTimeoutSeconds"), t("settings.performanceImpact.mediaWarmupTimeoutSeconds"))}
                       min={5}
                       max={7200}

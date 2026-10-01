@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
+	"github.com/nigowl/bitmagnet/internal/auth"
 	"github.com/nigowl/bitmagnet/internal/httpserver"
 	"github.com/nigowl/bitmagnet/internal/media"
 	"go.uber.org/fx"
@@ -55,6 +56,8 @@ func (b *builder) Key() string {
 func (b *builder) Apply(e *gin.Engine) error {
 	e.GET("/api/media", b.list)
 	e.GET("/api/media/:id", b.detail)
+	e.POST("/api/media/:id/block", b.block)
+	e.DELETE("/api/media/:id/block", b.unblock)
 	e.POST("/api/media/player/transmission/bootstrap", b.playerTransmissionBootstrap)
 	e.POST("/api/media/player/transmission/select-file", b.playerTransmissionSelectFile)
 	e.GET("/api/media/player/transmission/audio-tracks", b.playerTransmissionAudioTracks)
@@ -108,6 +111,7 @@ func (b *builder) list(c *gin.Context) {
 		ScoreMax: scoreMax,
 		Limit:    limit,
 		Page:     page,
+		ViewerID: viewerID(c),
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -121,6 +125,7 @@ func (b *builder) detail(c *gin.Context) {
 	refresh := parseBool(c.Query("refresh"), false)
 	result, err := b.service.Detail(c.Request.Context(), c.Param("id"), media.DetailOptions{
 		ForceRefresh: refresh,
+		ViewerID:     viewerID(c),
 	})
 	if err != nil {
 		if errors.Is(err, media.ErrNotFound) {
@@ -132,6 +137,48 @@ func (b *builder) detail(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) block(c *gin.Context) {
+	viewer, ok := auth.ViewerFromContext(c.Request.Context())
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	if err := b.service.Block(c.Request.Context(), viewer.ID, c.Param("id")); err != nil {
+		if errors.Is(err, media.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (b *builder) unblock(c *gin.Context) {
+	viewer, ok := auth.ViewerFromContext(c.Request.Context())
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	if err := b.service.Unblock(c.Request.Context(), viewer.ID, c.Param("id")); err != nil {
+		if errors.Is(err, media.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func viewerID(c *gin.Context) int64 {
+	viewer, ok := auth.ViewerFromContext(c.Request.Context())
+	if !ok {
+		return 0
+	}
+	return viewer.ID
 }
 
 func (b *builder) playerTransmissionBootstrap(c *gin.Context) {

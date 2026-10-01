@@ -39,6 +39,8 @@ export type SystemSettings = {
     media: {
       autoCacheCover: boolean;
       autoFetchBilingual: boolean;
+      coverCacheMaxSizeGB: number;
+      coverCacheCleanupHour: number;
       warmupTimeoutSeconds: number;
     };
   };

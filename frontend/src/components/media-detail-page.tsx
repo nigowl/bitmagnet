@@ -15,16 +15,18 @@ import {
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { ArrowLeft, Heart, HeartOff, RefreshCw } from "lucide-react";
+import { ArrowLeft, Ban, Heart, HeartOff, RefreshCw } from "lucide-react";
 import { useAuth } from "@/auth/provider";
 import { useI18n } from "@/languages/provider";
 import {
   cancelPlayerTransmissionCache,
+  blockMedia,
   clearPlayerTransmissionCache,
   deletePlayerTransmissionCache,
   enqueuePlayerTransmissionCache,
   fetchMediaDetail,
   fetchPlayerTransmissionBatchStatus,
+  unblockMedia,
   type MediaDetailResponse,
   type MediaDetailTorrent,
   type PlayerTransmissionTaskStatus
@@ -361,6 +363,34 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
     }
   };
 
+  const toggleBlockFromDetail = async () => {
+    if (!user) {
+      notifications.show({ color: "yellow", message: t("auth.needLogin") });
+      return;
+    }
+    const blocked = Boolean(item.blocked);
+    try {
+      if (blocked) {
+        await unblockMedia(item.id);
+      } else {
+        await blockMedia(item.id);
+      }
+      setPayload((current) => current ? {
+        ...current,
+        item: {
+          ...current.item,
+          blocked: !blocked
+        }
+      } : current);
+      notifications.show({
+        color: "green",
+        message: blocked ? t("media.detail.unblocked") : t("media.detail.blocked")
+      });
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
   const handleClearTorrentCache = async () => {
     if (cachedTaskInfoHashes.length === 0) {
       notifications.show({ color: "yellow", message: t("media.detail.cacheEmpty") });
@@ -500,6 +530,16 @@ export function MediaDetailPage({ mediaId, mediaType }: { mediaId: string; media
               disabled={!favoriteTarget}
             >
               {isFavorited ? t("profile.removeFavorite") : t("profile.addFavorite")}
+            </Button>
+            <Button
+              size="sm"
+              leftSection={<Ban size={14} />}
+              variant={item.blocked ? "light" : "default"}
+              color={item.blocked ? "red" : undefined}
+              onClick={() => void toggleBlockFromDetail()}
+              aria-label={item.blocked ? t("media.detail.unblock") : t("media.detail.block")}
+            >
+              {item.blocked ? t("media.detail.unblock") : t("media.detail.block")}
             </Button>
             <Button size="sm" variant="default" leftSection={<RefreshCw size={14} />} onClick={() => void load(true)}>
               {t("common.refresh")}

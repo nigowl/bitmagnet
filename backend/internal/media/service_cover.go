@@ -136,6 +136,7 @@ func (s *service) Cover(ctx context.Context, id string, kind string, size string
 
 	filePath := s.coverCache.variantPath(mediaID, coverKindValue, coverSizeValue)
 	if fileExists(filePath) {
+		_ = touchFile(filePath)
 		return CoverResult{FilePath: filePath}, nil
 	}
 
@@ -152,6 +153,30 @@ func (s *service) Cover(ctx context.Context, id string, kind string, size string
 	}
 
 	return CoverResult{Pending: true}, nil
+}
+
+func (s *service) RunScheduledCoverCacheCleanup(ctx context.Context, now time.Time) (CoverCacheCleanupResult, bool, error) {
+	q, err := s.dao.Get()
+	if err != nil {
+		return CoverCacheCleanupResult{}, false, err
+	}
+	options := s.loadRuntimeOptions(ctx, q.TorrentContent.WithContext(ctx).UnderlyingDB())
+	if now.Hour() < options.coverCacheCleanupHour {
+		return CoverCacheCleanupResult{}, false, nil
+	}
+	removed, bytes, err := s.coverCache.cleanup(int64(options.coverCacheMaxSizeGB) * 1024 * 1024 * 1024)
+	if err != nil {
+		return CoverCacheCleanupResult{}, true, err
+	}
+	if s.logger != nil {
+		s.logger.Info("cover cache cleanup completed",
+			zap.Int("removed", removed),
+			zap.Int64("bytes", bytes),
+			zap.Int("max_size_gb", options.coverCacheMaxSizeGB),
+			zap.Int("cleanup_hour", options.coverCacheCleanupHour),
+		)
+	}
+	return CoverCacheCleanupResult{Removed: removed, Bytes: bytes}, true, nil
 }
 
 func (s *service) GenerateCover(ctx context.Context, input GenerateCoverInput) error {

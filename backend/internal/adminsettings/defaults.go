@@ -34,9 +34,11 @@ func newSettingsDefaults(p Params, defaultLogLevel string) Settings {
 			},
 			Queue: newQueuePerformanceSettingsDefaults(queue.NewDefaultPerformanceConfig()),
 			Media: MediaPerformanceSettings{
-				AutoCacheCover:       true,
-				AutoFetchBilingual:   true,
-				WarmupTimeoutSeconds: 90,
+				AutoCacheCover:        true,
+				AutoFetchBilingual:    true,
+				CoverCacheMaxSizeGB:   10,
+				CoverCacheCleanupHour: 3,
+				WarmupTimeoutSeconds:  90,
 			},
 		},
 		Home: HomeSettings{

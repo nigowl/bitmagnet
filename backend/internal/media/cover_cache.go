@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ type coverCache struct {
 	imageBaseURL string
 	httpClient   *http.Client
 	locks        sync.Map
+	cleanupMu    sync.Mutex
 }
 
 func newCoverCache(config Config) (*coverCache, error) {
@@ -69,6 +71,7 @@ func (c *coverCache) resolvePath(ctx context.Context, mediaID string, kind cover
 
 	cachePath := c.variantPath(mediaID, kind, size)
 	if fileExists(cachePath) {
+		_ = touchFile(cachePath)
 		return cachePath, nil
 	}
 
@@ -78,6 +81,7 @@ func (c *coverCache) resolvePath(ctx context.Context, mediaID string, kind cover
 	defer lock.Unlock()
 
 	if fileExists(cachePath) {
+		_ = touchFile(cachePath)
 		return cachePath, nil
 	}
 
@@ -94,11 +98,15 @@ func (c *coverCache) resolvePath(ctx context.Context, mediaID string, kind cover
 		return "", fmt.Errorf("cover cache file not generated: %s", cachePath)
 	}
 
+	_ = touchFile(cachePath)
 	return cachePath, nil
 }
 
 func (c *coverCache) writeAllVariants(mediaID string, kind coverKind, source image.Image) error {
-	if err := os.MkdirAll(filepath.Join(c.cacheDir, mediaID), 0o755); err != nil {
+	c.cleanupMu.Lock()
+	defer c.cleanupMu.Unlock()
+
+	if err := os.MkdirAll(filepath.Dir(c.variantPath(mediaID, kind, coverSizeXL)), 0o755); err != nil {
 		return fmt.Errorf("create media cache dir: %w", err)
 	}
 
@@ -164,7 +172,15 @@ func (c *coverCache) sourceURL(sourcePath string) string {
 }
 
 func (c *coverCache) variantPath(mediaID string, kind coverKind, size coverSize) string {
-	return filepath.Join(c.cacheDir, mediaID, fmt.Sprintf("%s-%s.jpg", kind, size))
+	mediaID = strings.TrimSpace(mediaID)
+	prefixOne, prefixTwo := "xx", "xx"
+	if len(mediaID) >= 2 {
+		prefixOne = mediaID[:2]
+	}
+	if len(mediaID) >= 4 {
+		prefixTwo = mediaID[2:4]
+	}
+	return filepath.Join(c.cacheDir, "covers", prefixOne, prefixTwo, mediaID, fmt.Sprintf("%s-%s.jpg", kind, size))
 }
 
 func (c *coverCache) lockFor(key string) *sync.Mutex {
@@ -236,4 +252,100 @@ func fileExists(path string) bool {
 		return false
 	}
 	return !stat.IsDir()
+}
+
+type coverCacheFile struct {
+	path    string
+	modTime time.Time
+	size    int64
+}
+
+func (c *coverCache) cleanup(maxBytes int64) (int, int64, error) {
+	c.cleanupMu.Lock()
+	defer c.cleanupMu.Unlock()
+
+	if maxBytes <= 0 {
+		return 0, 0, nil
+	}
+
+	root := filepath.Join(c.cacheDir, "covers")
+	files := make([]coverCacheFile, 0)
+	var totalBytes int64
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if os.IsNotExist(walkErr) {
+				return nil
+			}
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if strings.HasPrefix(entry.Name(), ".cover-") || strings.ToLower(filepath.Ext(entry.Name())) != ".jpg" {
+			return nil
+		}
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			return infoErr
+		}
+		files = append(files, coverCacheFile{path: path, modTime: info.ModTime(), size: info.Size()})
+		totalBytes += info.Size()
+		return nil
+	})
+	if err != nil {
+		return 0, 0, fmt.Errorf("scan cover cache: %w", err)
+	}
+
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].modTime.Before(files[j].modTime)
+	})
+
+	removed := 0
+	for _, file := range files {
+		if totalBytes <= maxBytes {
+			break
+		}
+		if err := os.Remove(file.path); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return removed, totalBytes, fmt.Errorf("remove cover cache file %s: %w", file.path, err)
+		}
+		totalBytes -= file.size
+		removed++
+	}
+
+	_ = removeEmptyDirs(root)
+	return removed, totalBytes, nil
+}
+
+func touchFile(path string) error {
+	now := time.Now()
+	return os.Chtimes(path, now, now)
+}
+
+func removeEmptyDirs(root string) error {
+	var dirs []string
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path != root && entry.IsDir() {
+			dirs = append(dirs, path)
+		}
+		return nil
+	})
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	sort.Slice(dirs, func(i, j int) bool {
+		return len(dirs[i]) > len(dirs[j])
+	})
+	for _, dir := range dirs {
+		_ = os.Remove(dir)
+	}
+	return nil
 }

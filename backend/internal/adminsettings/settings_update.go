@@ -128,6 +128,20 @@ func applyMediaPerformanceUpdate(
 	applyOptionalBoolUpdate(input.AutoFetchBilingual, runtimeconfig.KeyMediaAutoFetchBilingual, updates, func(value bool) {
 		effective.Performance.Media.AutoFetchBilingual = value
 	})
+	if err := applyOptionalIntUpdate(
+		input.CoverCacheMaxSizeGB, 1, 10240, runtimeconfig.KeyMediaCoverCacheMaxSizeGB,
+		"performance.media.coverCacheMaxSizeGB", updates,
+		func(value int) { effective.Performance.Media.CoverCacheMaxSizeGB = value },
+	); err != nil {
+		return err
+	}
+	if err := applyOptionalIntUpdate(
+		input.CoverCacheCleanupHour, 0, 23, runtimeconfig.KeyMediaCoverCacheCleanupHour,
+		"performance.media.coverCacheCleanupHour", updates,
+		func(value int) { effective.Performance.Media.CoverCacheCleanupHour = value },
+	); err != nil {
+		return err
+	}
 	return applyOptionalIntUpdate(
 		input.WarmupTimeoutSeconds, 5, 7200, runtimeconfig.KeyMediaWarmupTimeoutSeconds,
 		"performance.media.warmupTimeoutSeconds", updates,

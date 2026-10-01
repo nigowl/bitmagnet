@@ -22,16 +22,20 @@ type mediaRuntimeSettings struct {
 }
 
 type mediaRuntimeOptions struct {
-	autoCacheCover     bool
-	autoFetchBilingual bool
-	homeHotDays        int
+	autoCacheCover        bool
+	autoFetchBilingual    bool
+	coverCacheMaxSizeGB   int
+	coverCacheCleanupHour int
+	homeHotDays           int
 }
 
 func newMediaRuntimeSettings() mediaRuntimeSettings {
 	defaults := mediaRuntimeOptions{
-		autoCacheCover:     true,
-		autoFetchBilingual: true,
-		homeHotDays:        defaultHomeHotDays,
+		autoCacheCover:        true,
+		autoFetchBilingual:    true,
+		coverCacheMaxSizeGB:   10,
+		coverCacheCleanupHour: 3,
+		homeHotDays:           defaultHomeHotDays,
 	}
 	return mediaRuntimeSettings{
 		configCacheTTL: 15 * time.Second,
@@ -104,6 +108,8 @@ func (s *service) loadRuntimeOptions(ctx context.Context, db *gorm.DB) mediaRunt
 	values, err := runtimeconfig.ReadValues(ctx, db, []string{
 		runtimeconfig.KeyMediaAutoCacheCover,
 		runtimeconfig.KeyMediaAutoFetchBilingual,
+		runtimeconfig.KeyMediaCoverCacheMaxSizeGB,
+		runtimeconfig.KeyMediaCoverCacheCleanupHour,
 		runtimeconfig.KeyHomeHotDays,
 	})
 	if err != nil {
@@ -120,6 +126,14 @@ func (s *service) loadRuntimeOptions(ctx context.Context, db *gorm.DB) mediaRunt
 		case runtimeconfig.KeyMediaAutoFetchBilingual:
 			if parsedValue, ok := parseRuntimeBool(value); ok {
 				parsed.autoFetchBilingual = parsedValue
+			}
+		case runtimeconfig.KeyMediaCoverCacheMaxSizeGB:
+			if parsedValue, ok := parseRuntimeIntInRange(value, 1, 10240); ok {
+				parsed.coverCacheMaxSizeGB = parsedValue
+			}
+		case runtimeconfig.KeyMediaCoverCacheCleanupHour:
+			if parsedValue, ok := parseRuntimeIntInRange(value, 0, 23); ok {
+				parsed.coverCacheCleanupHour = parsedValue
 			}
 		case runtimeconfig.KeyHomeHotDays:
 			if parsedValue, ok := parseRuntimeInt(value); ok {

@@ -39,6 +39,8 @@ export const PERFORMANCE_PRESETS: Record<PerformancePresetKey, SystemSettings["p
     media: {
       autoCacheCover: false,
       autoFetchBilingual: false,
+      coverCacheMaxSizeGB: 10,
+      coverCacheCleanupHour: 3,
       warmupTimeoutSeconds: 120
     }
   },
@@ -71,6 +73,8 @@ export const PERFORMANCE_PRESETS: Record<PerformancePresetKey, SystemSettings["p
     media: {
       autoCacheCover: true,
       autoFetchBilingual: true,
+      coverCacheMaxSizeGB: 10,
+      coverCacheCleanupHour: 3,
       warmupTimeoutSeconds: 90
     }
   },
@@ -103,6 +107,8 @@ export const PERFORMANCE_PRESETS: Record<PerformancePresetKey, SystemSettings["p
     media: {
       autoCacheCover: true,
       autoFetchBilingual: true,
+      coverCacheMaxSizeGB: 10,
+      coverCacheCleanupHour: 3,
       warmupTimeoutSeconds: 150
     }
   }

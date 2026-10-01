@@ -31,6 +31,7 @@ var defaultTableNames = map[*string]string{
 	&TableNameBloomFilter:              "bloom_filters",
 	&TableNameUser:                     "users",
 	&TableNameUserFavorite:             "user_favorites",
+	&TableNameUserMediaBlock:           "user_media_blocks",
 	&TableNameUserInviteCode:           "user_invite_codes",
 	&TableNameUserSession:              "user_sessions",
 	&TableNamePlayerSubtitle:           "player_subtitles",

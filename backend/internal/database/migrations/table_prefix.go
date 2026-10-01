@@ -33,6 +33,7 @@ var prefixedTables = []string{
 	"bloom_filters",
 	"users",
 	"user_favorites",
+	"user_media_blocks",
 }
 
 func EnsureTablePrefix(ctx context.Context, db *gorm.DB, prefix string) error {

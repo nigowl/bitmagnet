@@ -142,6 +142,12 @@ func applyMediaPerformanceMerge(result *Settings, values map[string]string) {
 	applyParsedBool(values, runtimeconfig.KeyMediaAutoFetchBilingual, func(v bool) {
 		result.Performance.Media.AutoFetchBilingual = v
 	})
+	applyParsedIntInRange(values, runtimeconfig.KeyMediaCoverCacheMaxSizeGB, 1, 10240, func(v int) {
+		result.Performance.Media.CoverCacheMaxSizeGB = v
+	})
+	applyParsedIntInRange(values, runtimeconfig.KeyMediaCoverCacheCleanupHour, 0, 23, func(v int) {
+		result.Performance.Media.CoverCacheCleanupHour = v
+	})
 
 	applyParsedIntInRange(values, runtimeconfig.KeyMediaWarmupTimeoutSeconds, 5, 7200, func(v int) {
 		result.Performance.Media.WarmupTimeoutSeconds = v

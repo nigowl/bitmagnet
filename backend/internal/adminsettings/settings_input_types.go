@@ -55,9 +55,11 @@ type QueuePerformanceSettingsInput struct {
 }
 
 type MediaPerformanceSettingsInput struct {
-	AutoCacheCover       *bool `json:"autoCacheCover"`
-	AutoFetchBilingual   *bool `json:"autoFetchBilingual"`
-	WarmupTimeoutSeconds *int  `json:"warmupTimeoutSeconds"`
+	AutoCacheCover        *bool `json:"autoCacheCover"`
+	AutoFetchBilingual    *bool `json:"autoFetchBilingual"`
+	CoverCacheMaxSizeGB   *int  `json:"coverCacheMaxSizeGB"`
+	CoverCacheCleanupHour *int  `json:"coverCacheCleanupHour"`
+	WarmupTimeoutSeconds  *int  `json:"warmupTimeoutSeconds"`
 }
 
 type HomeSettingsInput struct {

@@ -55,9 +55,11 @@ func settingsToRuntimeValueMap(settings Settings) map[string]string {
 		runtimeconfig.KeyQueueCleanupCompletedMaxRecords:               strconv.Itoa(settings.Performance.Queue.CleanupCompletedMaxRecords),
 		runtimeconfig.KeyQueueCleanupCompletedMaxAgeDays:               strconv.Itoa(settings.Performance.Queue.CleanupCompletedMaxAgeDays),
 
-		runtimeconfig.KeyMediaAutoCacheCover:       strconv.FormatBool(settings.Performance.Media.AutoCacheCover),
-		runtimeconfig.KeyMediaAutoFetchBilingual:   strconv.FormatBool(settings.Performance.Media.AutoFetchBilingual),
-		runtimeconfig.KeyMediaWarmupTimeoutSeconds: strconv.Itoa(settings.Performance.Media.WarmupTimeoutSeconds),
+		runtimeconfig.KeyMediaAutoCacheCover:        strconv.FormatBool(settings.Performance.Media.AutoCacheCover),
+		runtimeconfig.KeyMediaAutoFetchBilingual:    strconv.FormatBool(settings.Performance.Media.AutoFetchBilingual),
+		runtimeconfig.KeyMediaCoverCacheMaxSizeGB:   strconv.Itoa(settings.Performance.Media.CoverCacheMaxSizeGB),
+		runtimeconfig.KeyMediaCoverCacheCleanupHour: strconv.Itoa(settings.Performance.Media.CoverCacheCleanupHour),
+		runtimeconfig.KeyMediaWarmupTimeoutSeconds:  strconv.Itoa(settings.Performance.Media.WarmupTimeoutSeconds),
 
 		runtimeconfig.KeyHomeDailyRefreshHour:   strconv.Itoa(settings.Home.Daily.RefreshHour),
 		runtimeconfig.KeyHomeDailyPoolLimit:     strconv.Itoa(settings.Home.Daily.PoolLimit),
