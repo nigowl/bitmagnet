@@ -194,15 +194,42 @@ func probeFFmpegHLS(ctx context.Context, binaryPath string, options FFmpegSettin
 	if len(segments) < 2 {
 		return testArgs, fmt.Errorf("ffmpeg hls produced fewer than two segments")
 	}
+	decodeArgs := []string{
+		"-hide_banner",
+		"-loglevel", "error",
+		"-nostdin",
+		"-i", playlistPath,
+		"-t", "2",
+		"-map", "0:v:0",
+		"-map", "0:a?",
+		"-sn",
+		"-dn",
+		"-f", "null",
+		"-",
+	}
+	if err := runFFmpegCommand(testCtx, binaryPath, decodeArgs); err != nil {
+		return testArgs, fmt.Errorf("ffmpeg hls playback probe failed: %w", err)
+	}
 	return testArgs, nil
 }
 
 func buildFFmpegTestInputArgs(inputPath string, options FFmpegSettings) []string {
 	sourceSize := "1280x720"
+	videoCodec := "libx264"
+	pixelFormat := "yuv420p"
+	colorArgs := []string(nil)
 	if options.HardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
 		sourceSize = "3840x2160"
+		videoCodec = "libx265"
+		pixelFormat = "yuv420p10le"
+		colorArgs = []string{
+			"-color_primaries", "bt2020",
+			"-color_trc", "smpte2084",
+			"-colorspace", "bt2020nc",
+			"-color_range", "tv",
+		}
 	}
-	return []string{
+	args := []string{
 		"-hide_banner",
 		"-loglevel", "error",
 		"-nostdin",
@@ -214,13 +241,14 @@ func buildFFmpegTestInputArgs(inputPath string, options FFmpegSettings) []string
 		"-t", ffmpegTestDurationSeconds,
 		"-map", "0:v:0",
 		"-map", "1:a:0",
-		"-c:v", "libx264",
+		"-c:v", videoCodec,
 		"-preset", "ultrafast",
-		"-pix_fmt", "yuv420p",
+		"-pix_fmt", pixelFormat,
 		"-c:a", "aac",
 		"-b:a", "128k",
-		inputPath,
 	}
+	args = append(args, colorArgs...)
+	return append(args, inputPath)
 }
 
 func buildFFmpegHLSArgs(inputPath string, outputDir string, options FFmpegSettings) []string {
@@ -239,7 +267,7 @@ func buildFFmpegHLSArgs(inputPath string, outputDir string, options FFmpegSettin
 		ffmpegTestStartSeconds,
 		-1,
 		ffmpegTestOutputResolution,
-		media.PlayerVideoColorInfo{},
+		media.PlayerVideoColorInfo{NeedsToneMap: options.HardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI},
 		false,
 		2,
 		outputDir,

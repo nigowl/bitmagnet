@@ -554,7 +554,7 @@
     "playerFfmpegAudioBitrate": "音频码率（kbps）",
     "playerFfmpegThreads": "FFmpeg 线程数（0=自动）",
     "playerFfmpegHardwareAcceleration": "显卡加速",
-    "playerFfmpegHardwareAccelerationHint": "VAAPI 使用 /dev/dri 暴露的显卡。Docker 配置设备后，请先执行测试。",
+    "playerFfmpegHardwareAccelerationHint": "VAAPI 使用 /dev/dri 暴露的显卡，优先保证 4K 实时播放。HDR 视频会直通而不做 CPU 色调映射，不支持 HDR 的设备可能出现偏亮或偏色。",
     "playerFfmpegHardwareAccelerationNone": "关闭（软件编码）",
     "playerFfmpegHardwareAccelerationVaapi": "VAAPI（Intel/AMD）",
     "playerFfmpegExtraArgs": "FFmpeg 额外参数",

@@ -80,14 +80,14 @@ func TestBuildPlayerHLSFFmpegArgsSkipsForcedKeyframesForVAAPI(t *testing.T) {
 		t.Fatalf("expected VAAPI HLS args to let the driver choose profile and level, args=%s", strings.Join(args, " "))
 	}
 	joined := strings.Join(args, " ")
-	for _, expected := range []string{
-		"-hwaccel vaapi",
-		"-hwaccel_device /dev/dri/renderD128",
-		"-hwaccel_output_format vaapi",
-		"scale_vaapi=",
-	} {
+	for _, expected := range []string{"-vaapi_device /dev/dri/renderD128", "format=nv12,hwupload,scale_vaapi="} {
 		if !strings.Contains(joined, expected) {
 			t.Fatalf("expected VAAPI HLS args to contain %q, args=%s", expected, joined)
+		}
+	}
+	for _, unexpected := range []string{"-hwaccel vaapi", "-hwaccel_device", "-hwaccel_output_format"} {
+		if strings.Contains(joined, unexpected) {
+			t.Fatalf("expected VAAPI HLS args to avoid hardware decode options, args=%s", joined)
 		}
 	}
 }
@@ -130,6 +130,40 @@ func TestBuildPlayerHLSFFmpegArgsToneMapsHDR(t *testing.T) {
 	}
 }
 
+func TestBuildPlayerFFmpegArgsSkipsHDRToneMapForVAAPI(t *testing.T) {
+	args := buildPlayerFFmpegArgs("/tmp/video.mkv", media.PlayerFFmpegTranscodeSettings{
+		CRF:                  23,
+		HardwareAcceleration: media.PlayerFFmpegHardwareAccelerationVAAPI,
+	}, 0, -1, 1080, media.PlayerVideoColorInfo{NeedsToneMap: true}, false)
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "format=nv12,hwupload,scale_vaapi=") {
+		t.Fatalf("expected HDR VAAPI args to use the GPU scale path, args=%s", joined)
+	}
+	if strings.Contains(joined, "tonemap=") || strings.Contains(joined, "hwdownload") {
+		t.Fatalf("expected HDR VAAPI args to skip CPU tone mapping, args=%s", joined)
+	}
+	if strings.Contains(joined, "-color_primaries bt709") {
+		t.Fatalf("expected HDR VAAPI args to preserve source color metadata, args=%s", joined)
+	}
+}
+
+func TestBuildPlayerHLSFFmpegArgsSkipsHDRToneMapForVAAPI(t *testing.T) {
+	args := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", media.PlayerFFmpegTranscodeSettings{
+		CRF:                  23,
+		HardwareAcceleration: media.PlayerFFmpegHardwareAccelerationVAAPI,
+	}, 0, -1, 1080, media.PlayerVideoColorInfo{NeedsToneMap: true}, false, "/tmp/hls-cache")
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "format=nv12,hwupload,scale_vaapi=") {
+		t.Fatalf("expected HDR VAAPI HLS args to use the GPU scale path, args=%s", joined)
+	}
+	if strings.Contains(joined, "tonemap=") || strings.Contains(joined, "hwdownload") {
+		t.Fatalf("expected HDR VAAPI HLS args to skip CPU tone mapping, args=%s", joined)
+	}
+	if strings.Contains(joined, "-color_primaries bt709") {
+		t.Fatalf("expected HDR VAAPI HLS args to preserve source color metadata, args=%s", joined)
+	}
+}
+
 func TestBuildPlayerFFmpegArgsUsesVAAPIEncoder(t *testing.T) {
 	settings := media.PlayerFFmpegTranscodeSettings{
 		Preset:               "veryfast",
@@ -142,12 +176,9 @@ func TestBuildPlayerFFmpegArgsUsesVAAPIEncoder(t *testing.T) {
 	joined := strings.Join(args, " ")
 	for _, expected := range []string{
 		"-vaapi_device /dev/dri/renderD128",
-		"-hwaccel vaapi",
-		"-hwaccel_device /dev/dri/renderD128",
-		"-hwaccel_output_format vaapi",
 		"-c:v h264_vaapi",
 		"-qp 23",
-		"scale_vaapi=",
+		"format=nv12,hwupload,scale_vaapi=",
 		"format=nv12",
 	} {
 		if !strings.Contains(joined, expected) {
@@ -156,6 +187,9 @@ func TestBuildPlayerFFmpegArgsUsesVAAPIEncoder(t *testing.T) {
 	}
 	if strings.Contains(joined, "libx264") || strings.Contains(joined, "-preset veryfast") {
 		t.Fatalf("expected VAAPI args to skip software encoder options, args=%s", joined)
+	}
+	if strings.Contains(joined, "-hwaccel vaapi") {
+		t.Fatalf("expected VAAPI args to leave decoding on the faster CPU path, args=%s", joined)
 	}
 }
 

@@ -554,7 +554,7 @@
     "playerFfmpegAudioBitrate": "Audio Bitrate (kbps)",
     "playerFfmpegThreads": "FFmpeg Threads (0=auto)",
     "playerFfmpegHardwareAcceleration": "Hardware Acceleration",
-    "playerFfmpegHardwareAccelerationHint": "VAAPI uses the GPU exposed through /dev/dri. Test it after enabling the device in Docker.",
+    "playerFfmpegHardwareAccelerationHint": "VAAPI uses the GPU exposed through /dev/dri for realtime 4K playback. HDR is passed through without CPU tone mapping, so unsupported displays may look washed out or tinted.",
     "playerFfmpegHardwareAccelerationNone": "Disabled (software)",
     "playerFfmpegHardwareAccelerationVaapi": "VAAPI (Intel/AMD)",
     "playerFfmpegExtraArgs": "FFmpeg Extra Args",

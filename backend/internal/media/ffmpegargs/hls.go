@@ -32,12 +32,7 @@ func BuildPlayerHLSFFmpegArgs(
 		"-avoid_negative_ts", "make_zero",
 	}
 	if hardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
-		args = append(args,
-			"-vaapi_device", media.PlayerFFmpegVAAPIDevice,
-			"-hwaccel", "vaapi",
-			"-hwaccel_device", media.PlayerFFmpegVAAPIDevice,
-			"-hwaccel_output_format", "vaapi",
-		)
+		args = append(args, "-vaapi_device", media.PlayerFFmpegVAAPIDevice)
 	}
 	if startSeconds > 0 {
 		startValue := strconv.FormatFloat(startSeconds, 'f', 3, 64)
@@ -95,7 +90,7 @@ func BuildPlayerHLSFFmpegArgs(
 	if filterChain := playerFFmpegVideoFilterChain(outputResolution, videoColor, hardwareAcceleration); filterChain != "" {
 		args = append(args, "-vf", filterChain)
 	}
-	if videoColor.NeedsToneMap {
+	if videoColor.NeedsToneMap && hardwareAcceleration != media.PlayerFFmpegHardwareAccelerationVAAPI {
 		args = append(args, "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", "-color_range", "tv")
 	}
 	if options.Threads > 0 {
@@ -143,18 +138,7 @@ func playerFFmpegH264Level(outputResolution int) string {
 func playerFFmpegVideoFilterChain(outputResolution int, videoColor media.PlayerVideoColorInfo, hardwareAcceleration string) string {
 	filters := make([]string, 0, 3)
 	if hardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
-		if videoColor.NeedsToneMap {
-			filters = append(filters, "hwdownload", "format=p010", "tonemap=tonemap=mobius:peak=1000:desat=1.5")
-			if outputResolution > 0 {
-				filters = append(filters, fmt.Sprintf("scale=w=-2:h=%d:force_original_aspect_ratio=decrease:force_divisible_by=2", outputResolution))
-			}
-			filters = append(filters,
-				"pad=w='max(256,iw+mod(iw,2))':h='max(128,ih+mod(ih,2))':x='(ow-iw)/2':y='(oh-ih)/2':color=black",
-				"format=nv12",
-				"hwupload",
-			)
-			return strings.Join(filters, ",")
-		}
+		// The host driver lacks tonemap_vaapi, so keep HDR passthrough for realtime playback.
 		return playerFFmpegVAAPIScaleFilter(outputResolution)
 	}
 	if videoColor.NeedsToneMap {
@@ -175,7 +159,7 @@ func playerFFmpegVAAPIScaleFilter(outputResolution int) string {
 		targetHeight = strconv.Itoa(outputResolution)
 	}
 	return fmt.Sprintf(
-		"scale_vaapi=w='max(256,ceil(iw*min(1,%s/ih)/2)*2)':h='max(128,ceil(ih*min(1,%s/ih)/2)*2)':format=nv12",
+		"format=nv12,hwupload,scale_vaapi=w='max(256,ceil(iw*min(1,%s/ih)/2)*2)':h='max(128,ceil(ih*min(1,%s/ih)/2)*2)':format=nv12",
 		targetHeight,
 		targetHeight,
 	)

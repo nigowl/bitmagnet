@@ -19,13 +19,10 @@ func TestBuildFFmpegHLSArgsUsesVAAPIEncoder(t *testing.T) {
 	joined := strings.Join(args, " ")
 	for _, expected := range []string{
 		"-vaapi_device /dev/dri/renderD128",
-		"-hwaccel vaapi",
-		"-hwaccel_device /dev/dri/renderD128",
-		"-hwaccel_output_format vaapi",
 		"-f hls",
 		"-hls_time 2",
 		"-hls_segment_type mpegts",
-		"-vf scale_vaapi=",
+		"-vf format=nv12,hwupload,scale_vaapi=",
 		"format=nv12",
 		"-c:v h264_vaapi",
 		"-qp 23",
@@ -34,8 +31,29 @@ func TestBuildFFmpegHLSArgsUsesVAAPIEncoder(t *testing.T) {
 			t.Fatalf("expected VAAPI test args to contain %q, args=%s", expected, joined)
 		}
 	}
+	if strings.Contains(joined, "-hwaccel vaapi") {
+		t.Fatalf("expected VAAPI test args to leave decoding on the faster CPU path, args=%s", joined)
+	}
 	if strings.Contains(joined, "-force_key_frames") || strings.Contains(joined, "-profile:v") || strings.Contains(joined, "-level") {
 		t.Fatalf("expected VAAPI HLS test args to match the playback-compatible path, args=%s", joined)
+	}
+}
+
+func TestBuildFFmpegTestInputUsesHDRHEVCForVAAPI(t *testing.T) {
+	args := strings.Join(buildFFmpegTestInputArgs("/tmp/input.mkv", FFmpegSettings{
+		HardwareAcceleration: media.PlayerFFmpegHardwareAccelerationVAAPI,
+	}), " ")
+	for _, expected := range []string{
+		"testsrc=size=3840x2160:rate=24",
+		"-c:v libx265",
+		"-pix_fmt yuv420p10le",
+		"-color_primaries bt2020",
+		"-color_trc smpte2084",
+		"-colorspace bt2020nc",
+	} {
+		if !strings.Contains(args, expected) {
+			t.Fatalf("expected VAAPI test input to contain %q, args=%s", expected, args)
+		}
 	}
 }
 
