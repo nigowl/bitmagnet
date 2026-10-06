@@ -3,6 +3,7 @@ package adminsettings
 import (
 	"strings"
 
+	"github.com/nigowl/bitmagnet/internal/media"
 	"github.com/nigowl/bitmagnet/internal/runtimeconfig"
 )
 
@@ -56,6 +57,9 @@ func applyPlayerMerge(result *Settings, values map[string]string) {
 	})
 	applyParsedBool(values, runtimeconfig.KeyPlayerFFmpegEnabled, func(v bool) {
 		result.Player.FFmpeg.Enabled = v
+	})
+	applyNonEmptyTrimmedString(values, runtimeconfig.KeyPlayerFFmpegHardwareAcceleration, func(value string) {
+		result.Player.FFmpeg.HardwareAcceleration = media.NormalizePlayerFFmpegHardwareAcceleration(value)
 	})
 	applyNonEmptyTrimmedString(values, runtimeconfig.KeyPlayerFFmpegBinaryPath, func(value string) {
 		result.Player.FFmpeg.BinaryPath = value

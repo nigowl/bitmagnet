@@ -16,7 +16,7 @@ func playerFFmpegH264Level(outputResolution int) string {
 	return "4.1"
 }
 
-func normalizedPlayerFFmpegOptions(options media.PlayerFFmpegTranscodeSettings) (string, int, int) {
+func normalizedPlayerFFmpegOptions(options media.PlayerFFmpegTranscodeSettings) (string, int, int, string) {
 	preset := strings.TrimSpace(options.Preset)
 	if preset == "" {
 		preset = "veryfast"
@@ -29,7 +29,7 @@ func normalizedPlayerFFmpegOptions(options media.PlayerFFmpegTranscodeSettings) 
 	if audioBitrate < 64 || audioBitrate > 320 {
 		audioBitrate = 192
 	}
-	return preset, crf, audioBitrate
+	return preset, crf, audioBitrate, media.NormalizePlayerFFmpegHardwareAcceleration(options.HardwareAcceleration)
 }
 
 func buildPlayerFFmpegArgs(
@@ -41,7 +41,7 @@ func buildPlayerFFmpegArgs(
 	videoColor media.PlayerVideoColorInfo,
 	realTimeInput bool,
 ) []string {
-	preset, crf, audioBitrate := normalizedPlayerFFmpegOptions(options)
+	preset, crf, audioBitrate, hardwareAcceleration := normalizedPlayerFFmpegOptions(options)
 
 	args := []string{
 		"-hide_banner",
@@ -49,6 +49,9 @@ func buildPlayerFFmpegArgs(
 		"-nostdin",
 		"-fflags", "+genpts",
 		"-avoid_negative_ts", "make_zero",
+	}
+	if hardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
+		args = append(args, "-vaapi_device", media.PlayerFFmpegVAAPIDevice)
 	}
 	if startSeconds > 0 {
 		startValue := strconv.FormatFloat(startSeconds, 'f', 3, 64)
@@ -71,10 +74,6 @@ func buildPlayerFFmpegArgs(
 		"-map", selectedAudioTrackMap(audioTrackIndex),
 		"-sn",
 		"-dn",
-		"-c:v", "libx264",
-		"-preset", preset,
-		"-crf", strconv.Itoa(crf),
-		"-pix_fmt", "yuv420p",
 		"-profile:v", "high",
 		"-level", playerFFmpegH264Level(outputResolution),
 		"-g", "48",
@@ -89,7 +88,12 @@ func buildPlayerFFmpegArgs(
 		"-max_interleave_delta", "0",
 		"-max_muxing_queue_size", "4096",
 	)
-	if filterChain := playerFFmpegVideoFilterChain(outputResolution, videoColor); filterChain != "" {
+	if hardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
+		args = append(args, "-c:v", "h264_vaapi", "-qp", strconv.Itoa(crf))
+	} else {
+		args = append(args, "-c:v", "libx264", "-preset", preset, "-crf", strconv.Itoa(crf), "-pix_fmt", "yuv420p")
+	}
+	if filterChain := playerFFmpegVideoFilterChain(outputResolution, videoColor, hardwareAcceleration); filterChain != "" {
 		args = append(args, "-vf", filterChain)
 	}
 	if videoColor.NeedsToneMap {
@@ -115,7 +119,7 @@ func buildPlayerHLSFFmpegArgs(
 	_ int,
 	outputDir string,
 ) []string {
-	preset, crf, audioBitrate := normalizedPlayerFFmpegOptions(options)
+	preset, crf, audioBitrate, hardwareAcceleration := normalizedPlayerFFmpegOptions(options)
 
 	segmentPattern := filepath.Join(outputDir, "segment-%06d.ts")
 	playlistPath := filepath.Join(outputDir, "index.m3u8")
@@ -125,6 +129,9 @@ func buildPlayerHLSFFmpegArgs(
 		"-nostdin",
 		"-fflags", "+genpts",
 		"-avoid_negative_ts", "make_zero",
+	}
+	if hardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
+		args = append(args, "-vaapi_device", media.PlayerFFmpegVAAPIDevice)
 	}
 	if startSeconds > 0 {
 		startValue := strconv.FormatFloat(startSeconds, 'f', 3, 64)
@@ -141,10 +148,6 @@ func buildPlayerHLSFFmpegArgs(
 		"-map", selectedAudioTrackMap(audioTrackIndex),
 		"-sn",
 		"-dn",
-		"-c:v", "libx264",
-		"-preset", preset,
-		"-crf", strconv.Itoa(crf),
-		"-pix_fmt", "yuv420p",
 		"-profile:v", "high",
 		"-level", playerFFmpegH264Level(outputResolution),
 		"-g", "48",
@@ -160,7 +163,12 @@ func buildPlayerHLSFFmpegArgs(
 		"-max_interleave_delta", "0",
 		"-max_muxing_queue_size", "4096",
 	)
-	if filterChain := playerFFmpegVideoFilterChain(outputResolution, videoColor); filterChain != "" {
+	if hardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
+		args = append(args, "-c:v", "h264_vaapi", "-qp", strconv.Itoa(crf))
+	} else {
+		args = append(args, "-c:v", "libx264", "-preset", preset, "-crf", strconv.Itoa(crf), "-pix_fmt", "yuv420p")
+	}
+	if filterChain := playerFFmpegVideoFilterChain(outputResolution, videoColor, hardwareAcceleration); filterChain != "" {
 		args = append(args, "-vf", filterChain)
 	}
 	if videoColor.NeedsToneMap {
@@ -185,7 +193,7 @@ func buildPlayerHLSFFmpegArgs(
 	return args
 }
 
-func playerFFmpegVideoFilterChain(outputResolution int, videoColor media.PlayerVideoColorInfo) string {
+func playerFFmpegVideoFilterChain(outputResolution int, videoColor media.PlayerVideoColorInfo, hardwareAcceleration string) string {
 	filters := make([]string, 0, 3)
 	if videoColor.NeedsToneMap {
 		filters = append(filters, "tonemap=tonemap=mobius:peak=1000:desat=1.5")
@@ -193,7 +201,9 @@ func playerFFmpegVideoFilterChain(outputResolution int, videoColor media.PlayerV
 	if outputResolution > 0 {
 		filters = append(filters, fmt.Sprintf("scale=w=-2:h=%d:force_original_aspect_ratio=decrease:force_divisible_by=2", outputResolution))
 	}
-	if videoColor.NeedsToneMap {
+	if hardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
+		filters = append(filters, "format=nv12", "hwupload")
+	} else if videoColor.NeedsToneMap {
 		filters = append(filters, "format=yuv420p")
 	}
 	return strings.Join(filters, ",")

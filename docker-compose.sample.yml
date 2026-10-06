@@ -67,6 +67,8 @@ services:
     volumes:
       - ./backend/config:/root/.config/bitmagnet
       - ./backend/data:/root/.local/share/bitmagnet
+    devices:
+      - /dev/dri:/dev/dri
     # command 等价于执行：
     #   bitmagnet worker run [参数]
     #

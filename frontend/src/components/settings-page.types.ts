@@ -93,6 +93,7 @@ export type SystemSettings = {
       crf: number;
       audioBitrateKbps: number;
       threads: number;
+      hardwareAcceleration: string;
       extraArgs: string;
     };
   };
@@ -242,6 +243,7 @@ export type FFmpegConnectivityResult = {
   version: string;
   argsPreview: string;
   encodeMode: string;
+  hardwareAcceleration: string;
 };
 
 export type FFmpegConnectivityResponse = {

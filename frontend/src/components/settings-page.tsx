@@ -323,6 +323,7 @@ export function SettingsPage() {
         crf: settings.player.ffmpeg.crf,
         audioBitrateKbps: settings.player.ffmpeg.audioBitrateKbps,
         threads: settings.player.ffmpeg.threads,
+        hardwareAcceleration: settings.player.ffmpeg.hardwareAcceleration,
         extraArgs: settings.player.ffmpeg.extraArgs
       };
       const data = await apiRequest<FFmpegConnectivityResponse>("/api/admin/settings/player/ffmpeg/test", {

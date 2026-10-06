@@ -8,25 +8,29 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nigowl/bitmagnet/internal/media"
 )
 
 type FFmpegTestInput struct {
-	BinaryPath       string `json:"binaryPath"`
-	Preset           string `json:"preset"`
-	CRF              int    `json:"crf"`
-	AudioBitrateKbps int    `json:"audioBitrateKbps"`
-	Threads          int    `json:"threads"`
-	ExtraArgs        string `json:"extraArgs"`
+	BinaryPath           string `json:"binaryPath"`
+	Preset               string `json:"preset"`
+	CRF                  int    `json:"crf"`
+	AudioBitrateKbps     int    `json:"audioBitrateKbps"`
+	Threads              int    `json:"threads"`
+	HardwareAcceleration string `json:"hardwareAcceleration"`
+	ExtraArgs            string `json:"extraArgs"`
 }
 
 type FFmpegTestResult struct {
-	Success     bool   `json:"success"`
-	Message     string `json:"message"`
-	BinaryPath  string `json:"binaryPath"`
-	LatencyMs   int64  `json:"latencyMs"`
-	Version     string `json:"version"`
-	ArgsPreview string `json:"argsPreview"`
-	EncodeMode  string `json:"encodeMode"`
+	Success              bool   `json:"success"`
+	Message              string `json:"message"`
+	BinaryPath           string `json:"binaryPath"`
+	LatencyMs            int64  `json:"latencyMs"`
+	Version              string `json:"version"`
+	ArgsPreview          string `json:"argsPreview"`
+	EncodeMode           string `json:"encodeMode"`
+	HardwareAcceleration string `json:"hardwareAcceleration"`
 }
 
 func (s *service) TestPlayerFFmpeg(ctx context.Context, input FFmpegTestInput) (FFmpegTestResult, error) {
@@ -61,28 +65,43 @@ func (s *service) TestPlayerFFmpeg(ctx context.Context, input FFmpegTestInput) (
 		return FFmpegTestResult{}, fmt.Errorf("%w: player.ffmpeg.threads", ErrInvalidInput)
 	}
 
+	hardwareAcceleration := firstNonEmptyTrimmed(input.HardwareAcceleration, s.defaults.Player.FFmpeg.HardwareAcceleration)
+	if hardwareAcceleration == "" {
+		hardwareAcceleration = media.PlayerFFmpegHardwareAccelerationNone
+	}
+	hardwareAcceleration = media.NormalizePlayerFFmpegHardwareAcceleration(hardwareAcceleration)
+	if !media.IsPlayerFFmpegHardwareAcceleration(input.HardwareAcceleration) && strings.TrimSpace(input.HardwareAcceleration) != "" {
+		return FFmpegTestResult{}, fmt.Errorf("%w: player.ffmpeg.hardwareAcceleration", ErrInvalidInput)
+	}
+
 	options := FFmpegSettings{
-		Enabled:          true,
-		BinaryPath:       binaryPath,
-		Preset:           preset,
-		CRF:              crf,
-		AudioBitrateKbps: audioBitrate,
-		Threads:          threads,
-		ExtraArgs:        firstNonEmptyTrimmed(input.ExtraArgs),
+		Enabled:              true,
+		BinaryPath:           binaryPath,
+		Preset:               preset,
+		CRF:                  crf,
+		AudioBitrateKbps:     audioBitrate,
+		Threads:              threads,
+		HardwareAcceleration: hardwareAcceleration,
+		ExtraArgs:            firstNonEmptyTrimmed(input.ExtraArgs),
 	}
 	testArgs := buildFFmpegSanityArgs(options)
 	preview := strings.Join(append([]string{binaryPath}, testArgs...), " ")
 
 	startedAt := time.Now()
+	encodeMode := "lavfi-smoke"
+	if hardwareAcceleration != media.PlayerFFmpegHardwareAccelerationNone {
+		encodeMode = hardwareAcceleration
+	}
 	buildResult := func(success bool, message string, version string) FFmpegTestResult {
 		return FFmpegTestResult{
-			Success:     success,
-			Message:     message,
-			BinaryPath:  binaryPath,
-			LatencyMs:   time.Since(startedAt).Milliseconds(),
-			Version:     version,
-			ArgsPreview: preview,
-			EncodeMode:  "lavfi-smoke",
+			Success:              success,
+			Message:              message,
+			BinaryPath:           binaryPath,
+			LatencyMs:            time.Since(startedAt).Milliseconds(),
+			Version:              version,
+			ArgsPreview:          preview,
+			EncodeMode:           encodeMode,
+			HardwareAcceleration: hardwareAcceleration,
 		}
 	}
 	version, err := probeFFmpegVersion(ctx, binaryPath)
@@ -147,6 +166,11 @@ func buildFFmpegSanityArgs(options FFmpegSettings) []string {
 		"-hide_banner",
 		"-loglevel", "error",
 		"-nostdin",
+	}
+	if options.HardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
+		args = append(args, "-vaapi_device", media.PlayerFFmpegVAAPIDevice)
+	}
+	args = append(args,
 		"-f", "lavfi",
 		"-i", "testsrc=size=160x90:rate=24",
 		"-f", "lavfi",
@@ -156,12 +180,13 @@ func buildFFmpegSanityArgs(options FFmpegSettings) []string {
 		"-map", "1:a:0",
 		"-sn",
 		"-dn",
-		"-c:v", "libx264",
-		"-preset", options.Preset,
-		"-crf", strconv.Itoa(options.CRF),
-		"-pix_fmt", "yuv420p",
 		"-c:a", "aac",
 		"-b:a", fmt.Sprintf("%dk", options.AudioBitrateKbps),
+	)
+	if options.HardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
+		args = append(args, "-vf", "format=nv12,hwupload", "-c:v", "h264_vaapi", "-qp", strconv.Itoa(options.CRF))
+	} else {
+		args = append(args, "-c:v", "libx264", "-preset", options.Preset, "-crf", strconv.Itoa(options.CRF), "-pix_fmt", "yuv420p")
 	}
 	if options.Threads > 0 {
 		args = append(args, "-threads", strconv.Itoa(options.Threads))

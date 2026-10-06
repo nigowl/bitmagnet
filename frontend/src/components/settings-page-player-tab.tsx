@@ -1,6 +1,6 @@
 "use client";
 
-import { Accordion, Badge, Button, Card, Group, NumberInput, SimpleGrid, Stack, Switch, Tabs, TagsInput, Text, TextInput } from "@mantine/core";
+import { Accordion, Badge, Button, Card, Group, NumberInput, Select, SimpleGrid, Stack, Switch, Tabs, TagsInput, Text, TextInput } from "@mantine/core";
 import { RotateCcw } from "lucide-react";
 import { SettingsResultCard } from "./settings-page.shared";
 import type { FFmpegConnectivityResult, SystemSettings, DownloadMappingConnectivityResult, TransmissionConnectivityResult, TransmissionTaskStats } from "./settings-page.types";
@@ -447,6 +447,21 @@ export function SettingsPagePlayerTab({
                             }
                           }}
                         />
+                        <Select
+                          label={t("settings.playerFfmpegHardwareAcceleration")}
+                          description={t("settings.playerFfmpegHardwareAccelerationHint")}
+                          data={[
+                            { value: "none", label: t("settings.playerFfmpegHardwareAccelerationNone") },
+                            { value: "vaapi", label: t("settings.playerFfmpegHardwareAccelerationVaapi") }
+                          ]}
+                          allowDeselect={false}
+                          value={settings.player.ffmpeg.hardwareAcceleration}
+                          onChange={(value) => {
+                            if (value) {
+                              onUpdateFfmpegSettings({ hardwareAcceleration: value });
+                            }
+                          }}
+                        />
                         <TextInput
                           label={t("settings.playerFfmpegExtraArgs")}
                           value={settings.player.ffmpeg.extraArgs}
@@ -467,6 +482,8 @@ export function SettingsPagePlayerTab({
                           lines={[
                             { label: t("settings.playerFfmpegVersion"), value: ffmpegTestResult.version || "-" },
                             { label: t("settings.playerFfmpegBinaryPath"), value: ffmpegTestResult.binaryPath || "-" },
+                            { label: t("settings.playerFfmpegEncodeMode"), value: ffmpegTestResult.encodeMode || "-" },
+                            { label: t("settings.playerFfmpegHardwareAcceleration"), value: ffmpegTestResult.hardwareAcceleration || "-" },
                             { label: "", value: ffmpegTestResult.argsPreview || "-", monospace: true }
                           ]}
                         />

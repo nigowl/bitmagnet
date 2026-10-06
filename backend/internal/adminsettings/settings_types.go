@@ -117,13 +117,14 @@ type TransmissionSettings struct {
 }
 
 type FFmpegSettings struct {
-	Enabled          bool   `json:"enabled"`
-	BinaryPath       string `json:"binaryPath"`
-	Preset           string `json:"preset"`
-	CRF              int    `json:"crf"`
-	AudioBitrateKbps int    `json:"audioBitrateKbps"`
-	Threads          int    `json:"threads"`
-	ExtraArgs        string `json:"extraArgs"`
+	Enabled              bool   `json:"enabled"`
+	BinaryPath           string `json:"binaryPath"`
+	Preset               string `json:"preset"`
+	CRF                  int    `json:"crf"`
+	AudioBitrateKbps     int    `json:"audioBitrateKbps"`
+	Threads              int    `json:"threads"`
+	HardwareAcceleration string `json:"hardwareAcceleration"`
+	ExtraArgs            string `json:"extraArgs"`
 }
 
 type AuthSettings struct {

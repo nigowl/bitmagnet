@@ -95,6 +95,7 @@ func settingsToRuntimeValueMap(settings Settings) map[string]string {
 		runtimeconfig.KeyPlayerFFmpegCRF:                            strconv.Itoa(settings.Player.FFmpeg.CRF),
 		runtimeconfig.KeyPlayerFFmpegAudioBitrateKbps:               strconv.Itoa(settings.Player.FFmpeg.AudioBitrateKbps),
 		runtimeconfig.KeyPlayerFFmpegThreads:                        strconv.Itoa(settings.Player.FFmpeg.Threads),
+		runtimeconfig.KeyPlayerFFmpegHardwareAcceleration:           settings.Player.FFmpeg.HardwareAcceleration,
 		runtimeconfig.KeyPlayerFFmpegExtraArgs:                      settings.Player.FFmpeg.ExtraArgs,
 
 		runtimeconfig.KeyAuthMembershipEnabled:   strconv.FormatBool(settings.Auth.MembershipEnabled),

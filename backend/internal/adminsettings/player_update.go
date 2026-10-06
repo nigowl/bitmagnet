@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nigowl/bitmagnet/internal/media"
 	"github.com/nigowl/bitmagnet/internal/runtimeconfig"
 )
 
@@ -205,6 +206,19 @@ func applyPlayerUpdate(
 			func(value int) { effective.Player.FFmpeg.Threads = value },
 		); err != nil {
 			return err
+		}
+		if input.FFmpeg.HardwareAcceleration != nil {
+			value := strings.ToLower(strings.TrimSpace(*input.FFmpeg.HardwareAcceleration))
+			if value == "" {
+				updates[runtimeconfig.KeyPlayerFFmpegHardwareAcceleration] = nil
+				effective.Player.FFmpeg.HardwareAcceleration = defaults.FFmpeg.HardwareAcceleration
+			} else {
+				if !media.IsPlayerFFmpegHardwareAcceleration(value) {
+					return fmt.Errorf("%w: player.ffmpeg.hardwareAcceleration", ErrInvalidInput)
+				}
+				updates[runtimeconfig.KeyPlayerFFmpegHardwareAcceleration] = &value
+				effective.Player.FFmpeg.HardwareAcceleration = value
+			}
 		}
 		applyOptionalTrimmedStringUpdate(
 			input.FFmpeg.ExtraArgs,

@@ -38,6 +38,7 @@ const defaultPlayerFFmpegPreset = "veryfast"
 const defaultPlayerFFmpegCRF = 21
 const defaultPlayerFFmpegAudioBitrateKbps = 192
 const defaultPlayerFFmpegThreads = 0
+const defaultPlayerFFmpegHardwareAcceleration = PlayerFFmpegHardwareAccelerationNone
 const transmissionSessionHeader = "X-Transmission-Session-Id"
 
 type playerBootstrapSettings struct {
@@ -98,13 +99,14 @@ func (s *service) loadPlayerBootstrapSettings(ctx context.Context, db *gorm.DB) 
 		TransmissionCleanupSlowWindowMinutes: defaultPlayerTransmissionCleanupSlowWindowMinutes,
 		TransmissionCleanupSlowRateKbps:      defaultPlayerTransmissionCleanupSlowRateKbps,
 		FFmpeg: PlayerFFmpegTranscodeSettings{
-			Enabled:          true,
-			BinaryPath:       defaultPlayerFFmpegBinaryPath,
-			Preset:           defaultPlayerFFmpegPreset,
-			CRF:              defaultPlayerFFmpegCRF,
-			AudioBitrateKbps: defaultPlayerFFmpegAudioBitrateKbps,
-			Threads:          defaultPlayerFFmpegThreads,
-			ExtraArgs:        "",
+			Enabled:              true,
+			BinaryPath:           defaultPlayerFFmpegBinaryPath,
+			Preset:               defaultPlayerFFmpegPreset,
+			CRF:                  defaultPlayerFFmpegCRF,
+			AudioBitrateKbps:     defaultPlayerFFmpegAudioBitrateKbps,
+			Threads:              defaultPlayerFFmpegThreads,
+			HardwareAcceleration: defaultPlayerFFmpegHardwareAcceleration,
+			ExtraArgs:            "",
 		},
 	}
 
@@ -243,6 +245,9 @@ func (s *service) loadPlayerBootstrapSettings(ctx context.Context, db *gorm.DB) 
 		if parsed, ok := parseRuntimeIntInRange(raw, 0, 32); ok {
 			settings.FFmpeg.Threads = parsed
 		}
+	}
+	if raw, ok := values[runtimeconfig.KeyPlayerFFmpegHardwareAcceleration]; ok {
+		settings.FFmpeg.HardwareAcceleration = NormalizePlayerFFmpegHardwareAcceleration(raw)
 	}
 	applyRuntimeString(values, runtimeconfig.KeyPlayerFFmpegExtraArgs, true, func(value string) {
 		settings.FFmpeg.ExtraArgs = value

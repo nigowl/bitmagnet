@@ -88,6 +88,31 @@ func TestBuildPlayerHLSFFmpegArgsToneMapsHDR(t *testing.T) {
 	}
 }
 
+func TestBuildPlayerFFmpegArgsUsesVAAPIEncoder(t *testing.T) {
+	settings := media.PlayerFFmpegTranscodeSettings{
+		Preset:               "veryfast",
+		CRF:                  23,
+		AudioBitrateKbps:     128,
+		HardwareAcceleration: media.PlayerFFmpegHardwareAccelerationVAAPI,
+	}
+
+	args := buildPlayerFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 1080, media.PlayerVideoColorInfo{}, false)
+	joined := strings.Join(args, " ")
+	for _, expected := range []string{
+		"-vaapi_device /dev/dri/renderD128",
+		"-c:v h264_vaapi",
+		"-qp 23",
+		"format=nv12,hwupload",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("expected VAAPI args to contain %q, args=%s", expected, joined)
+		}
+	}
+	if strings.Contains(joined, "libx264") || strings.Contains(joined, "-preset veryfast") {
+		t.Fatalf("expected VAAPI args to skip software encoder options, args=%s", joined)
+	}
+}
+
 func TestRewritePlayerHLSPlaylist(t *testing.T) {
 	playlist := "#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:2.000,\nsegment-000000.ts\n#EXTINF:2.000,\nsegment-000001.ts\n"
 	rewritten := rewritePlayerHLSPlaylist(playlist, "0123456789abcdef0123456789abcdef01234567")

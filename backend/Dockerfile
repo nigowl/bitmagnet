@@ -22,6 +22,8 @@ RUN apk add --no-cache \
     curl \
     iproute2-ss \
     ca-certificates \
+    libva \
+    mesa-va-gallium \
     ffmpeg
 
 COPY --from=build /tmp/bitmagnet /usr/bin/bitmagnet

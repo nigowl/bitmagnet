@@ -171,6 +171,7 @@ export const DEFAULT_PLAYER_SETTINGS: SystemSettings["player"] = {
     crf: 21,
     audioBitrateKbps: 192,
     threads: 0,
+    hardwareAcceleration: "none",
     extraArgs: ""
   }
 };

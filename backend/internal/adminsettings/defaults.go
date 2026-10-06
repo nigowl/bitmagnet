@@ -3,6 +3,7 @@ package adminsettings
 import (
 	"time"
 
+	"github.com/nigowl/bitmagnet/internal/media"
 	"github.com/nigowl/bitmagnet/internal/queue"
 )
 
@@ -84,13 +85,14 @@ func newSettingsDefaults(p Params, defaultLogLevel string) Settings {
 				AutoCleanupSlowRateKbps:      100,
 			},
 			FFmpeg: FFmpegSettings{
-				Enabled:          true,
-				BinaryPath:       "ffmpeg",
-				Preset:           "veryfast",
-				CRF:              21,
-				AudioBitrateKbps: 192,
-				Threads:          0,
-				ExtraArgs:        "",
+				Enabled:              true,
+				BinaryPath:           "ffmpeg",
+				Preset:               "veryfast",
+				CRF:                  21,
+				AudioBitrateKbps:     192,
+				Threads:              0,
+				HardwareAcceleration: media.PlayerFFmpegHardwareAccelerationNone,
+				ExtraArgs:            "",
 			},
 		},
 		Auth: AuthSettings{

@@ -49,6 +49,7 @@ const (
 	KeyPlayerFFmpegCRF                            = "system.player.ffmpeg.crf"
 	KeyPlayerFFmpegAudioBitrateKbps               = "system.player.ffmpeg.audio_bitrate_kbps"
 	KeyPlayerFFmpegThreads                        = "system.player.ffmpeg.threads"
+	KeyPlayerFFmpegHardwareAcceleration           = "system.player.ffmpeg.hardware_acceleration"
 	KeyPlayerFFmpegExtraArgs                      = "system.player.ffmpeg.extra_args"
 
 	KeyAuthMembershipEnabled   = "system.auth.membership.enabled"
@@ -218,6 +219,7 @@ func PlayerKeys() []string {
 		KeyPlayerFFmpegCRF,
 		KeyPlayerFFmpegAudioBitrateKbps,
 		KeyPlayerFFmpegThreads,
+		KeyPlayerFFmpegHardwareAcceleration,
 		KeyPlayerFFmpegExtraArgs,
 	}
 }
