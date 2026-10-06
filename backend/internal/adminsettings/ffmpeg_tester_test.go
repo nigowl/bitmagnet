@@ -19,12 +19,14 @@ func TestBuildFFmpegHLSArgsUsesVAAPIEncoder(t *testing.T) {
 	joined := strings.Join(args, " ")
 	for _, expected := range []string{
 		"-vaapi_device /dev/dri/renderD128",
+		"-hwaccel vaapi",
+		"-hwaccel_device /dev/dri/renderD128",
+		"-hwaccel_output_format vaapi",
 		"-f hls",
 		"-hls_time 2",
 		"-hls_segment_type mpegts",
-		"-vf scale=w=-2:h=2160",
+		"-vf scale_vaapi=",
 		"format=nv12",
-		"hwupload",
 		"-c:v h264_vaapi",
 		"-qp 23",
 	} {

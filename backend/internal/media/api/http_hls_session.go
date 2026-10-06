@@ -92,7 +92,7 @@ func (b *builder) playerHLSStartOrReuseSession(
 		resolveResult.AudioTrackIndex,
 		resolveResult.OutputResolution,
 		resolveResult.VideoColor,
-		prebufferSeconds,
+		!resolveResult.Completed,
 		sessionDir,
 	)
 	cmd := exec.Command(binaryPath, args...)

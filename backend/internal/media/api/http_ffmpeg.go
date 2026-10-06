@@ -51,7 +51,12 @@ func buildPlayerFFmpegArgs(
 		"-avoid_negative_ts", "make_zero",
 	}
 	if hardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
-		args = append(args, "-vaapi_device", media.PlayerFFmpegVAAPIDevice)
+		args = append(args,
+			"-vaapi_device", media.PlayerFFmpegVAAPIDevice,
+			"-hwaccel", "vaapi",
+			"-hwaccel_device", media.PlayerFFmpegVAAPIDevice,
+			"-hwaccel_output_format", "vaapi",
+		)
 	}
 	if startSeconds > 0 {
 		startValue := strconv.FormatFloat(startSeconds, 'f', 3, 64)
@@ -118,7 +123,7 @@ func buildPlayerHLSFFmpegArgs(
 	audioTrackIndex int,
 	outputResolution int,
 	videoColor media.PlayerVideoColorInfo,
-	_ int,
+	realTimeInput bool,
 	outputDir string,
 ) []string {
 	return ffmpegargs.BuildPlayerHLSFFmpegArgs(
@@ -128,6 +133,7 @@ func buildPlayerHLSFFmpegArgs(
 		audioTrackIndex,
 		outputResolution,
 		videoColor,
+		realTimeInput,
 		playerHLSSegmentSeconds,
 		outputDir,
 	)
@@ -135,22 +141,43 @@ func buildPlayerHLSFFmpegArgs(
 
 func playerFFmpegVideoFilterChain(outputResolution int, videoColor media.PlayerVideoColorInfo, hardwareAcceleration string) string {
 	filters := make([]string, 0, 3)
+	if hardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
+		if videoColor.NeedsToneMap {
+			filters = append(filters, "hwdownload", "format=p010", "tonemap=tonemap=mobius:peak=1000:desat=1.5")
+			if outputResolution > 0 {
+				filters = append(filters, fmt.Sprintf("scale=w=-2:h=%d:force_original_aspect_ratio=decrease:force_divisible_by=2", outputResolution))
+			}
+			filters = append(filters,
+				"pad=w='max(256,iw+mod(iw,2))':h='max(128,ih+mod(ih,2))':x='(ow-iw)/2':y='(oh-ih)/2':color=black",
+				"format=nv12",
+				"hwupload",
+			)
+			return strings.Join(filters, ",")
+		}
+		return playerFFmpegVAAPIScaleFilter(outputResolution)
+	}
 	if videoColor.NeedsToneMap {
 		filters = append(filters, "tonemap=tonemap=mobius:peak=1000:desat=1.5")
 	}
 	if outputResolution > 0 {
 		filters = append(filters, fmt.Sprintf("scale=w=-2:h=%d:force_original_aspect_ratio=decrease:force_divisible_by=2", outputResolution))
 	}
-	if hardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
-		filters = append(filters,
-			"pad=w='max(256,iw+mod(iw,2))':h='max(128,ih+mod(ih,2))':x='(ow-iw)/2':y='(oh-ih)/2':color=black",
-			"format=nv12",
-			"hwupload",
-		)
-	} else if videoColor.NeedsToneMap {
+	if videoColor.NeedsToneMap {
 		filters = append(filters, "format=yuv420p")
 	}
 	return strings.Join(filters, ",")
+}
+
+func playerFFmpegVAAPIScaleFilter(outputResolution int) string {
+	targetHeight := "ih"
+	if outputResolution > 0 {
+		targetHeight = strconv.Itoa(outputResolution)
+	}
+	return fmt.Sprintf(
+		"scale_vaapi=w='max(256,ceil(iw*min(1,%s/ih)/2)*2)':h='max(128,ceil(ih*min(1,%s/ih)/2)*2)':format=nv12",
+		targetHeight,
+		targetHeight,
+	)
 }
 
 func buildPlayerFFmpegThumbnailArgs(filePath string, seconds float64) []string {

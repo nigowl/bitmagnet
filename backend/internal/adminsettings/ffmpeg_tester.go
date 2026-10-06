@@ -16,7 +16,8 @@ import (
 
 const (
 	ffmpegTestOutputResolution = 2160
-	ffmpegTestDurationSeconds  = "3.2"
+	ffmpegTestDurationSeconds  = "6.2"
+	ffmpegTestStartSeconds     = 1.2
 )
 
 type FFmpegTestInput struct {
@@ -190,8 +191,8 @@ func probeFFmpegHLS(ctx context.Context, binaryPath string, options FFmpegSettin
 	if err != nil {
 		return testArgs, fmt.Errorf("ffmpeg hls segment scan failed: %w", err)
 	}
-	if len(segments) == 0 {
-		return testArgs, fmt.Errorf("ffmpeg hls produced no segments")
+	if len(segments) < 2 {
+		return testArgs, fmt.Errorf("ffmpeg hls produced fewer than two segments")
 	}
 	return testArgs, nil
 }
@@ -235,10 +236,11 @@ func buildFFmpegHLSArgs(inputPath string, outputDir string, options FFmpegSettin
 			HardwareAcceleration: options.HardwareAcceleration,
 			ExtraArgs:            options.ExtraArgs,
 		},
-		0,
+		ffmpegTestStartSeconds,
 		-1,
 		ffmpegTestOutputResolution,
 		media.PlayerVideoColorInfo{},
+		false,
 		2,
 		outputDir,
 	)

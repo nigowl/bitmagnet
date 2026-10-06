@@ -36,7 +36,7 @@ func TestBuildPlayerHLSFFmpegArgsWritesSegmentedPlaylist(t *testing.T) {
 		AudioBitrateKbps: 128,
 	}
 
-	args := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 12.5, -1, 1080, media.PlayerVideoColorInfo{}, 60, "/tmp/hls-cache")
+	args := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 12.5, -1, 1080, media.PlayerVideoColorInfo{}, false, "/tmp/hls-cache")
 	joined := strings.Join(args, " ")
 	for _, expected := range []string{
 		"-f hls",
@@ -68,7 +68,7 @@ func TestBuildPlayerHLSFFmpegArgsSkipsForcedKeyframesForVAAPI(t *testing.T) {
 		CRF:                  23,
 		AudioBitrateKbps:     128,
 		HardwareAcceleration: media.PlayerFFmpegHardwareAccelerationVAAPI,
-	}, 0, -1, 2160, media.PlayerVideoColorInfo{}, 60, "/tmp/hls-cache")
+	}, 0, -1, 2160, media.PlayerVideoColorInfo{}, false, "/tmp/hls-cache")
 	if containsArg(args, "-force_key_frames") {
 		t.Fatalf("expected VAAPI HLS args to skip force_key_frames, args=%s", strings.Join(args, " "))
 	}
@@ -78,13 +78,31 @@ func TestBuildPlayerHLSFFmpegArgsSkipsForcedKeyframesForVAAPI(t *testing.T) {
 	if containsArg(args, "-profile:v") || containsArg(args, "-level") {
 		t.Fatalf("expected VAAPI HLS args to let the driver choose profile and level, args=%s", strings.Join(args, " "))
 	}
+	joined := strings.Join(args, " ")
+	for _, expected := range []string{
+		"-hwaccel vaapi",
+		"-hwaccel_device /dev/dri/renderD128",
+		"-hwaccel_output_format vaapi",
+		"scale_vaapi=",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("expected VAAPI HLS args to contain %q, args=%s", expected, joined)
+		}
+	}
+}
+
+func TestBuildPlayerHLSFFmpegArgsUsesRealtimeInputForIncompleteFiles(t *testing.T) {
+	args := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", media.PlayerFFmpegTranscodeSettings{}, 0, -1, 2160, media.PlayerVideoColorInfo{}, true, "/tmp/hls-cache")
+	if !containsArg(args, "-re") {
+		t.Fatalf("expected incomplete HLS input to include -re, args=%s", strings.Join(args, " "))
+	}
 }
 
 func TestBuildPlayerHLSFFmpegArgsToneMapsHDR(t *testing.T) {
 	settings := media.PlayerFFmpegTranscodeSettings{Preset: "veryfast"}
 	args := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 0, media.PlayerVideoColorInfo{
 		NeedsToneMap: true,
-	}, 60, "/tmp/hls-cache")
+	}, false, "/tmp/hls-cache")
 	joined := strings.Join(args, " ")
 	for _, expected := range []string{
 		"tonemap=tonemap=mobius:peak=1000:desat=1.5",
@@ -99,7 +117,7 @@ func TestBuildPlayerHLSFFmpegArgsToneMapsHDR(t *testing.T) {
 		}
 	}
 
-	sdrArgs := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 0, media.PlayerVideoColorInfo{}, 60, "/tmp/hls-cache")
+	sdrArgs := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 0, media.PlayerVideoColorInfo{}, false, "/tmp/hls-cache")
 	if strings.Contains(strings.Join(sdrArgs, " "), "tonemap=") {
 		t.Fatalf("expected SDR HLS args to skip tonemap, args=%s", strings.Join(sdrArgs, " "))
 	}
@@ -117,9 +135,13 @@ func TestBuildPlayerFFmpegArgsUsesVAAPIEncoder(t *testing.T) {
 	joined := strings.Join(args, " ")
 	for _, expected := range []string{
 		"-vaapi_device /dev/dri/renderD128",
+		"-hwaccel vaapi",
+		"-hwaccel_device /dev/dri/renderD128",
+		"-hwaccel_output_format vaapi",
 		"-c:v h264_vaapi",
 		"-qp 23",
-		"format=nv12,hwupload",
+		"scale_vaapi=",
+		"format=nv12",
 	} {
 		if !strings.Contains(joined, expected) {
 			t.Fatalf("expected VAAPI args to contain %q, args=%s", expected, joined)
@@ -139,8 +161,8 @@ func TestBuildPlayerFFmpegArgsPadsSmallVAAPIInputs(t *testing.T) {
 
 	args := buildPlayerFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 0, media.PlayerVideoColorInfo{}, false)
 	joined := strings.Join(args, " ")
-	if !strings.Contains(joined, "pad=w='max(256,iw+mod(iw,2))':h='max(128,ih+mod(ih,2))'") {
-		t.Fatalf("expected VAAPI args to pad small inputs, args=%s", joined)
+	if !strings.Contains(joined, "scale_vaapi=w='max(256,ceil(iw*min(1,ih/ih)/2)*2)':h='max(128,ceil(ih*min(1,ih/ih)/2)*2)'") {
+		t.Fatalf("expected VAAPI args to keep encoder minimum dimensions, args=%s", joined)
 	}
 }
 
