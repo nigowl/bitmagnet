@@ -19,8 +19,9 @@ func TestBuildPlayerFFmpegArgsUsesRealtimeInputOnlyForIncompleteFiles(t *testing
 	}
 
 	incompleteArgs := buildPlayerFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 0, media.PlayerVideoColorInfo{}, true)
-	if !containsArg(incompleteArgs, "-re") {
-		t.Fatalf("expected incomplete local input to include -re, args=%s", strings.Join(incompleteArgs, " "))
+	incompleteJoined := strings.Join(incompleteArgs, " ")
+	if !strings.Contains(incompleteJoined, "-readrate 4") {
+		t.Fatalf("expected incomplete local input to use burstable readrate, args=%s", incompleteJoined)
 	}
 
 	completedArgs := buildPlayerFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 0, media.PlayerVideoColorInfo{}, false)
@@ -93,8 +94,14 @@ func TestBuildPlayerHLSFFmpegArgsSkipsForcedKeyframesForVAAPI(t *testing.T) {
 
 func TestBuildPlayerHLSFFmpegArgsUsesRealtimeInputForIncompleteFiles(t *testing.T) {
 	args := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", media.PlayerFFmpegTranscodeSettings{}, 0, -1, 2160, media.PlayerVideoColorInfo{}, true, "/tmp/hls-cache")
-	if !containsArg(args, "-re") {
-		t.Fatalf("expected incomplete HLS input to include -re, args=%s", strings.Join(args, " "))
+	joined := strings.Join(args, " ")
+	for _, expected := range []string{"-readrate 4", "-readrate_initial_burst 8", "-readrate_catchup 8"} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("expected incomplete HLS input to contain %q, args=%s", expected, joined)
+		}
+	}
+	if containsArg(args, "-re") {
+		t.Fatalf("expected incomplete HLS input to use burstable readrate, args=%s", joined)
 	}
 }
 

@@ -65,7 +65,11 @@ func buildPlayerFFmpegArgs(
 		}
 	}
 	if filePath != "pipe:0" && realTimeInput {
-		args = append(args, "-re")
+		args = append(args,
+			"-readrate", "4",
+			"-readrate_initial_burst", "8",
+			"-readrate_catchup", "8",
+		)
 	}
 	args = append(args, "-i", filePath)
 	if startSeconds > 0 && filePath == "pipe:0" {
