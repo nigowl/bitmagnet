@@ -17,6 +17,7 @@ func TestBuildFFmpegSanityArgsUsesVAAPIEncoder(t *testing.T) {
 	joined := strings.Join(args, " ")
 	for _, expected := range []string{
 		"-vaapi_device /dev/dri/renderD128",
+		"testsrc=size=320x240:rate=24",
 		"-vf format=nv12,hwupload",
 		"-c:v h264_vaapi",
 		"-qp 23",

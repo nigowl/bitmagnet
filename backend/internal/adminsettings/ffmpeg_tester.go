@@ -172,7 +172,7 @@ func buildFFmpegSanityArgs(options FFmpegSettings) []string {
 	}
 	args = append(args,
 		"-f", "lavfi",
-		"-i", "testsrc=size=160x90:rate=24",
+		"-i", "testsrc=size=320x240:rate=24",
 		"-f", "lavfi",
 		"-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
 		"-t", "1.2",

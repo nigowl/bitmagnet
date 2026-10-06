@@ -113,6 +113,20 @@ func TestBuildPlayerFFmpegArgsUsesVAAPIEncoder(t *testing.T) {
 	}
 }
 
+func TestBuildPlayerFFmpegArgsPadsSmallVAAPIInputs(t *testing.T) {
+	settings := media.PlayerFFmpegTranscodeSettings{
+		CRF:                  23,
+		AudioBitrateKbps:     128,
+		HardwareAcceleration: media.PlayerFFmpegHardwareAccelerationVAAPI,
+	}
+
+	args := buildPlayerFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 0, media.PlayerVideoColorInfo{}, false)
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "pad=w='max(256,iw+mod(iw,2))':h='max(128,ih+mod(ih,2))'") {
+		t.Fatalf("expected VAAPI args to pad small inputs, args=%s", joined)
+	}
+}
+
 func TestRewritePlayerHLSPlaylist(t *testing.T) {
 	playlist := "#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:2.000,\nsegment-000000.ts\n#EXTINF:2.000,\nsegment-000001.ts\n"
 	rewritten := rewritePlayerHLSPlaylist(playlist, "0123456789abcdef0123456789abcdef01234567")

@@ -202,7 +202,13 @@ func playerFFmpegVideoFilterChain(outputResolution int, videoColor media.PlayerV
 		filters = append(filters, fmt.Sprintf("scale=w=-2:h=%d:force_original_aspect_ratio=decrease:force_divisible_by=2", outputResolution))
 	}
 	if hardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
-		filters = append(filters, "format=nv12", "hwupload")
+		// VAAPI encoders commonly reject frames below 256x128. Pad small inputs
+		// instead of stretching them so low-resolution videos remain watchable.
+		filters = append(filters,
+			"pad=w='max(256,iw+mod(iw,2))':h='max(128,ih+mod(ih,2))':x='(ow-iw)/2':y='(oh-ih)/2':color=black",
+			"format=nv12",
+			"hwupload",
+		)
 	} else if videoColor.NeedsToneMap {
 		filters = append(filters, "format=yuv420p")
 	}
