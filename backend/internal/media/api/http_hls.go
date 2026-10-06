@@ -282,7 +282,7 @@ func waitForPlayerHLSPrebuffer(ctx context.Context, session *playerHLSSession, t
 			return cachedSeconds, false, ctx.Err()
 		case <-session.Done:
 			if session.ExitErr != nil {
-				return cachedSeconds, false, fmt.Errorf("hls transcode failed before prebuffer target: %w", session.ExitErr)
+				return cachedSeconds, false, fmt.Errorf("hls transcode failed before prebuffer target: %s", playerHLSFFmpegError(session))
 			}
 			if cachedSeconds > 0 {
 				return cachedSeconds, true, nil
@@ -293,6 +293,29 @@ func waitForPlayerHLSPrebuffer(ctx context.Context, session *playerHLSSession, t
 		case <-time.After(playerHLSWaitPollInterval):
 		}
 	}
+}
+
+func playerHLSFFmpegError(session *playerHLSSession) string {
+	if session == nil {
+		return "unknown ffmpeg error"
+	}
+	message := ""
+	if strings.TrimSpace(session.StderrPath) != "" {
+		if raw, err := os.ReadFile(session.StderrPath); err == nil {
+			message = strings.TrimSpace(string(raw))
+		}
+	}
+	if message == "" && session.ExitErr != nil {
+		message = session.ExitErr.Error()
+	}
+	if message == "" {
+		return "unknown ffmpeg error"
+	}
+	const maxMessageLength = 4000
+	if len(message) > maxMessageLength {
+		message = message[len(message)-maxMessageLength:]
+	}
+	return message
 }
 
 func playerHLSCachedSeconds(playlistPath string) (float64, bool) {

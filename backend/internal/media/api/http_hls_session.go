@@ -27,6 +27,7 @@ type playerHLSSession struct {
 	PrebufferSeconds int
 	StartSeconds     float64
 	TranscodePaused  bool
+	StderrPath       string
 	Cmd              *exec.Cmd
 	Done             chan struct{}
 	DoneObserved     bool
@@ -114,6 +115,7 @@ func (b *builder) playerHLSStartOrReuseSession(
 		LastAccessedAt:   time.Now(),
 		PrebufferSeconds: prebufferSeconds,
 		StartSeconds:     math.Max(0, resolveResult.StartSeconds),
+		StderrPath:       stderrPath,
 		Cmd:              cmd,
 		Done:             make(chan struct{}),
 	}

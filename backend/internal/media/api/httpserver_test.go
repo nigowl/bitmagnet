@@ -63,6 +63,23 @@ func TestBuildPlayerHLSFFmpegArgsWritesSegmentedPlaylist(t *testing.T) {
 	}
 }
 
+func TestBuildPlayerHLSFFmpegArgsSkipsForcedKeyframesForVAAPI(t *testing.T) {
+	args := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", media.PlayerFFmpegTranscodeSettings{
+		CRF:                  23,
+		AudioBitrateKbps:     128,
+		HardwareAcceleration: media.PlayerFFmpegHardwareAccelerationVAAPI,
+	}, 0, -1, 2160, media.PlayerVideoColorInfo{}, 60, "/tmp/hls-cache")
+	if containsArg(args, "-force_key_frames") {
+		t.Fatalf("expected VAAPI HLS args to skip force_key_frames, args=%s", strings.Join(args, " "))
+	}
+	if !containsArg(args, "-g") || !containsArg(args, "48") {
+		t.Fatalf("expected VAAPI HLS args to keep fixed GOP, args=%s", strings.Join(args, " "))
+	}
+	if containsArg(args, "-profile:v") || containsArg(args, "-level") {
+		t.Fatalf("expected VAAPI HLS args to let the driver choose profile and level, args=%s", strings.Join(args, " "))
+	}
+}
+
 func TestBuildPlayerHLSFFmpegArgsToneMapsHDR(t *testing.T) {
 	settings := media.PlayerFFmpegTranscodeSettings{Preset: "veryfast"}
 	args := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 0, media.PlayerVideoColorInfo{

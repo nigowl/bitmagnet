@@ -4,12 +4,19 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
-	"strconv"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/nigowl/bitmagnet/internal/media"
+	"github.com/nigowl/bitmagnet/internal/media/ffmpegargs"
+)
+
+const (
+	ffmpegTestOutputResolution = 2160
+	ffmpegTestDurationSeconds  = "3.2"
 )
 
 type FFmpegTestInput struct {
@@ -84,36 +91,36 @@ func (s *service) TestPlayerFFmpeg(ctx context.Context, input FFmpegTestInput) (
 		HardwareAcceleration: hardwareAcceleration,
 		ExtraArgs:            firstNonEmptyTrimmed(input.ExtraArgs),
 	}
-	testArgs := buildFFmpegSanityArgs(options)
-	preview := strings.Join(append([]string{binaryPath}, testArgs...), " ")
 
 	startedAt := time.Now()
-	encodeMode := "lavfi-smoke"
+	encodeMode := "hls-smoke"
 	if hardwareAcceleration != media.PlayerFFmpegHardwareAccelerationNone {
-		encodeMode = hardwareAcceleration
+		encodeMode = "hls-" + hardwareAcceleration
 	}
-	buildResult := func(success bool, message string, version string) FFmpegTestResult {
+	buildResult := func(success bool, message string, version string, args []string) FFmpegTestResult {
 		return FFmpegTestResult{
 			Success:              success,
 			Message:              message,
 			BinaryPath:           binaryPath,
 			LatencyMs:            time.Since(startedAt).Milliseconds(),
 			Version:              version,
-			ArgsPreview:          preview,
+			ArgsPreview:          strings.Join(append([]string{binaryPath}, args...), " "),
 			EncodeMode:           encodeMode,
 			HardwareAcceleration: hardwareAcceleration,
 		}
 	}
+
 	version, err := probeFFmpegVersion(ctx, binaryPath)
 	if err != nil {
-		return buildResult(false, err.Error(), ""), nil
+		return buildResult(false, err.Error(), "", nil), nil
 	}
 
-	if err := probeFFmpegEncode(ctx, binaryPath, testArgs); err != nil {
-		return buildResult(false, err.Error(), version), nil
+	testArgs, err := probeFFmpegHLS(ctx, binaryPath, options)
+	if err != nil {
+		return buildResult(false, err.Error(), version, testArgs), nil
 	}
 
-	return buildResult(true, "ffmpeg encode pipeline ok", version), nil
+	return buildResult(true, "ffmpeg hls encode pipeline ok", version, testArgs), nil
 }
 
 func probeFFmpegVersion(ctx context.Context, binaryPath string) (string, error) {
@@ -144,11 +151,101 @@ func probeFFmpegVersion(ctx context.Context, binaryPath string) (string, error) 
 	return firstLine, nil
 }
 
-func probeFFmpegEncode(ctx context.Context, binaryPath string, args []string) error {
-	testCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+func probeFFmpegHLS(ctx context.Context, binaryPath string, options FFmpegSettings) ([]string, error) {
+	testCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(testCtx, binaryPath, args...)
+	workDir, err := os.MkdirTemp("", "bitmagnet-ffmpeg-hls-test-*")
+	if err != nil {
+		return nil, fmt.Errorf("create ffmpeg test directory: %w", err)
+	}
+	defer os.RemoveAll(workDir)
+
+	inputPath := filepath.Join(workDir, "input.mkv")
+	outputDir := filepath.Join(workDir, "hls")
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create ffmpeg hls output directory: %w", err)
+	}
+
+	if err := runFFmpegCommand(testCtx, binaryPath, buildFFmpegTestInputArgs(inputPath, options)); err != nil {
+		return nil, fmt.Errorf("ffmpeg test input generation failed: %w", err)
+	}
+
+	testArgs := buildFFmpegHLSArgs(inputPath, outputDir, options)
+	if err := runFFmpegCommand(testCtx, binaryPath, testArgs); err != nil {
+		return testArgs, fmt.Errorf("ffmpeg hls encode failed: %w", err)
+	}
+
+	playlistPath := filepath.Join(outputDir, "index.m3u8")
+	playlist, err := os.ReadFile(playlistPath)
+	if err != nil {
+		return testArgs, fmt.Errorf("ffmpeg hls playlist missing: %w", err)
+	}
+	playlistText := string(playlist)
+	if !strings.Contains(playlistText, "#EXTM3U") || !strings.Contains(playlistText, "#EXTINF:") {
+		return testArgs, fmt.Errorf("ffmpeg hls playlist is invalid")
+	}
+
+	segments, err := filepath.Glob(filepath.Join(outputDir, "segment-*.ts"))
+	if err != nil {
+		return testArgs, fmt.Errorf("ffmpeg hls segment scan failed: %w", err)
+	}
+	if len(segments) == 0 {
+		return testArgs, fmt.Errorf("ffmpeg hls produced no segments")
+	}
+	return testArgs, nil
+}
+
+func buildFFmpegTestInputArgs(inputPath string, options FFmpegSettings) []string {
+	sourceSize := "1280x720"
+	if options.HardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
+		sourceSize = "3840x2160"
+	}
+	return []string{
+		"-hide_banner",
+		"-loglevel", "error",
+		"-nostdin",
+		"-y",
+		"-f", "lavfi",
+		"-i", "testsrc=size=" + sourceSize + ":rate=24",
+		"-f", "lavfi",
+		"-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+		"-t", ffmpegTestDurationSeconds,
+		"-map", "0:v:0",
+		"-map", "1:a:0",
+		"-c:v", "libx264",
+		"-preset", "ultrafast",
+		"-pix_fmt", "yuv420p",
+		"-c:a", "aac",
+		"-b:a", "128k",
+		inputPath,
+	}
+}
+
+func buildFFmpegHLSArgs(inputPath string, outputDir string, options FFmpegSettings) []string {
+	return ffmpegargs.BuildPlayerHLSFFmpegArgs(
+		inputPath,
+		media.PlayerFFmpegTranscodeSettings{
+			Enabled:              true,
+			BinaryPath:           options.BinaryPath,
+			Preset:               options.Preset,
+			CRF:                  options.CRF,
+			AudioBitrateKbps:     options.AudioBitrateKbps,
+			Threads:              options.Threads,
+			HardwareAcceleration: options.HardwareAcceleration,
+			ExtraArgs:            options.ExtraArgs,
+		},
+		0,
+		-1,
+		ffmpegTestOutputResolution,
+		media.PlayerVideoColorInfo{},
+		2,
+		outputDir,
+	)
+}
+
+func runFFmpegCommand(ctx context.Context, binaryPath string, args []string) error {
+	cmd := exec.CommandContext(ctx, binaryPath, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -156,44 +253,7 @@ func probeFFmpegEncode(ctx context.Context, binaryPath string, args []string) er
 		if message == "" {
 			message = err.Error()
 		}
-		return fmt.Errorf("ffmpeg encode failed: %s", message)
+		return fmt.Errorf("%s", message)
 	}
 	return nil
-}
-
-func buildFFmpegSanityArgs(options FFmpegSettings) []string {
-	args := []string{
-		"-hide_banner",
-		"-loglevel", "error",
-		"-nostdin",
-	}
-	if options.HardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
-		args = append(args, "-vaapi_device", media.PlayerFFmpegVAAPIDevice)
-	}
-	args = append(args,
-		"-f", "lavfi",
-		"-i", "testsrc=size=320x240:rate=24",
-		"-f", "lavfi",
-		"-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
-		"-t", "1.2",
-		"-map", "0:v:0",
-		"-map", "1:a:0",
-		"-sn",
-		"-dn",
-		"-c:a", "aac",
-		"-b:a", fmt.Sprintf("%dk", options.AudioBitrateKbps),
-	)
-	if options.HardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
-		args = append(args, "-vf", "format=nv12,hwupload", "-c:v", "h264_vaapi", "-qp", strconv.Itoa(options.CRF))
-	} else {
-		args = append(args, "-c:v", "libx264", "-preset", options.Preset, "-crf", strconv.Itoa(options.CRF), "-pix_fmt", "yuv420p")
-	}
-	if options.Threads > 0 {
-		args = append(args, "-threads", strconv.Itoa(options.Threads))
-	}
-	if extra := strings.TrimSpace(options.ExtraArgs); extra != "" {
-		args = append(args, strings.Fields(extra)...)
-	}
-	args = append(args, "-f", "null", "-")
-	return args
 }
