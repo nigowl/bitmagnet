@@ -210,6 +210,14 @@ func (s *service) List(ctx context.Context, input ListInput) (ListResult, error)
 		db = db.Where("me.has_cache = ?", true)
 	}
 
+	if favoriteFilter := normalizeListFilter(input.Favorite); favoriteFilter == "favorited" || favoriteFilter == "true" || favoriteFilter == "1" {
+		if input.ViewerID <= 0 {
+			db = db.Where("1 = 0")
+		} else {
+			db = applyFavoriteFilter(db, input.ViewerID)
+		}
+	}
+
 	scoreMin, hasScoreMin := normalizeScoreBound(input.ScoreMin)
 	scoreMax, hasScoreMax := normalizeScoreBound(input.ScoreMax)
 	if hasScoreMin || hasScoreMax {

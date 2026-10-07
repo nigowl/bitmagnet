@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/nigowl/bitmagnet/internal/model"
 	"gorm.io/gorm"
 )
 
@@ -28,6 +29,13 @@ func normalizeSort(value string) string {
 	default:
 		return sortLatest
 	}
+}
+
+func applyFavoriteFilter(db *gorm.DB, viewerID int64) *gorm.DB {
+	return db.Where(
+		"EXISTS (SELECT 1 FROM "+model.TableNameTorrentContent+" AS tc JOIN "+model.TableNameUserFavorite+" AS uf ON uf.info_hash = tc.info_hash WHERE tc.content_type = me.content_type AND tc.content_source = me.content_source AND tc.content_id = me.content_id AND uf.user_id = ?)",
+		viewerID,
+	)
 }
 
 func normalizeScoreBound(value *float64) (float64, bool) {

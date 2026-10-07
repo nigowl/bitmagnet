@@ -2,6 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { notifications } from "@mantine/notifications";
 import { useAuth } from "@/auth/provider";
 import { useI18n } from "@/languages/provider";
 import type { PlayerTransmissionTaskStatus } from "@/lib/media-api";
@@ -41,10 +42,11 @@ const formatSubtitleOffsetLabel = player.formatSubtitleOffsetLabel;
 
 export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: string }) {
   const { t, locale } = useI18n();
-  const { user } = useAuth();
+  const { user, hasFavorite, toggleFavorite } = useAuth();
   const [cacheStatusOpened, setCacheStatusOpened] = useState(false);
   const searchParams = useSearchParams();
   const infoHash = player.normalizeInfoHash(routeInfoHash);
+  const isFavorited = hasFavorite(infoHash);
   const requestedFileIndex = useMemo(() => {
     const raw = searchParams.get("fileIndex");
     if (!raw) return -1;
@@ -951,6 +953,20 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   useEffect(() => {
     revealInlineControlsRef.current = revealInlineControls;
   }, [revealInlineControls, revealInlineControlsRef]);
+  const handleStagePointerMove = useCallback(() => {
+    if (!isFullscreenActive) return;
+    revealInlineControls(player.INLINE_CONTROLS_FULLSCREEN_HIDE_MS);
+  }, [isFullscreenActive, revealInlineControls]);
+  const handleToggleFavorite = useCallback(async () => {
+    if (!infoHash) return;
+    const removing = hasFavorite(infoHash);
+    try {
+      await toggleFavorite(infoHash);
+      notifications.show({ color: "green", message: removing ? t("profile.favoriteRemoved") : t("profile.favoriteAdded") });
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    }
+  }, [hasFavorite, infoHash, t, toggleFavorite]);
   const inlineControlsVisible = !isFullscreenActive || shouldKeepInlineControlsVisible || controlsActive;
   const audioFormatLabel = useMemo(() => {
     if (selectedAudioTrackId.startsWith("srv:")) {
@@ -995,6 +1011,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       base={{ t, detail, infoHash, playerError, formatClock, formatBytes, formatSpeed }}
       state={{
         canInitializePlayer, isVideoPaused, isFullscreenActive, inlineControlsVisible, isPipActive,
+        isFavorited,
         settingsOpen, audioTrackMenuOpen, subtitleManagerOpened, activePreferTranscode, streamUrl, selectedFileIndex, fileSwitching, fileOptions,
         selectedFileOption,
         seekHoverSeconds, seekHoverRatio, seekPreviewLoadedKey, seekPreviewFailedKey, videoFitMode, videoEffectPresets,
@@ -1015,6 +1032,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
       handlers={{
         onOpenDiagnostics: handleOpenDiagnostics,
         onOpenCacheStatus: () => setCacheStatusOpened(true),
+        onToggleFavorite: () => void handleToggleFavorite(),
         onStageClickTogglePlayback: handleStageClickTogglePlayback,
         onStageDoubleClickToggleFullscreen: handleStageDoubleClickToggleFullscreen,
         onTogglePlayback: handleTogglePlaybackButton,
@@ -1024,6 +1042,7 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         onSeekInput: handleSeekInput,
         onSeekChange: handleSeekChange,
         onSeekKeyUp: handleSeekKeyUp,
+        onStagePointerMove: handleStagePointerMove,
         onSetVideoBrightness: (value) => setVideoBrightness(player.normalizeVideoBrightnessPreference(value)),
         onSetVideoContrast: (value) => setVideoContrast(player.normalizeVideoContrastPreference(value)),
         onSetVideoSaturation: (value) => setVideoSaturation(player.normalizeVideoSaturationPreference(value)),

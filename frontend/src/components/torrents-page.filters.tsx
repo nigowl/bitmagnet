@@ -1,7 +1,7 @@
 "use client";
 
 import { Accordion, Badge, Card, Checkbox, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
-import { Search } from "lucide-react";
+import { Heart, Search } from "lucide-react";
 
 type FilterOption = {
   value: string;
@@ -18,12 +18,14 @@ type AggregationOption = {
 type TorrentFiltersSidebarProps = {
   t: (key: string) => string;
   search: string;
+  favoriteOnly: boolean;
   contentTypeFilters: string[];
   tagFilters: string[];
   contentTypeOptions: FilterOption[];
   tagOptions: AggregationOption[];
   onSearchChange: (value: string) => void;
   onCommitSearch: () => void;
+  onToggleFavorite: () => void;
   onChangeContentTypes: (value: string[]) => void;
   onChangeTags: (value: string[]) => void;
 };
@@ -31,12 +33,14 @@ type TorrentFiltersSidebarProps = {
 export function TorrentFiltersSidebar({
   t,
   search,
+  favoriteOnly,
   contentTypeFilters,
   tagFilters,
   contentTypeOptions,
   tagOptions,
   onSearchChange,
   onCommitSearch,
+  onToggleFavorite,
   onChangeContentTypes,
   onChangeTags
 }: TorrentFiltersSidebarProps) {
@@ -60,6 +64,16 @@ export function TorrentFiltersSidebar({
                     event.currentTarget.blur();
                   }
                 }}
+              />
+              <Checkbox
+                checked={favoriteOnly}
+                onChange={() => onToggleFavorite()}
+                label={
+                  <span className="filter-option-label">
+                    <Text size="sm">{t("torrents.favoriteFilter")}</Text>
+                    <Heart size={14} />
+                  </span>
+                }
               />
             </Stack>
           </Accordion.Panel>

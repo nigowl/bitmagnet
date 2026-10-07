@@ -3,7 +3,7 @@
 import Image from "next/image";
 import type { CSSProperties, MutableRefObject, ReactNode, MouseEvent as ReactMouseEvent } from "react";
 import { Alert, Badge, Button, Card, Group, Loader, Select, Stack, Text, Tooltip, ActionIcon } from "@mantine/core";
-import { AlertTriangle, Captions, Maximize2, Minimize2, Pause, PictureInPicture2, Play, Settings2 } from "lucide-react";
+import { AlertTriangle, Captions, Heart, HeartOff, Maximize2, Minimize2, Pause, PictureInPicture2, Play, Settings2 } from "lucide-react";
 import type { PlayerTransmissionStatusResponse } from "@/lib/media-api";
 import type { PlaybackFileOption, SubtitleCue, TorrentDetailLite, VideoEffectPreset } from "./torrent-player/torrent-player-helpers";
 import { TorrentPlayerInfoPanel } from "./torrent-player-page.view-info";
@@ -26,6 +26,7 @@ export type TorrentPlayerPageViewProps = {
   isFullscreenActive: boolean;
   inlineControlsVisible: boolean;
   isPipActive: boolean;
+  isFavorited: boolean;
   settingsOpen: boolean;
   audioTrackMenuOpen: boolean;
   subtitleManagerOpened: boolean;
@@ -84,6 +85,7 @@ export type TorrentPlayerPageViewProps = {
   formatBytes: (bytes: number) => string;
   formatSpeed: (bytesPerSecond: number) => string;
   onOpenCacheStatus: () => void;
+  onToggleFavorite: () => void;
   onOpenDiagnostics: () => void;
   onStageClickTogglePlayback: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onStageDoubleClickToggleFullscreen: (event: ReactMouseEvent<HTMLDivElement>) => void;
@@ -94,6 +96,7 @@ export type TorrentPlayerPageViewProps = {
   onSeekInput: (value: number) => void;
   onSeekChange: (value: number) => void;
   onSeekKeyUp: (value: number, key: string) => void;
+  onStagePointerMove: () => void;
   onSetVideoBrightness: (value: number) => void;
   onSetVideoContrast: (value: number) => void;
   onSetVideoSaturation: (value: number) => void;
@@ -131,6 +134,7 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
     isFullscreenActive,
     inlineControlsVisible,
     isPipActive,
+    isFavorited,
     settingsOpen,
     audioTrackMenuOpen,
     subtitleManagerOpened,
@@ -189,6 +193,7 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
     formatBytes,
     formatSpeed,
     onOpenCacheStatus,
+    onToggleFavorite,
     onOpenDiagnostics,
     onStageClickTogglePlayback,
     onStageDoubleClickToggleFullscreen,
@@ -199,6 +204,7 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
     onSeekInput,
     onSeekChange,
     onSeekKeyUp,
+    onStagePointerMove,
     onSetVideoBrightness,
     onSetVideoContrast,
     onSetVideoSaturation,
@@ -237,17 +243,31 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
               <Badge variant="light">{t("media.player.playbackPosition")}: {playbackPositionLabel}</Badge>
             </Group>
           </div>
-          <Tooltip label={t("media.player.diagnosticsTitle")} withArrow>
-            <ActionIcon
-              className="app-icon-btn torrent-player-diagnostics-btn"
-              variant="default"
-              size={32}
-              aria-label={t("media.player.diagnosticsTitle")}
-              onClick={onOpenDiagnostics}
-            >
-              <Settings2 size={14} />
-            </ActionIcon>
-          </Tooltip>
+          <Group gap={6}>
+            <Tooltip label={t("media.player.diagnosticsTitle")} withArrow>
+              <ActionIcon
+                className="app-icon-btn torrent-player-diagnostics-btn"
+                variant="default"
+                size={32}
+                aria-label={t("media.player.diagnosticsTitle")}
+                onClick={onOpenDiagnostics}
+              >
+                <Settings2 size={14} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label={isFavorited ? t("profile.removeFavorite") : t("profile.addFavorite")} withArrow>
+              <ActionIcon
+                className="app-icon-btn torrent-player-diagnostics-btn"
+                variant={isFavorited ? "light" : "default"}
+                color={isFavorited ? "pink" : undefined}
+                size={32}
+                aria-label={isFavorited ? t("profile.removeFavorite") : t("profile.addFavorite")}
+                onClick={onToggleFavorite}
+              >
+                {isFavorited ? <HeartOff size={14} /> : <Heart size={14} />}
+              </ActionIcon>
+            </Tooltip>
+          </Group>
         </Group>
       ) : null}
 
@@ -285,6 +305,8 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
           <div
             ref={playerStageRef}
             className={`torrent-player-stage-shell${isVideoPaused ? " is-paused" : ""}${isFullscreenActive ? " is-fullscreen" : ""}${inlineControlsVisible ? " controls-visible" : ""}`}
+            onPointerMove={onStagePointerMove}
+            onTouchStart={onStagePointerMove}
           >
             <div className={`torrent-player-wrap torrent-player-native-wrap ${videoEffectClassName}`} style={playerStageStyle}>
               <video

@@ -737,6 +737,7 @@
     "reprocess": "Reprocess",
     "delete": "Delete",
     "selected": "Selected",
+    "favoriteFilter": "Favorites only",
     "clearFilters": "Clear Filters",
     "details": "Details",
     "selectFirst": "Please select at least one torrent",
@@ -827,6 +828,7 @@
     "size": "Torrent Size",
     "torrentCount": "Torrents",
     "cacheBadge": "Cached",
+    "favoriteFilter": "Favorites",
     "all": "All",
     "contentTypes": {
       "all": "All",

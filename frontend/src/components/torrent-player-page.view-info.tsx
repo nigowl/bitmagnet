@@ -132,15 +132,17 @@ export function TorrentPlayerInfoPanel({
               percent={downloadedRatio}
               wide
               action={(
-                <button
-                  type="button"
-                  className="torrent-player-info-metric-action"
-                  onClick={onOpenCacheStatus}
-                  aria-label={t("media.detail.cacheStatusTitle")}
-                  title={t("media.detail.cacheStatusTitle")}
-                >
-                  <Info size={12} />
-                </button>
+                <span className="torrent-player-info-metric-actions">
+                  <button
+                    type="button"
+                    className="torrent-player-info-metric-action"
+                    onClick={onOpenCacheStatus}
+                    aria-label={t("media.detail.cacheStatusTitle")}
+                    title={t("media.detail.cacheStatusTitle")}
+                  >
+                    <Info size={12} />
+                  </button>
+                </span>
               )}
             />
             {streamUrl ? (

@@ -71,6 +71,30 @@ func TestListFiltersWithOrKeepContentTypeIsolation(t *testing.T) {
 	}
 }
 
+func TestApplyFavoriteFilterUsesTorrentContentRefs(t *testing.T) {
+	t.Parallel()
+
+	db := newDryRunMediaDB(t)
+	query := db.Table(model.TableNameMediaEntry + " me")
+	query = applyFavoriteFilter(query, 42)
+
+	sql := query.Find(&[]model.MediaEntry{}).Statement.SQL.String()
+	for _, want := range []string{
+		model.TableNameTorrentContent + " AS tc",
+		model.TableNameUserFavorite + " AS uf",
+		"tc.content_type = me.content_type",
+		"tc.content_source = me.content_source",
+		"tc.content_id = me.content_id",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("favorite filter SQL missing %q, got SQL: %s", want, sql)
+		}
+	}
+	if strings.Contains(sql, model.TableNameMediaEntryTorrent) {
+		t.Fatalf("favorite filter should not depend on media entry torrent cache table, got SQL: %s", sql)
+	}
+}
+
 func newDryRunMediaDB(t *testing.T) *gorm.DB {
 	t.Helper()
 

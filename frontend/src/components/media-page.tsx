@@ -68,6 +68,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
   const studio = normalizeSimpleValue(searchParams.get("studio"), "all");
   const awards = normalizeSimpleValue(searchParams.get("awards"), "all");
   const cache = normalizeSimpleValue(searchParams.get("cache"), "all");
+  const favorite = normalizeSimpleValue(searchParams.get("favorite"), "all");
   const sort = normalizeSimpleValue(searchParams.get("sort"), "popular");
   const page = parsePositiveIntParam(searchParams.get("page"), 1);
   const scoreMin = parseScoreParam(searchParams.get("scoreMin"), 0);
@@ -184,12 +185,13 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
         studio: enabledFilterKeys.has("studio") ? studio : "all",
         awards: enabledFilterKeys.has("awards") ? awards : "all",
         cache,
+        favorite,
         sort,
         scoreMin: scoreMin > 0 ? scoreMin : undefined,
         scoreMax: scoreMax < 10 ? scoreMax : undefined,
         pageSize
       }),
-    [awards, cache, country, enabledFilterKeys, fixedCategory, genre, language, network, pageSize, quality, scoreMax, scoreMin, searchValue, sort, studio, year]
+    [awards, cache, country, enabledFilterKeys, favorite, fixedCategory, genre, language, network, pageSize, quality, scoreMax, scoreMin, searchValue, sort, studio, year]
   );
 
   const load = useCallback(async () => {
@@ -207,6 +209,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
         studio: enabledFilterKeys.has("studio") ? studio : "all",
         awards: enabledFilterKeys.has("awards") ? awards : "all",
         cache,
+        favorite,
         sort,
         scoreMin: scoreMin > 0 ? scoreMin : undefined,
         scoreMax: scoreMax < 10 ? scoreMax : undefined,
@@ -222,7 +225,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
     } finally {
       setLoading(false);
     }
-  }, [awards, cache, country, enabledFilterKeys, fixedCategory, genre, language, network, page, pageBoundsKey, pageSize, quality, scoreMax, scoreMin, searchValue, sort, studio, year]);
+  }, [awards, cache, country, enabledFilterKeys, favorite, fixedCategory, genre, language, network, page, pageBoundsKey, pageSize, quality, scoreMax, scoreMin, searchValue, sort, studio, year]);
 
   useEffect(() => {
     void load();
@@ -468,6 +471,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
             t={t}
             searchInput={searchInput}
             cache={cache}
+            favorite={favorite}
             showAdvancedFilters={showAdvancedFilters}
             expandedRows={expandedRows}
             enabledFilterKeys={enabledFilterKeys}
@@ -487,6 +491,7 @@ export function MediaPage({ fixedCategory }: { fixedCategory: MediaCategory }) {
             onSearchChange={setSearchInput}
             onCommitSearch={commitSearch}
             onToggleCache={() => updateQuery({ cache: cache === "cached" ? null : "cached", page: null })}
+            onToggleFavorite={() => updateQuery({ favorite: favorite === "favorited" ? null : "favorited", page: null })}
             onClearFilters={clearFilters}
             onRefresh={() => void load()}
             onToggleAdvancedFilters={() => setShowAdvancedFilters((value) => !value)}

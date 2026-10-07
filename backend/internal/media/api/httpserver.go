@@ -105,6 +105,7 @@ func (b *builder) list(c *gin.Context) {
 		Studio:   c.Query("studio"),
 		Awards:   c.Query("awards"),
 		Cache:    c.Query("cache"),
+		Favorite: c.Query("favorite"),
 		Sort:     c.Query("sort"),
 		HeatDays: heatDays,
 		ScoreMin: scoreMin,

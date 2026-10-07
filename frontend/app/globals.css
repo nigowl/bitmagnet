@@ -1706,7 +1706,7 @@ body {
 
 .media-wall {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 188px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 188px), 260px));
   gap: 16px;
   align-items: start;
 }
@@ -1766,6 +1766,7 @@ body {
 .media-wall-item {
   display: block;
   width: 100%;
+  max-width: 260px;
   margin: 0;
 }
 
@@ -2105,8 +2106,12 @@ body {
   }
 
   .media-wall {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 156px), 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 156px), 1fr));
     gap: 12px;
+  }
+
+  .media-wall-item {
+    max-width: none;
   }
 
   .media-toolbar {
@@ -2789,15 +2794,25 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-left: auto;
   border: 0;
   color: color-mix(in srgb, var(--page-text) 72%, #cddaf2);
   background: transparent;
   cursor: pointer;
 }
 
+.torrent-player-info-metric-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+}
+
 .torrent-player-info-metric-action:hover {
   color: var(--brand-orange-deep);
+}
+
+.torrent-player-info-metric-action.is-active {
+  color: var(--brand-orange);
 }
 
 .torrent-player-info-metric-row span {

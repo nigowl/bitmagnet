@@ -201,6 +201,7 @@ export async function fetchMediaList(params: {
   studio?: string;
   awards?: string;
   cache?: string;
+  favorite?: string;
   sort?: string;
   heatDays?: number;
   scoreMin?: number;
@@ -229,6 +230,7 @@ export async function fetchMediaList(params: {
   setTrimmedParam("studio", params.studio, "all");
   setTrimmedParam("awards", params.awards, "all");
   setTrimmedParam("cache", params.cache, "all");
+  setTrimmedParam("favorite", params.favorite, "all");
   setTrimmedParam("sort", params.sort, "latest");
   if (typeof params.heatDays === "number" && Number.isFinite(params.heatDays) && params.heatDays > 0) {
     query.set("heatDays", String(Math.round(params.heatDays)));

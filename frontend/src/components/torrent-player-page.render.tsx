@@ -15,6 +15,7 @@ type TorrentPlayerPageRenderProps = {
     | "isFullscreenActive"
     | "inlineControlsVisible"
     | "isPipActive"
+    | "isFavorited"
     | "settingsOpen"
     | "audioTrackMenuOpen"
     | "subtitleManagerOpened"
@@ -80,6 +81,7 @@ type TorrentPlayerPageRenderProps = {
     | "onSeekInput"
     | "onSeekChange"
     | "onSeekKeyUp"
+    | "onStagePointerMove"
     | "onSetVideoBrightness"
     | "onSetVideoContrast"
     | "onSetVideoSaturation"
@@ -100,6 +102,7 @@ type TorrentPlayerPageRenderProps = {
     | "onSeekPreviewLoaded"
     | "onSeekPreviewFailed"
     | "onOpenCacheStatus"
+    | "onToggleFavorite"
   >;
   overlays: OverlaysProps;
 };

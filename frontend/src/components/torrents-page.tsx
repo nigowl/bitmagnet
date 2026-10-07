@@ -14,6 +14,7 @@ import {
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { FilterX, RefreshCw } from "lucide-react";
+import { useAuth } from "@/auth/provider";
 import { graphqlRequest } from "@/lib/api";
 import {
   TORRENT_CONTENT_SEARCH_QUERY,
@@ -58,6 +59,7 @@ export function TorrentsPage() {
   const [loadingDetailFiles, setLoadingDetailFiles] = useState(false);
 
   const { t } = useI18n();
+  const { favorites } = useAuth();
 
   const queryState = useMemo(() => {
     const parsedParams = new URLSearchParams(searchParamsString);
@@ -74,6 +76,7 @@ export function TorrentsPage() {
       ? parsedParams.get("order")
       : "updated_at") as (typeof torrentOrderFields)[number];
     const nextDescending = parseBooleanParam(parsedParams.get("desc"), true);
+    const nextFavoriteOnly = parseBooleanParam(parsedParams.get("favorite"), false);
 
     return {
       page: nextPage,
@@ -82,7 +85,8 @@ export function TorrentsPage() {
       sourceFilters: nextSources,
       tagFilters: nextTags,
       orderBy: nextOrder,
-      descending: nextDescending
+      descending: nextDescending,
+      favoriteOnly: nextFavoriteOnly
     };
   }, [searchParamsString]);
 
@@ -93,7 +97,8 @@ export function TorrentsPage() {
     sourceFilters,
     tagFilters,
     orderBy,
-    descending
+    descending,
+    favoriteOnly
   } = queryState;
 
   const currentListHref = useMemo(
@@ -111,6 +116,7 @@ export function TorrentsPage() {
       tags?: string[] | null;
       order?: (typeof torrentOrderFields)[number];
       desc?: boolean;
+      favorite?: boolean | null;
     }) => {
       const params = new URLSearchParams(searchParams.toString());
 
@@ -138,6 +144,7 @@ export function TorrentsPage() {
       const nextTags = updates.tags !== undefined ? updates.tags : tagFilters;
       const nextOrder = updates.order !== undefined ? updates.order : orderBy;
       const nextDesc = updates.desc !== undefined ? updates.desc : descending;
+      const nextFavoriteOnly = updates.favorite !== undefined ? updates.favorite : favoriteOnly;
 
       setMaybeString("q", nextQ);
       if (!nextPage || nextPage <= 1) {
@@ -155,6 +162,11 @@ export function TorrentsPage() {
       setMaybeArray("tags", nextTags);
       params.set("order", nextOrder);
       params.set("desc", nextDesc ? "1" : "0");
+      if (nextFavoriteOnly) {
+        params.set("favorite", "1");
+      } else {
+        params.delete("favorite");
+      }
 
       const nextQuery = params.toString();
       const currentQuery = searchParams.toString();
@@ -163,7 +175,7 @@ export function TorrentsPage() {
       }
       router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
     },
-    [contentTypeFilters, descending, limit, orderBy, page, pathname, queryString, router, searchParams, sourceFilters, tagFilters]
+    [contentTypeFilters, descending, favoriteOnly, limit, orderBy, page, pathname, queryString, router, searchParams, sourceFilters, tagFilters]
   );
 
   useEffect(() => {
@@ -248,10 +260,20 @@ export function TorrentsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      if (favoriteOnly && favorites.length === 0) {
+        setResult({
+          totalCount: 0,
+          hasNextPage: false,
+          items: [],
+          aggregations: { contentType: [], torrentSource: [], torrentTag: [] }
+        });
+        return;
+      }
       const resolvedOrder = orderBy === "relevance" && !queryString.trim() ? "updated_at" : orderBy;
       const data = await graphqlRequest<SearchResponse>(TORRENT_CONTENT_SEARCH_QUERY, {
         input: {
           queryString: queryString.trim() || undefined,
+          infoHashes: favoriteOnly ? favorites : undefined,
           limit,
           page,
           totalCount: true,
@@ -279,7 +301,7 @@ export function TorrentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [contentTypeFilters, descending, limit, orderBy, page, queryString, sourceFilters, tagFilters]);
+  }, [contentTypeFilters, descending, favoriteOnly, favorites, limit, orderBy, page, queryString, sourceFilters, tagFilters]);
 
   useEffect(() => {
     void load();
@@ -295,7 +317,8 @@ export function TorrentsPage() {
       sources: null,
       tags: null,
       order: "updated_at",
-      desc: true
+      desc: true,
+      favorite: null
     });
   };
 
@@ -425,12 +448,14 @@ export function TorrentsPage() {
         <TorrentFiltersSidebar
           t={t}
           search={search}
+          favoriteOnly={favoriteOnly}
           contentTypeFilters={contentTypeFilters}
           tagFilters={tagFilters}
           contentTypeOptions={contentTypeBlockOptions}
           tagOptions={result?.aggregations.torrentTag || []}
           onSearchChange={setSearch}
           onCommitSearch={commitSearch}
+          onToggleFavorite={() => updateQuery({ favorite: favoriteOnly ? null : true, page: null })}
           onChangeContentTypes={(value) => updateQuery({ types: value, page: null })}
           onChangeTags={(value) => updateQuery({ tags: value, page: null })}
         />

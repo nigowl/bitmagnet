@@ -737,6 +737,7 @@
     "reprocess": "重处理",
     "delete": "删除",
     "selected": "已选",
+    "favoriteFilter": "收藏",
     "clearFilters": "清空筛选",
     "details": "详情",
     "selectFirst": "请先选择至少一个种子",
@@ -827,6 +828,7 @@
     "size": "资源大小",
     "torrentCount": "种子数",
     "cacheBadge": "缓存",
+    "favoriteFilter": "收藏",
     "all": "全部",
     "contentTypes": {
       "all": "全部",

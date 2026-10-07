@@ -1,7 +1,7 @@
 "use client";
 
 import { ActionIcon, Card, Group, RangeSlider, Text, TextInput, Tooltip } from "@mantine/core";
-import { ChevronDown, FilterX, HardDriveDownload, RefreshCw, Search } from "lucide-react";
+import { ChevronDown, FilterX, HardDriveDownload, Heart, RefreshCw, Search } from "lucide-react";
 import { FilterRow } from "./media-page.filter-row";
 import type { FilterOption, FilterRowKey } from "./media-page.helpers";
 
@@ -9,6 +9,7 @@ type MediaToolbarProps = {
   t: (key: string) => string;
   searchInput: string;
   cache: string;
+  favorite: string;
   showAdvancedFilters: boolean;
   expandedRows: Record<FilterRowKey, boolean>;
   enabledFilterKeys: Set<FilterRowKey>;
@@ -38,6 +39,7 @@ type MediaToolbarProps = {
   onSearchChange: (value: string) => void;
   onCommitSearch: () => void;
   onToggleCache: () => void;
+  onToggleFavorite: () => void;
   onClearFilters: () => void;
   onRefresh: () => void;
   onToggleAdvancedFilters: () => void;
@@ -51,6 +53,7 @@ export function MediaToolbar({
   t,
   searchInput,
   cache,
+  favorite,
   showAdvancedFilters,
   expandedRows,
   enabledFilterKeys,
@@ -60,6 +63,7 @@ export function MediaToolbar({
   onSearchChange,
   onCommitSearch,
   onToggleCache,
+  onToggleFavorite,
   onClearFilters,
   onRefresh,
   onToggleAdvancedFilters,
@@ -98,6 +102,19 @@ export function MediaToolbar({
               title={t("media.cacheBadge")}
             >
               <HardDriveDownload size={16} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label={t("media.favoriteFilter")} withArrow>
+            <ActionIcon
+              className="app-icon-btn"
+              variant={favorite === "favorited" ? "light" : "default"}
+              color={favorite === "favorited" ? "pink" : undefined}
+              size={36}
+              onClick={onToggleFavorite}
+              aria-label={t("media.favoriteFilter")}
+              title={t("media.favoriteFilter")}
+            >
+              <Heart size={16} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label={t("media.clearFilters")} withArrow>
