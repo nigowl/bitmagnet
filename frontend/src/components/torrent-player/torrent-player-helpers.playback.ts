@@ -163,19 +163,6 @@ export function resolvePlayableTranscodeStart(input: {
       range: containing
     };
   }
-  if (containing) {
-    const availableAheadSeconds = Math.max(0, toSeconds(containing.end) - clampedSeconds);
-    return {
-      seconds: clampedSeconds,
-      startBytes: rawStartBytes,
-      prebufferSeconds: configuredPrebufferSeconds,
-      availableAheadSeconds,
-      adjusted: false,
-      originalSeconds,
-      reason: "near_range_end",
-      range: containing
-    };
-  }
 
   type Candidate = {
     ratio: number;
