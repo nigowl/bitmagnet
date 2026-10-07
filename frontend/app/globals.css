@@ -1706,7 +1706,7 @@ body {
 
 .media-wall {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 188px), 260px));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 188px), 1fr));
   gap: 16px;
   align-items: start;
 }
