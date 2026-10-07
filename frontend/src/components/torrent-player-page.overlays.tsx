@@ -33,6 +33,8 @@ type TorrentPlayerOverlaysProps = {
   subtitleScaleOptions: readonly number[];
   resumePromptOpened: boolean;
   resumePromptSeconds: number;
+  resumePromptUpdatedAt: number;
+  onResumePromptClose: () => void;
   onResumePromptContinue: () => Promise<void>;
   diagnosticsOpened: boolean;
   diagnostics: DiagnosticEntry[];
@@ -65,6 +67,8 @@ export function TorrentPlayerOverlays(props: TorrentPlayerOverlaysProps) {
     subtitleScaleOptions,
     resumePromptOpened,
     resumePromptSeconds,
+    resumePromptUpdatedAt,
+    onResumePromptClose,
     onResumePromptContinue,
     diagnosticsOpened,
     diagnostics,
@@ -325,14 +329,30 @@ export function TorrentPlayerOverlays(props: TorrentPlayerOverlaysProps) {
     </div>
   ) : null;
 
+  const resumePromptDateTime = formatResumePromptDateTime(resumePromptUpdatedAt);
+  const resumePromptProgressLabel = resumePromptDateTime
+    ? `${resumePromptDateTime} ${t("media.player.resumePromptWatchedTo")}`
+    : t("media.player.resumePromptWatchedTo");
   const resumePromptPanel = resumePromptOpened ? (
     <div className="torrent-player-center-layer" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
       <div className="torrent-player-floating-panel torrent-player-resume-panel">
         <div className="torrent-player-panel-header">
           <div className="torrent-player-panel-title">{t("media.player.resumePromptTitle")}</div>
+          <button
+            type="button"
+            className="torrent-inline-title-icon-btn"
+            onClick={onResumePromptClose}
+            aria-label={t("common.close")}
+          >
+            <X size={14} />
+          </button>
         </div>
         <Text size="sm" c="dimmed">
-          {t("media.player.resumePromptMessage")} <span className="torrent-player-resume-time">{formatClock(resumePromptSeconds)}</span>
+          {t("media.player.resumePromptMessage")}
+        </Text>
+        <Text className="torrent-player-resume-time-row" size="sm">
+          {resumePromptProgressLabel}{" "}
+          <span className="torrent-player-resume-time">{formatClock(resumePromptSeconds)}</span>
         </Text>
         <div className="torrent-player-panel-actions">
           <button type="button" className="torrent-player-panel-action is-primary" onClick={() => void onResumePromptContinue()}>
@@ -393,4 +413,16 @@ export function TorrentPlayerOverlays(props: TorrentPlayerOverlaysProps) {
       {scope !== "stage" ? diagnosticsModal : null}
     </>
   );
+}
+
+function formatResumePromptDateTime(timestamp: number): string {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return "";
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate())
+  ].join("-") + ` ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }

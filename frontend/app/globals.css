@@ -3691,6 +3691,11 @@ body {
   gap: 13px;
 }
 
+.torrent-player-resume-time-row {
+  color: rgba(232, 240, 255, 0.9);
+  font-weight: 700;
+}
+
 .torrent-player-resume-time {
   color: var(--player-control-accent);
   font-weight: 800;

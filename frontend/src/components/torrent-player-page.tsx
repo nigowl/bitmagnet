@@ -853,6 +853,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
   const {
     resumePromptOpened,
     resumePromptSeconds,
+    resumePromptUpdatedAt,
+    handleResumePromptClose,
     handleResumePromptContinue
   } = useTorrentPlayerResumePrompt({
     infoHash,
@@ -1069,6 +1071,8 @@ export function TorrentPlayerPage({ infoHash: routeInfoHash }: { infoHash: strin
         subtitleScaleOptions,
         resumePromptOpened,
         resumePromptSeconds,
+        resumePromptUpdatedAt,
+        onResumePromptClose: handleResumePromptClose,
         onResumePromptContinue: handleResumePromptContinue,
         diagnosticsOpened,
         diagnostics,

@@ -32,6 +32,7 @@ export function useTorrentPlayerResumePrompt({
 }: UseTorrentPlayerResumePromptArgs) {
   const [resumePromptOpened, setResumePromptOpened] = useState(false);
   const [resumePromptSeconds, setResumePromptSeconds] = useState(0);
+  const [resumePromptUpdatedAt, setResumePromptUpdatedAt] = useState(0);
   const [resumePromptFileIndex, setResumePromptFileIndex] = useState(-1);
 
   useEffect(() => {
@@ -42,11 +43,13 @@ export function useTorrentPlayerResumePrompt({
       const fileIndex = Number.isInteger(record?.fileIndex) ? Number(record?.fileIndex) : -1;
       if (seconds < 15) {
         setResumePromptSeconds(0);
+        setResumePromptUpdatedAt(0);
         setResumePromptFileIndex(-1);
         setResumePromptOpened(false);
         return;
       }
       setResumePromptSeconds(seconds);
+      setResumePromptUpdatedAt(Number.isFinite(record?.updatedAt) ? Math.max(0, Number(record?.updatedAt)) : 0);
       setResumePromptFileIndex(fileIndex);
       setResumePromptOpened(true);
     }, 0);
@@ -93,9 +96,15 @@ export function useTorrentPlayerResumePrompt({
     await onContinueSameFile(resumePromptSeconds);
   }, [onContinueOtherFile, onContinueSameFile, prepareContinue, resumePromptFileIndex, resumePromptSeconds, selectedFileIndexRef]);
 
+  const handleResumePromptClose = useCallback(() => {
+    setResumePromptOpened(false);
+  }, []);
+
   return {
     resumePromptOpened,
     resumePromptSeconds,
+    resumePromptUpdatedAt,
+    handleResumePromptClose,
     handleResumePromptContinue
   };
 }
