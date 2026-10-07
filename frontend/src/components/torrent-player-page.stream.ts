@@ -69,7 +69,7 @@ type UseTorrentPlayerStreamArgs = {
   playerStatusRef: MutableRefObject<PlayerStatus>;
   pauseCurrentHLSLoadRef: MutableRefObject<(paused: boolean) => void>;
   releaseCurrentHLSRef: MutableRefObject<(reason: string, keepalive?: boolean) => void>;
-  retryCurrentStreamRef: MutableRefObject<(reason: string) => boolean>;
+  retryCurrentStreamRef: MutableRefObject<(reason: string, manual?: boolean) => boolean>;
   selectedAudioTrackQueryIndexRef: MutableRefObject<number>;
   selectedFileIndexRef: MutableRefObject<number>;
   statusSnapshotRef: MutableRefObject<PlayerTransmissionStatusResponse | null>;
@@ -320,7 +320,7 @@ export function useTorrentPlayerStream({
     logWarn
   });
 
-  const retryCurrentStream = useCallback((reason: string) => {
+  const retryCurrentStream = useCallback((reason: string, manual = false) => {
     const index = selectedFileIndexRef.current;
     if (!infoHash || !Number.isInteger(index) || index < 0) return false;
     if (userPausedRef.current) {
@@ -331,14 +331,24 @@ export function useTorrentPlayerStream({
       settlePausedPlayback();
       return true;
     }
+    if (!manual) {
+      autoResumeWhenPlayableRef.current = false;
+      pendingResumeTargetRef.current = null;
+      setPlaybackLoading(false);
+      setPlayerStatus("error");
+      setPlayerError(tRef.current("media.player.playbackError"));
+      logWarn("stream", "playback disruption requires manual retry", { reason });
+      return false;
+    }
 
     const now = Date.now();
     const retryKey = `${index}:transcode:${activePreferTranscodeRef.current ? "tc" : "direct"}`;
-    if (streamRetryRef.current.key !== retryKey) {
+    if (manual || streamRetryRef.current.key !== retryKey) {
+      if (streamRetryTimerRef.current !== null) {
+        window.clearTimeout(streamRetryTimerRef.current);
+        streamRetryTimerRef.current = null;
+      }
       streamRetryRef.current = { key: retryKey, attempts: 0 };
-    }
-    if (streamRetryTimerRef.current !== null && now - lastStreamRetryAtRef.current < player.STREAM_RETRY_DEDUPE_MS) {
-      return true;
     }
     if (streamRetryRef.current.attempts >= player.STREAM_RETRY_MAX_ATTEMPTS) {
       return false;
@@ -404,7 +414,7 @@ export function useTorrentPlayerStream({
     if (streamRetryTimerRef.current !== null) {
       window.clearTimeout(streamRetryTimerRef.current);
     }
-    const delayMs = Math.min(player.STREAM_RETRY_MAX_DELAY_MS, player.STREAM_RETRY_BASE_DELAY_MS * attempt);
+    const delayMs = manual ? 0 : Math.min(player.STREAM_RETRY_MAX_DELAY_MS, player.STREAM_RETRY_BASE_DELAY_MS * attempt);
     streamRetryTimerRef.current = window.setTimeout(() => {
       streamRetryTimerRef.current = null;
       applyStreamUrl(nextUrl, {
@@ -415,6 +425,7 @@ export function useTorrentPlayerStream({
     }, delayMs);
     logWarn("stream", "retry stream after playback disruption", {
       reason,
+      manual,
       attempt,
       maxAttempts: player.STREAM_RETRY_MAX_ATTEMPTS,
       delayMs,
@@ -452,6 +463,7 @@ export function useTorrentPlayerStream({
     statusSnapshotRef,
     streamRetryRef,
     streamRetryTimerRef,
+    tRef,
     totalDurationSecondsRef,
     transcodeOutputResolution,
     transcodePrebufferSeconds,

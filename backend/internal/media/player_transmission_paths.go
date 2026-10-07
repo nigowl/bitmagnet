@@ -17,37 +17,18 @@ func playerTransmissionResolveFilePath(downloadDir string, fileName string, loca
 	}
 
 	baseDirs := buildTransmissionPathCandidates(downloadDir, localDownloadDir)
-	basename := filepath.Base(relative)
 	for _, baseDir := range baseDirs {
 		if baseDir == "" {
 			continue
 		}
-		candidates := []string{
+		if direct, ok := playerTransmissionFirstExistingPath(baseDir, []string{
 			filepath.Join(baseDir, relative),
-			filepath.Join(baseDir, relative+".part"),
-			filepath.Join(baseDir, basename),
-			filepath.Join(baseDir, basename+".part"),
 			filepath.Join(baseDir, "complete", relative),
-			filepath.Join(baseDir, "complete", relative+".part"),
-			filepath.Join(baseDir, "complete", basename),
-			filepath.Join(baseDir, "complete", basename+".part"),
-			filepath.Join(baseDir, "incomplete", relative),
-			filepath.Join(baseDir, "incomplete", relative+".part"),
-			filepath.Join(baseDir, "incomplete", basename),
-			filepath.Join(baseDir, "incomplete", basename+".part"),
+		}); ok {
+			return direct, nil
 		}
-		for _, candidate := range candidates {
-			relCheck, err := filepath.Rel(baseDir, candidate)
-			if err != nil || strings.HasPrefix(relCheck, "..") {
-				continue
-			}
-			if _, err := os.Stat(candidate); err == nil {
-				return candidate, nil
-			}
-			partialCandidate := candidate + ".part"
-			if _, err := os.Stat(partialCandidate); err == nil {
-				return partialCandidate, nil
-			}
+		if incomplete, ok := playerTransmissionResolveIncompletePath(baseDir, relative); ok {
+			return incomplete, nil
 		}
 	}
 
@@ -66,6 +47,49 @@ func playerTransmissionResolveFilePath(downloadDir string, fileName string, loca
 		strings.Join(baseDirs, " | "),
 		ErrNotFound,
 	)
+}
+
+func playerTransmissionFirstExistingPath(baseDir string, candidates []string) (string, bool) {
+	for _, candidate := range candidates {
+		relCheck, err := filepath.Rel(baseDir, candidate)
+		if err != nil || relCheck == ".." || strings.HasPrefix(relCheck, ".."+string(os.PathSeparator)) {
+			continue
+		}
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, true
+		}
+	}
+	return "", false
+}
+
+func playerTransmissionResolveIncompletePath(baseDir string, relative string) (string, bool) {
+	incompletePath := filepath.Join(baseDir, "incomplete", relative)
+	if direct, ok := playerTransmissionFirstExistingPath(baseDir, []string{
+		incompletePath,
+		incompletePath + ".part",
+	}); ok {
+		return direct, true
+	}
+
+	parentDir := filepath.Dir(incompletePath)
+	baseName := filepath.Base(incompletePath)
+	entries, err := os.ReadDir(parentDir)
+	if err != nil {
+		return "", false
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if name == baseName || strings.HasPrefix(name, baseName+".") {
+			candidate := filepath.Join(parentDir, name)
+			if direct, ok := playerTransmissionFirstExistingPath(baseDir, []string{candidate}); ok {
+				return direct, true
+			}
+		}
+	}
+	return "", false
 }
 
 func buildTransmissionPathCandidates(downloadDir string, localDownloadDir string) []string {

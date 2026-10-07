@@ -152,6 +152,8 @@ export type SubtitleStylePreset = {
   verticalPercent: number;
 };
 
+export type VideoEffectPreset = "vignette" | "mono" | "crt";
+
 export type PlayerGlobalPreferences = {
   playbackRate?: number;
   videoBrightness?: number;
@@ -159,6 +161,8 @@ export type PlayerGlobalPreferences = {
   videoSaturation?: number;
   videoHue?: number;
   videoFitMode?: "contain" | "cover" | "fill";
+  videoEffectPreset?: VideoEffectPreset | "none";
+  videoEffectPresets?: VideoEffectPreset[];
   transcodePrebufferSeconds?: number;
   outputResolution?: number;
   subtitleStyleScale?: number;

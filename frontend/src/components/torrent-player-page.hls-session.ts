@@ -23,7 +23,7 @@ type UseTorrentPlayerHlsSessionArgs = {
   hlsSuspendedRef: MutableRefObject<boolean>;
   logWarnRef: MutableRefObject<LogFn>;
   pauseCurrentHLSLoadRef: MutableRefObject<(paused: boolean) => void>;
-  retryCurrentStreamRef: MutableRefObject<(reason: string) => boolean>;
+  retryCurrentStreamRef: MutableRefObject<(reason: string, manual?: boolean) => boolean>;
   selectedAudioTrackQueryIndexRef: MutableRefObject<number>;
   selectedFileIndexRef: MutableRefObject<number>;
   tRef: MutableRefObject<(key: string) => string>;

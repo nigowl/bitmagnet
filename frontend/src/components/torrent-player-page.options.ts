@@ -29,17 +29,6 @@ export function useTorrentPlayerOptions({
   subtitleStylePreset,
   setTranscodeOutputResolution
 }: UseTorrentPlayerOptionsArgs) {
-  const subtitleTrackOptions = useMemo(
-    () => [
-      { value: "none", label: t("media.player.subtitleNone") },
-      ...subtitleItems.map((item) => ({
-        value: String(item.id),
-        label: `${item.label || `Subtitle ${item.id}`}${item.language ? ` (${item.language})` : ""}`
-      }))
-    ],
-    [subtitleItems, t]
-  );
-
   const selectedSubtitleItem = useMemo(
     () => selectedSubtitleId === "none"
       ? null
@@ -80,7 +69,6 @@ export function useTorrentPlayerOptions({
     selectedSubtitleItem,
     subtitleScaleOptions: player.SUBTITLE_SCALE_OPTIONS,
     subtitleStylePreset,
-    subtitleTrackOptions,
     transcodeResolutionOptions
   };
 }

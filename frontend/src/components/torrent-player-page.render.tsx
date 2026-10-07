@@ -16,7 +16,8 @@ type TorrentPlayerPageRenderProps = {
     | "inlineControlsVisible"
     | "isPipActive"
     | "settingsOpen"
-    | "videoImageSettingsOpen"
+    | "audioTrackMenuOpen"
+    | "subtitleManagerOpened"
     | "activePreferTranscode"
     | "streamUrl"
     | "selectedFileIndex"
@@ -28,6 +29,7 @@ type TorrentPlayerPageRenderProps = {
     | "seekPreviewLoadedKey"
     | "seekPreviewFailedKey"
     | "videoFitMode"
+    | "videoEffectPresets"
     | "videoBrightness"
     | "videoContrast"
     | "videoSaturation"
@@ -38,8 +40,6 @@ type TorrentPlayerPageRenderProps = {
     | "audioTrackSelectionAvailable"
     | "audioTrackOptions"
     | "selectedAudioTrackId"
-    | "selectedSubtitleId"
-    | "subtitleTrackOptions"
     | "statusSnapshot"
   >;
   viewModel: Pick<PlayerViewProps,
@@ -66,7 +66,7 @@ type TorrentPlayerPageRenderProps = {
     | "subtitleOverlayStyle"
     | "availableRanges"
   >;
-  refs: Pick<PlayerViewProps, "playerStageRef" | "inlineSettingsRef" | "inlineImageSettingsRef" | "videoRef">;
+  refs: Pick<PlayerViewProps, "playerStageRef" | "inlineSettingsRef" | "inlineAudioTrackRef" | "videoRef">;
   seek: Pick<PlayerViewProps, "activeSubtitleCue" | "seekHoverThumbnail" | "seekMax" | "displayedCurrentSeconds">;
   options: Pick<PlayerViewProps, "playbackRateOptions" | "transcodeResolutionOptions">;
   handlers: Pick<PlayerViewProps,
@@ -80,22 +80,23 @@ type TorrentPlayerPageRenderProps = {
     | "onSeekInput"
     | "onSeekChange"
     | "onSeekKeyUp"
-    | "onImageSettingsButtonClick"
     | "onSetVideoBrightness"
     | "onSetVideoContrast"
     | "onSetVideoSaturation"
     | "onSetVideoHue"
     | "onSetVideoFitMode"
+    | "onToggleVideoEffectPreset"
     | "onSettingsButtonClick"
+    | "onAudioTrackButtonClick"
     | "onSetPlaybackRate"
     | "onSetTranscodeOutputResolution"
     | "onSetTranscodePrebufferSeconds"
     | "onSetAudioTrackId"
     | "onOpenSubtitleManager"
+    | "onRetryPlayback"
     | "onTogglePip"
     | "onToggleFullscreen"
     | "onSelectFile"
-    | "onSetSelectedSubtitleId"
     | "onSeekPreviewLoaded"
     | "onSeekPreviewFailed"
     | "onOpenCacheStatus"

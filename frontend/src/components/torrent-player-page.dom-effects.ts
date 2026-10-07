@@ -6,31 +6,31 @@ import { isElementFullscreen } from "@/lib/player/native-media";
 type UseTorrentPlayerDomEffectsArgs = {
   streamUrl: string;
   settingsOpen: boolean;
-  videoImageSettingsOpen: boolean;
+  audioTrackMenuOpen: boolean;
   inlineSettingsRef: MutableRefObject<HTMLDivElement | null>;
-  inlineImageSettingsRef: MutableRefObject<HTMLDivElement | null>;
+  inlineAudioTrackRef: MutableRefObject<HTMLDivElement | null>;
   playerStageRef: MutableRefObject<HTMLDivElement | null>;
   stageClickTimerRef: MutableRefObject<number | null>;
   videoRef: MutableRefObject<HTMLVideoElement | null>;
   setIsFullscreenActive: Dispatch<SetStateAction<boolean>>;
   setIsPipActive: Dispatch<SetStateAction<boolean>>;
   setSettingsOpen: Dispatch<SetStateAction<boolean>>;
-  setVideoImageSettingsOpen: Dispatch<SetStateAction<boolean>>;
+  setAudioTrackMenuOpen: Dispatch<SetStateAction<boolean>>;
 };
 
 export function useTorrentPlayerDomEffects({
   streamUrl,
   settingsOpen,
-  videoImageSettingsOpen,
+  audioTrackMenuOpen,
   inlineSettingsRef,
-  inlineImageSettingsRef,
+  inlineAudioTrackRef,
   playerStageRef,
   stageClickTimerRef,
   videoRef,
   setIsFullscreenActive,
   setIsPipActive,
   setSettingsOpen,
-  setVideoImageSettingsOpen
+  setAudioTrackMenuOpen
 }: UseTorrentPlayerDomEffectsArgs) {
   useEffect(() => {
     const updateFullscreenState = () => {
@@ -94,18 +94,18 @@ export function useTorrentPlayerDomEffects({
   }, [inlineSettingsRef, settingsOpen, setSettingsOpen]);
 
   useEffect(() => {
-    if (!videoImageSettingsOpen) return;
+    if (!audioTrackMenuOpen) return;
 
     const onPointerDown = (event: MouseEvent) => {
-      const node = inlineImageSettingsRef.current;
+      const node = inlineAudioTrackRef.current;
       if (!node) return;
       if (node.contains(event.target as Node)) return;
-      setVideoImageSettingsOpen(false);
+      setAudioTrackMenuOpen(false);
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setVideoImageSettingsOpen(false);
+        setAudioTrackMenuOpen(false);
       }
     };
 
@@ -115,7 +115,7 @@ export function useTorrentPlayerDomEffects({
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [inlineImageSettingsRef, videoImageSettingsOpen, setVideoImageSettingsOpen]);
+  }, [audioTrackMenuOpen, inlineAudioTrackRef, setAudioTrackMenuOpen]);
 
   useEffect(() => {
     return () => {

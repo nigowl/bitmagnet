@@ -20,6 +20,8 @@ type TorrentPlayerOverlaysProps = {
   setSubtitleManagerOpened: Dispatch<SetStateAction<boolean>>;
   setSubtitleManagerTab: Dispatch<SetStateAction<string | null>>;
   subtitleItems: PlayerSubtitleItem[];
+  selectedSubtitleId: string;
+  onSetSelectedSubtitleId: (value: string) => void;
   subtitleSiteLinks: PlayerSubtitleSiteLink[];
   subtitleLoading: boolean;
   subtitleUploadInputRef: MutableRefObject<HTMLInputElement | null>;
@@ -31,7 +33,6 @@ type TorrentPlayerOverlaysProps = {
   subtitleScaleOptions: readonly number[];
   resumePromptOpened: boolean;
   resumePromptSeconds: number;
-  onResumePromptRestart: () => void;
   onResumePromptContinue: () => Promise<void>;
   diagnosticsOpened: boolean;
   diagnostics: DiagnosticEntry[];
@@ -51,6 +52,8 @@ export function TorrentPlayerOverlays(props: TorrentPlayerOverlaysProps) {
     setSubtitleManagerOpened,
     setSubtitleManagerTab,
     subtitleItems,
+    selectedSubtitleId,
+    onSetSelectedSubtitleId,
     subtitleSiteLinks,
     subtitleLoading,
     subtitleUploadInputRef,
@@ -62,7 +65,6 @@ export function TorrentPlayerOverlays(props: TorrentPlayerOverlaysProps) {
     subtitleScaleOptions,
     resumePromptOpened,
     resumePromptSeconds,
-    onResumePromptRestart,
     onResumePromptContinue,
     diagnosticsOpened,
     diagnostics,
@@ -132,56 +134,77 @@ export function TorrentPlayerOverlays(props: TorrentPlayerOverlaysProps) {
               <Text size="sm" c="dimmed">{t("media.player.subtitleManagerEmpty")}</Text>
             ) : (
               <Stack gap="xs">
-                {subtitleItems.map((item) => (
-                  <div className="torrent-subtitle-item-card" key={item.id}>
-                    <Group justify="space-between" align="center" gap="xs" wrap="nowrap">
-                      <Stack gap={2} style={{ minWidth: 0 }}>
-                        <Text fw={700} size="sm" className="torrent-subtitle-item-title">
-                          {item.label || `Subtitle ${item.id}`}
-                        </Text>
-                        <Text size="xs" c="dimmed">
-                          {t("media.player.subtitleOffset")}: {formatSubtitleOffsetLabel(item.offsetSeconds || 0)}
-                        </Text>
-                      </Stack>
-                      <Group gap={4} wrap="nowrap">
-                        <ActionIcon
-                          size="sm"
-                          variant="light"
-                          disabled={subtitleLoading}
-                          onClick={() => {
-                            void onAdjustSubtitleOffset(item.id, -0.5);
-                          }}
-                          aria-label={t("media.player.subtitleOffsetMinus")}
-                        >
-                          <Minus size={14} />
-                        </ActionIcon>
-                        <ActionIcon
-                          size="sm"
-                          variant="light"
-                          disabled={subtitleLoading}
-                          onClick={() => {
-                            void onAdjustSubtitleOffset(item.id, 0.5);
-                          }}
-                          aria-label={t("media.player.subtitleOffsetPlus")}
-                        >
-                          <Plus size={14} />
-                        </ActionIcon>
-                        <ActionIcon
-                          size="sm"
-                          color="red"
-                          variant="light"
-                          disabled={subtitleLoading}
-                          onClick={() => {
-                            void onDeleteSubtitle(item.id);
-                          }}
-                          aria-label={t("media.player.subtitleDelete")}
-                        >
-                          <Trash2 size={14} />
-                        </ActionIcon>
+                {subtitleItems.map((item) => {
+                  const itemId = String(item.id);
+                  const isSelected = selectedSubtitleId === itemId;
+                  const toggleSubtitle = () => onSetSelectedSubtitleId(isSelected ? "none" : itemId);
+                  return (
+                    <div
+                      className={`torrent-subtitle-item-card torrent-subtitle-select-card${isSelected ? " is-active" : ""}`}
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={isSelected}
+                      onClick={toggleSubtitle}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          toggleSubtitle();
+                        }
+                      }}
+                    >
+                      <Group justify="space-between" align="center" gap="xs" wrap="nowrap">
+                        <Stack gap={2} style={{ minWidth: 0 }}>
+                          <Text fw={700} size="sm" className="torrent-subtitle-item-title">
+                            {item.label || `Subtitle ${item.id}`}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            {t("media.player.subtitleOffset")}: {formatSubtitleOffsetLabel(item.offsetSeconds || 0)}
+                          </Text>
+                        </Stack>
+                        <Group gap={4} wrap="nowrap">
+                          <ActionIcon
+                            size="sm"
+                            variant="light"
+                            disabled={subtitleLoading}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void onAdjustSubtitleOffset(item.id, -0.5);
+                            }}
+                            aria-label={t("media.player.subtitleOffsetMinus")}
+                          >
+                            <Minus size={14} />
+                          </ActionIcon>
+                          <ActionIcon
+                            size="sm"
+                            variant="light"
+                            disabled={subtitleLoading}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void onAdjustSubtitleOffset(item.id, 0.5);
+                            }}
+                            aria-label={t("media.player.subtitleOffsetPlus")}
+                          >
+                            <Plus size={14} />
+                          </ActionIcon>
+                          <ActionIcon
+                            size="sm"
+                            color="red"
+                            variant="light"
+                            disabled={subtitleLoading}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void onDeleteSubtitle(item.id);
+                            }}
+                            aria-label={t("media.player.subtitleDelete")}
+                          >
+                            <Trash2 size={14} />
+                          </ActionIcon>
+                        </Group>
                       </Group>
-                    </Group>
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
               </Stack>
             )}
             {subtitleSiteLinks.length > 0 ? (
@@ -307,22 +330,11 @@ export function TorrentPlayerOverlays(props: TorrentPlayerOverlaysProps) {
       <div className="torrent-player-floating-panel torrent-player-resume-panel">
         <div className="torrent-player-panel-header">
           <div className="torrent-player-panel-title">{t("media.player.resumePromptTitle")}</div>
-          <button
-            type="button"
-            className="torrent-inline-title-icon-btn"
-            onClick={onResumePromptRestart}
-            aria-label={t("common.close")}
-          >
-            <X size={14} />
-          </button>
         </div>
         <Text size="sm" c="dimmed">
           {t("media.player.resumePromptMessage")} <span className="torrent-player-resume-time">{formatClock(resumePromptSeconds)}</span>
         </Text>
         <div className="torrent-player-panel-actions">
-          <button type="button" className="torrent-player-panel-action" onClick={onResumePromptRestart}>
-            {t("media.player.resumePromptRestart")}
-          </button>
           <button type="button" className="torrent-player-panel-action is-primary" onClick={() => void onResumePromptContinue()}>
             {t("media.player.resumePromptContinue")}
           </button>

@@ -35,7 +35,6 @@ type UseTorrentPlayerViewModelArgs = {
   playbackLoading: boolean;
   playableCacheAheadSeconds: number;
   settingsOpen: boolean;
-  videoImageSettingsOpen: boolean;
   subtitleManagerOpened: boolean;
   resumePromptOpened: boolean;
   isSeekingDrag: boolean;
@@ -46,6 +45,7 @@ type UseTorrentPlayerViewModelArgs = {
   videoSaturation: number;
   videoHue: number;
   videoFitMode: "contain" | "cover" | "fill";
+  videoEffectPresets: player.VideoEffectPreset[];
   videoAspectRatioCss: string;
   videoAspectRatioValue: number;
 };
@@ -74,7 +74,6 @@ export function useTorrentPlayerViewModel({
   playbackLoading,
   playableCacheAheadSeconds,
   settingsOpen,
-  videoImageSettingsOpen,
   subtitleManagerOpened,
   resumePromptOpened,
   isSeekingDrag,
@@ -85,6 +84,7 @@ export function useTorrentPlayerViewModel({
   videoSaturation,
   videoHue,
   videoFitMode,
+  videoEffectPresets,
   videoAspectRatioCss,
   videoAspectRatioValue
 }: UseTorrentPlayerViewModelArgs) {
@@ -176,6 +176,7 @@ export function useTorrentPlayerViewModel({
     ["--torrent-video-contrast" as string]: `${player.normalizeVideoContrastPreference(videoContrast)}%`,
     ["--torrent-video-saturation" as string]: `${player.normalizeVideoSaturationPreference(videoSaturation)}%`,
     ["--torrent-video-hue" as string]: `${player.normalizeVideoHuePreference(videoHue)}deg`,
+    ["--torrent-video-grayscale" as string]: player.normalizeVideoEffectPresets(videoEffectPresets).includes("mono") ? "100%" : "0%",
     ["--torrent-video-object-fit" as string]: videoFitMode,
     ["--torrent-player-aspect-ratio" as string]: videoAspectRatioCss,
     ["--torrent-player-aspect-ratio-value" as string]: String(videoAspectRatioValue),
@@ -196,7 +197,7 @@ export function useTorrentPlayerViewModel({
       ((playbackLoading || (playerStatus === "buffering" && !isVideoPaused)) && effectivePlaybackCacheAheadSeconds < 1.5)
     );
   const shouldKeepInlineControlsVisible =
-    settingsOpen || videoImageSettingsOpen || subtitleManagerOpened || resumePromptOpened || isSeekingDrag || showPlaybackBusyOverlay || isVideoPaused;
+    settingsOpen || subtitleManagerOpened || resumePromptOpened || isSeekingDrag || showPlaybackBusyOverlay || isVideoPaused;
 
   return {
     stageBootstrapLoading,

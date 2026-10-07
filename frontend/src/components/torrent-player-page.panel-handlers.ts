@@ -6,8 +6,9 @@ type UseTorrentPlayerPanelHandlersArgs = {
   handleSelectFile: (nextIndex: number, source: "panel" | "native", options?: { resumeAt?: number; autoplay?: boolean }) => Promise<void>;
   setDiagnosticsOpened: Dispatch<SetStateAction<boolean>>;
   setSettingsOpen: Dispatch<SetStateAction<boolean>>;
-  setVideoImageSettingsOpen: Dispatch<SetStateAction<boolean>>;
+  setAudioTrackMenuOpen: Dispatch<SetStateAction<boolean>>;
   setSubtitleManagerOpened: Dispatch<SetStateAction<boolean>>;
+  setSubtitleManagerTab: Dispatch<SetStateAction<string | null>>;
   setSelectedSubtitleId: Dispatch<SetStateAction<string>>;
 };
 
@@ -15,21 +16,24 @@ export function useTorrentPlayerPanelHandlers({
   handleSelectFile,
   setDiagnosticsOpened,
   setSettingsOpen,
-  setVideoImageSettingsOpen,
+  setAudioTrackMenuOpen,
   setSubtitleManagerOpened,
+  setSubtitleManagerTab,
   setSelectedSubtitleId
 }: UseTorrentPlayerPanelHandlersArgs) {
   const handleSettingsButtonClick = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    setVideoImageSettingsOpen(false);
+    setAudioTrackMenuOpen(false);
+    setSubtitleManagerOpened(false);
     setSettingsOpen((value) => !value);
-  }, [setSettingsOpen, setVideoImageSettingsOpen]);
+  }, [setAudioTrackMenuOpen, setSettingsOpen, setSubtitleManagerOpened]);
 
-  const handleImageSettingsButtonClick = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
+  const handleAudioTrackButtonClick = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     setSettingsOpen(false);
-    setVideoImageSettingsOpen((value) => !value);
-  }, [setSettingsOpen, setVideoImageSettingsOpen]);
+    setSubtitleManagerOpened(false);
+    setAudioTrackMenuOpen((value) => !value);
+  }, [setAudioTrackMenuOpen, setSettingsOpen, setSubtitleManagerOpened]);
 
   const handleOpenDiagnostics = useCallback(() => {
     setDiagnosticsOpened(true);
@@ -37,9 +41,10 @@ export function useTorrentPlayerPanelHandlers({
 
   const handleOpenSubtitleManager = useCallback(() => {
     setSettingsOpen(false);
-    setVideoImageSettingsOpen(false);
-    setSubtitleManagerOpened(true);
-  }, [setSettingsOpen, setSubtitleManagerOpened, setVideoImageSettingsOpen]);
+    setAudioTrackMenuOpen(false);
+    setSubtitleManagerTab("files");
+    setSubtitleManagerOpened((value) => !value);
+  }, [setAudioTrackMenuOpen, setSettingsOpen, setSubtitleManagerOpened, setSubtitleManagerTab]);
 
   const handleSetSelectedSubtitleId = useCallback((value: string) => {
     setSelectedSubtitleId(value);
@@ -50,7 +55,7 @@ export function useTorrentPlayerPanelHandlers({
   }, [handleSelectFile]);
 
   return {
-    handleImageSettingsButtonClick,
+    handleAudioTrackButtonClick,
     handleOpenDiagnostics,
     handleOpenSubtitleManager,
     handleSelectFilePanel,

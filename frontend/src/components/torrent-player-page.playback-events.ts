@@ -31,7 +31,7 @@ type UseTorrentPlayerPlaybackEventsArgs = {
   pendingResumeTargetRef: MutableRefObject<number | null>;
   pendingTranscodeSeekDisplayRef: MutableRefObject<{ target: number; at: number } | null>;
   pauseCurrentHLSLoadRef: MutableRefObject<(paused: boolean) => void>;
-  retryCurrentStreamRef: MutableRefObject<(reason: string) => boolean>;
+  retryCurrentStreamRef: MutableRefObject<(reason: string, manual?: boolean) => boolean>;
   seekingSwitchingRef: MutableRefObject<boolean>;
   stallStartedAtRef: MutableRefObject<number>;
   streamRetryRef: MutableRefObject<{ key: string; attempts: number }>;

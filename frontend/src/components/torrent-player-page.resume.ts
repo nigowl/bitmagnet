@@ -57,8 +57,7 @@ export function useTorrentPlayerResumePrompt({
 
   useEffect(() => {
     if (!infoHash || !bootstrapped) return;
-    const storageKey = player.buildPlaybackProgressStorageKey(infoHash, userId);
-    const timer = window.setInterval(() => {
+    const saveProgress = () => {
       const seconds = Math.max(0, resolveAbsoluteCurrent());
       if (!Number.isFinite(seconds) || seconds < 1) return;
       const duration = Math.max(0, totalDurationSecondsRef.current, videoDuration);
@@ -69,12 +68,18 @@ export function useTorrentPlayerResumePrompt({
         duration,
         updatedAt: Date.now()
       };
-      try {
-        window.localStorage.setItem(storageKey, JSON.stringify(payload));
-      } catch { }
-    }, player.PLAYBACK_PROGRESS_SAVE_MS);
+      player.writePlaybackProgressRecord(payload, userId);
+    };
+    const timer = window.setInterval(saveProgress, player.PLAYBACK_PROGRESS_SAVE_MS);
+    const saveBeforePageExit = () => saveProgress();
+    window.addEventListener("pagehide", saveBeforePageExit);
+    window.addEventListener("beforeunload", saveBeforePageExit);
+    document.addEventListener("visibilitychange", saveBeforePageExit);
     return () => {
       window.clearInterval(timer);
+      window.removeEventListener("pagehide", saveBeforePageExit);
+      window.removeEventListener("beforeunload", saveBeforePageExit);
+      document.removeEventListener("visibilitychange", saveBeforePageExit);
     };
   }, [bootstrapped, infoHash, resolveAbsoluteCurrent, selectedFileIndexRef, totalDurationSecondsRef, userId, videoDuration]);
 
@@ -88,21 +93,9 @@ export function useTorrentPlayerResumePrompt({
     await onContinueSameFile(resumePromptSeconds);
   }, [onContinueOtherFile, onContinueSameFile, prepareContinue, resumePromptFileIndex, resumePromptSeconds, selectedFileIndexRef]);
 
-  const handleResumePromptRestart = useCallback(() => {
-    setResumePromptOpened(false);
-    setResumePromptSeconds(0);
-    setResumePromptFileIndex(-1);
-    if (!infoHash) return;
-    const storageKey = player.buildPlaybackProgressStorageKey(infoHash, userId);
-    try {
-      window.localStorage.removeItem(storageKey);
-    } catch { }
-  }, [infoHash, userId]);
-
   return {
     resumePromptOpened,
     resumePromptSeconds,
-    handleResumePromptContinue,
-    handleResumePromptRestart
+    handleResumePromptContinue
   };
 }

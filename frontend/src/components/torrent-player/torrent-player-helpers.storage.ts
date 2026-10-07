@@ -1,5 +1,5 @@
 import { PLAYBACK_RATE_OPTIONS, PLAYER_FILE_SELECTION_KEY_PREFIX, PLAYER_GLOBAL_PREFS_KEY_PREFIX, PLAYER_TRACK_PREFS_KEY_PREFIX, PLAYBACK_PROGRESS_KEY_PREFIX, SUBTITLE_RENDER_FONT_SIZE_OPTIONS, SUBTITLE_RENDER_LINE_HEIGHT_OPTIONS, SUBTITLE_SCALE_OPTIONS, TRANSCODE_OUTPUT_RESOLUTION_OPTIONS, TRANSCODE_PREBUFFER_DEFAULT_SECONDS, TRANSCODE_PREBUFFER_OPTIONS } from "./torrent-player-helpers.constants";
-import type { PlaybackFileSelectionRecord, PlaybackProgressRecord, PlayerGlobalPreferences, PlayerTrackPreferences, SubtitleStylePreset } from "./torrent-player-helpers.types";
+import type { PlaybackFileSelectionRecord, PlaybackProgressRecord, PlayerGlobalPreferences, PlayerTrackPreferences, SubtitleStylePreset, VideoEffectPreset } from "./torrent-player-helpers.types";
 export { normalizeInfoHash } from "@/lib/info-hash";
 export { firstNonEmptyText as firstNonEmpty } from "@/lib/text";
 
@@ -60,6 +60,21 @@ export function readPlaybackProgressRecord(infoHash: string, userId?: number): P
   }
 }
 
+export function writePlaybackProgressRecord(
+  payload: PlaybackProgressRecord,
+  userId?: number
+): void {
+  if (typeof window === "undefined" || !payload.infoHash) return;
+  try {
+    window.localStorage.setItem(
+      buildPlaybackProgressStorageKey(payload.infoHash, userId),
+      JSON.stringify(payload)
+    );
+  } catch {
+    // ignore storage quota/privacy failures
+  }
+}
+
 export function readRememberedPlaybackFileIndex(infoHash: string, userId?: number): number {
   if (typeof window === "undefined" || !infoHash) return -1;
   try {
@@ -115,6 +130,17 @@ export function normalizeTranscodeOutputResolution(raw: number): number {
 export function normalizeVideoFitModePreference(raw: string | null | undefined): "contain" | "cover" | "fill" {
   if (raw === "cover" || raw === "fill") return raw;
   return "contain";
+}
+
+export function normalizeVideoEffectPresets(raw: unknown): VideoEffectPreset[] {
+  const values = Array.isArray(raw) ? raw : [raw];
+  const seen = new Set<VideoEffectPreset>();
+  for (const value of values) {
+    if (value === "vignette" || value === "mono" || value === "crt") {
+      seen.add(value);
+    }
+  }
+  return Array.from(seen);
 }
 
 export function normalizeVideoBrightnessPreference(raw: number): number {

@@ -186,6 +186,61 @@ func TestPlayerTransmissionResolveFilePathFindsIncompletePartFile(t *testing.T) 
 	}
 }
 
+func TestPlayerTransmissionResolveFilePathPrefersRootThenCompleteThenIncomplete(t *testing.T) {
+	dir := t.TempDir()
+	relative := filepath.Join("Movie Folder", "movie.mp4")
+	rootPath := filepath.Join(dir, relative)
+	completePath := filepath.Join(dir, "complete", relative)
+	incompletePath := filepath.Join(dir, "incomplete", relative+".part")
+	for _, path := range []string{rootPath, completePath, incompletePath} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte(path), 0o644); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	got, err := playerTransmissionResolveFilePath("/downloads", filepath.ToSlash(relative), dir)
+	if err != nil {
+		t.Fatalf("resolve root path: %v", err)
+	}
+	if got != rootPath {
+		t.Fatalf("expected root path first, got=%q want=%q", got, rootPath)
+	}
+
+	if err := os.Remove(rootPath); err != nil {
+		t.Fatalf("remove root path: %v", err)
+	}
+	got, err = playerTransmissionResolveFilePath("/downloads", filepath.ToSlash(relative), dir)
+	if err != nil {
+		t.Fatalf("resolve complete path: %v", err)
+	}
+	if got != completePath {
+		t.Fatalf("expected complete path before incomplete, got=%q want=%q", got, completePath)
+	}
+}
+
+func TestPlayerTransmissionResolveFilePathFindsIncompleteFileWithAddedSuffix(t *testing.T) {
+	dir := t.TempDir()
+	relative := filepath.Join("Movie Folder", "movie.mp4")
+	incompletePath := filepath.Join(dir, "incomplete", relative+".download")
+	if err := os.MkdirAll(filepath.Dir(incompletePath), 0o755); err != nil {
+		t.Fatalf("mkdir incomplete dir: %v", err)
+	}
+	if err := os.WriteFile(incompletePath, []byte("partial"), 0o644); err != nil {
+		t.Fatalf("write incomplete file: %v", err)
+	}
+
+	got, err := playerTransmissionResolveFilePath("/downloads", filepath.ToSlash(relative), dir)
+	if err != nil {
+		t.Fatalf("expected incomplete suffixed path to resolve: %v", err)
+	}
+	if got != incompletePath {
+		t.Fatalf("unexpected resolved path, got=%q want=%q", got, incompletePath)
+	}
+}
+
 func TestPlayerTransmissionSequentialStartPieceUsesSelectedFileOffset(t *testing.T) {
 	snapshot := &playerTransmissionRPCTorrent{
 		PieceSize: 1024,

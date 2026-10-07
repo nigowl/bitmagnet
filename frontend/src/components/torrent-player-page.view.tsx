@@ -2,12 +2,12 @@
 
 import Image from "next/image";
 import type { CSSProperties, MutableRefObject, ReactNode, MouseEvent as ReactMouseEvent } from "react";
-import { Alert, Badge, Card, Group, Loader, Select, Stack, Text, Tooltip, ActionIcon } from "@mantine/core";
-import { AlertTriangle, Maximize2, Minimize2, Pause, PictureInPicture2, Play, Settings2 } from "lucide-react";
+import { Alert, Badge, Button, Card, Group, Loader, Select, Stack, Text, Tooltip, ActionIcon } from "@mantine/core";
+import { AlertTriangle, Captions, Maximize2, Minimize2, Pause, PictureInPicture2, Play, Settings2 } from "lucide-react";
 import type { PlayerTransmissionStatusResponse } from "@/lib/media-api";
-import type { PlaybackFileOption, SubtitleCue, TorrentDetailLite } from "./torrent-player/torrent-player-helpers";
+import type { PlaybackFileOption, SubtitleCue, TorrentDetailLite, VideoEffectPreset } from "./torrent-player/torrent-player-helpers";
 import { TorrentPlayerInfoPanel } from "./torrent-player-page.view-info";
-import { TorrentPlayerInlineImageSettings, TorrentPlayerInlineSettings } from "./torrent-player-page.view-settings";
+import { TorrentPlayerInlineAudioMenu, TorrentPlayerInlineSettings } from "./torrent-player-page.view-settings";
 
 type SelectOption = { value: string; label: string };
 type HoverThumbnail = { key: string; url: string } | null;
@@ -27,7 +27,8 @@ export type TorrentPlayerPageViewProps = {
   inlineControlsVisible: boolean;
   isPipActive: boolean;
   settingsOpen: boolean;
-  videoImageSettingsOpen: boolean;
+  audioTrackMenuOpen: boolean;
+  subtitleManagerOpened: boolean;
   activePreferTranscode: boolean;
   streamUrl: string;
   showPlaybackBusyOverlay: boolean;
@@ -52,7 +53,7 @@ export type TorrentPlayerPageViewProps = {
   mediaTitleDisplay: string;
   playerStageRef: MutableRefObject<HTMLDivElement | null>;
   inlineSettingsRef: MutableRefObject<HTMLDivElement | null>;
-  inlineImageSettingsRef: MutableRefObject<HTMLDivElement | null>;
+  inlineAudioTrackRef: MutableRefObject<HTMLDivElement | null>;
   videoRef: MutableRefObject<HTMLVideoElement | null>;
   playerStageStyle: CSSProperties;
   subtitleOverlayStyle: CSSProperties;
@@ -66,11 +67,12 @@ export type TorrentPlayerPageViewProps = {
   seekMax: number;
   displayedCurrentSeconds: number;
   videoFitMode: "contain" | "cover" | "fill";
+  videoEffectPresets: VideoEffectPreset[];
+  videoPlaybackRate: number;
   videoBrightness: number;
   videoContrast: number;
   videoSaturation: number;
   videoHue: number;
-  videoPlaybackRate: number;
   transcodeOutputResolution: number;
   transcodePrebufferSeconds: number;
   playbackRateOptions: number[];
@@ -78,8 +80,6 @@ export type TorrentPlayerPageViewProps = {
   audioTrackSelectionAvailable: boolean;
   audioTrackOptions: SelectOption[];
   selectedAudioTrackId: string;
-  selectedSubtitleId: string;
-  subtitleTrackOptions: SelectOption[];
   statusSnapshot: PlayerTransmissionStatusResponse | null;
   formatBytes: (bytes: number) => string;
   formatSpeed: (bytesPerSecond: number) => string;
@@ -94,22 +94,23 @@ export type TorrentPlayerPageViewProps = {
   onSeekInput: (value: number) => void;
   onSeekChange: (value: number) => void;
   onSeekKeyUp: (value: number, key: string) => void;
-  onImageSettingsButtonClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onSetVideoBrightness: (value: number) => void;
   onSetVideoContrast: (value: number) => void;
   onSetVideoSaturation: (value: number) => void;
   onSetVideoHue: (value: number) => void;
   onSetVideoFitMode: (value: "contain" | "cover" | "fill") => void;
+  onToggleVideoEffectPreset: (value: VideoEffectPreset) => void;
   onSettingsButtonClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onAudioTrackButtonClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onSetPlaybackRate: (rate: number) => void;
   onSetTranscodeOutputResolution: (value: number) => void;
   onSetTranscodePrebufferSeconds: (value: number) => void;
   onSetAudioTrackId: (value: string) => void;
   onOpenSubtitleManager: () => void;
+  onRetryPlayback: () => void;
   onTogglePip: () => void;
   onToggleFullscreen: () => void;
   onSelectFile: (nextIndex: number) => void;
-  onSetSelectedSubtitleId: (value: string) => void;
   onSeekPreviewLoaded: (key: string) => void;
   onSeekPreviewFailed: (key: string) => void;
   stageOverlayPanel?: ReactNode;
@@ -131,7 +132,8 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
     inlineControlsVisible,
     isPipActive,
     settingsOpen,
-    videoImageSettingsOpen,
+    audioTrackMenuOpen,
+    subtitleManagerOpened,
     activePreferTranscode,
     streamUrl,
     showPlaybackBusyOverlay,
@@ -156,7 +158,7 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
     mediaTitleDisplay,
     playerStageRef,
     inlineSettingsRef,
-    inlineImageSettingsRef,
+    inlineAudioTrackRef,
     videoRef,
     playerStageStyle,
     subtitleOverlayStyle,
@@ -170,6 +172,7 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
     seekMax,
     displayedCurrentSeconds,
     videoFitMode,
+    videoEffectPresets,
     videoBrightness,
     videoContrast,
     videoSaturation,
@@ -182,8 +185,6 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
     audioTrackSelectionAvailable,
     audioTrackOptions,
     selectedAudioTrackId,
-    selectedSubtitleId,
-    subtitleTrackOptions,
     statusSnapshot,
     formatBytes,
     formatSpeed,
@@ -198,26 +199,29 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
     onSeekInput,
     onSeekChange,
     onSeekKeyUp,
-    onImageSettingsButtonClick,
     onSetVideoBrightness,
     onSetVideoContrast,
     onSetVideoSaturation,
     onSetVideoHue,
     onSetVideoFitMode,
+    onToggleVideoEffectPreset,
     onSettingsButtonClick,
+    onAudioTrackButtonClick,
     onSetPlaybackRate,
     onSetTranscodeOutputResolution,
     onSetTranscodePrebufferSeconds,
     onSetAudioTrackId,
     onOpenSubtitleManager,
+    onRetryPlayback,
     onTogglePip,
     onToggleFullscreen,
     onSelectFile,
-    onSetSelectedSubtitleId,
     onSeekPreviewLoaded,
     onSeekPreviewFailed,
     stageOverlayPanel
   } = props;
+
+  const videoEffectClassName = videoEffectPresets.map((preset) => `torrent-player-effect-${preset}`).join(" ");
 
   return (
     <Stack gap="md" className="torrent-player-page">
@@ -253,9 +257,14 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
         </Alert>
       ) : null}
 
-      {playerError ? (
-        <Alert color="red" icon={<AlertTriangle size={16} />}>
-          {playerError}
+      {playerError && !canInitializePlayer ? (
+        <Alert color="red" icon={<AlertTriangle size={16} />} className="torrent-player-error-alert">
+          <Group justify="space-between" align="center" gap="sm" wrap="wrap">
+            <Text size="sm">{playerError}</Text>
+            <Button size="xs" variant="light" onClick={onRetryPlayback}>
+              {t("media.player.playbackRetry")}
+            </Button>
+          </Group>
         </Alert>
       ) : null}
 
@@ -277,7 +286,7 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
             ref={playerStageRef}
             className={`torrent-player-stage-shell${isVideoPaused ? " is-paused" : ""}${isFullscreenActive ? " is-fullscreen" : ""}${inlineControlsVisible ? " controls-visible" : ""}`}
           >
-            <div className="torrent-player-wrap torrent-player-native-wrap" style={playerStageStyle}>
+            <div className={`torrent-player-wrap torrent-player-native-wrap ${videoEffectClassName}`} style={playerStageStyle}>
               <video
                 ref={videoRef}
                 src={!activePreferTranscode ? streamUrl || undefined : undefined}
@@ -292,6 +301,7 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
                   {activeSubtitleCue.text}
                 </div>
               ) : null}
+              <div className="torrent-player-visual-effect-overlay" aria-hidden="true" />
               <div
                 className="torrent-player-click-layer"
                 aria-hidden="true"
@@ -310,6 +320,19 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
                       {t("media.player.networkCacheStatus")} {networkCacheLabel}
                     </Text>
                   ) : null}
+                </Stack>
+              </div>
+            ) : null}
+            <div className={`torrent-player-stage-status${playerError ? " is-error" : showPlaybackBusyOverlay ? " is-loading" : isVideoPaused ? " is-paused" : ""}`} aria-live="polite">
+              {playerError ? t("media.player.statusError") : showPlaybackBusyOverlay ? t("media.player.statusBuffering") : isVideoPaused ? t("media.player.statusPaused") : playbackStatusLabel}
+            </div>
+            {playerError ? (
+              <div className="torrent-player-error-overlay">
+                <Stack gap="sm" align="center">
+                  <Alert color="red" icon={<AlertTriangle size={16} />}>{playerError}</Alert>
+                  <Button size="xs" variant="light" onClick={onRetryPlayback}>
+                    {t("media.player.playbackRetry")}
+                  </Button>
                 </Stack>
               </div>
             ) : null}
@@ -392,45 +415,53 @@ export function TorrentPlayerPageView(props: TorrentPlayerPageViewProps) {
                 <div className="torrent-inline-time">{formatClock(seekMax)}</div>
 
                 <div className="torrent-inline-actions">
-                  <TorrentPlayerInlineImageSettings
-                    t={t}
-                    opened={videoImageSettingsOpen}
-                    inlineImageSettingsRef={inlineImageSettingsRef}
-                    videoBrightness={videoBrightness}
-                    videoContrast={videoContrast}
-                    videoSaturation={videoSaturation}
-                    videoHue={videoHue}
-                    onButtonClick={onImageSettingsButtonClick}
-                    onSetVideoBrightness={onSetVideoBrightness}
-                    onSetVideoContrast={onSetVideoContrast}
-                    onSetVideoSaturation={onSetVideoSaturation}
-                    onSetVideoHue={onSetVideoHue}
-                  />
-
                   <TorrentPlayerInlineSettings
                     t={t}
                     settingsOpen={settingsOpen}
                     inlineSettingsRef={inlineSettingsRef}
                     videoPlaybackRate={videoPlaybackRate}
                     videoFitMode={videoFitMode}
+                    videoEffectPresets={videoEffectPresets}
+                    videoBrightness={videoBrightness}
+                    videoContrast={videoContrast}
+                    videoSaturation={videoSaturation}
+                    videoHue={videoHue}
                     transcodeOutputResolution={transcodeOutputResolution}
                     transcodePrebufferSeconds={transcodePrebufferSeconds}
                     playbackRateOptions={playbackRateOptions}
                     transcodeResolutionOptions={transcodeResolutionOptions}
-                    audioTrackSelectionAvailable={audioTrackSelectionAvailable}
-                    audioTrackOptions={audioTrackOptions}
-                    selectedAudioTrackId={selectedAudioTrackId}
-                    selectedSubtitleId={selectedSubtitleId}
-                    subtitleTrackOptions={subtitleTrackOptions}
                     onSettingsButtonClick={onSettingsButtonClick}
                     onSetPlaybackRate={onSetPlaybackRate}
                     onSetVideoFitMode={onSetVideoFitMode}
+                    onToggleVideoEffectPreset={onToggleVideoEffectPreset}
+                    onSetVideoBrightness={onSetVideoBrightness}
+                    onSetVideoContrast={onSetVideoContrast}
+                    onSetVideoSaturation={onSetVideoSaturation}
+                    onSetVideoHue={onSetVideoHue}
                     onSetTranscodeOutputResolution={onSetTranscodeOutputResolution}
                     onSetTranscodePrebufferSeconds={onSetTranscodePrebufferSeconds}
-                    onSetAudioTrackId={onSetAudioTrackId}
-                    onOpenSubtitleManager={onOpenSubtitleManager}
-                    onSetSelectedSubtitleId={onSetSelectedSubtitleId}
                   />
+
+                  <TorrentPlayerInlineAudioMenu
+                    t={t}
+                    opened={audioTrackMenuOpen}
+                    inlineAudioTrackRef={inlineAudioTrackRef}
+                    audioTrackSelectionAvailable={audioTrackSelectionAvailable}
+                    audioTrackOptions={audioTrackOptions}
+                    selectedAudioTrackId={selectedAudioTrackId}
+                    onButtonClick={onAudioTrackButtonClick}
+                    onSetAudioTrackId={onSetAudioTrackId}
+                  />
+
+                  <button
+                    type="button"
+                    className={`torrent-inline-icon-btn${subtitleManagerOpened ? " is-active" : ""}`}
+                    onClick={onOpenSubtitleManager}
+                    title={t("media.player.subtitleManage")}
+                    aria-label={t("media.player.subtitleManage")}
+                  >
+                    <Captions size={15} />
+                  </button>
 
                   <button
                     type="button"

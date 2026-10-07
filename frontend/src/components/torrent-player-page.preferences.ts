@@ -17,6 +17,7 @@ type UseTorrentPlayerGlobalPreferencesArgs = {
   videoSaturation: number;
   videoHue: number;
   videoFitMode: "contain" | "cover" | "fill";
+  videoEffectPresets: player.VideoEffectPreset[];
   transcodePrebufferSeconds: number;
   transcodeOutputResolution: number;
   subtitleStylePreset: SubtitleStylePreset;
@@ -27,6 +28,7 @@ type UseTorrentPlayerGlobalPreferencesArgs = {
   setVideoSaturation: Dispatch<SetStateAction<number>>;
   setVideoHue: Dispatch<SetStateAction<number>>;
   setVideoFitMode: Dispatch<SetStateAction<"contain" | "cover" | "fill">>;
+  setVideoEffectPresets: Dispatch<SetStateAction<player.VideoEffectPreset[]>>;
   setTranscodePrebufferSeconds: Dispatch<SetStateAction<number>>;
   setTranscodeOutputResolution: Dispatch<SetStateAction<number>>;
   setSubtitleStylePreset: Dispatch<SetStateAction<SubtitleStylePreset>>;
@@ -58,6 +60,7 @@ export function useTorrentPlayerGlobalPreferences({
   videoSaturation,
   videoHue,
   videoFitMode,
+  videoEffectPresets,
   transcodePrebufferSeconds,
   transcodeOutputResolution,
   subtitleStylePreset,
@@ -68,6 +71,7 @@ export function useTorrentPlayerGlobalPreferences({
   setVideoSaturation,
   setVideoHue,
   setVideoFitMode,
+  setVideoEffectPresets,
   setTranscodePrebufferSeconds,
   setTranscodeOutputResolution,
   setSubtitleStylePreset
@@ -85,6 +89,7 @@ export function useTorrentPlayerGlobalPreferences({
         setVideoSaturation(100);
         setVideoHue(0);
         setVideoFitMode("contain");
+        setVideoEffectPresets([]);
         setTranscodePrebufferSeconds(TRANSCODE_PREBUFFER_DEFAULT_SECONDS);
         setTranscodeOutputResolution(0);
         setSubtitleStylePreset(defaultSubtitleStylePreset);
@@ -98,6 +103,7 @@ export function useTorrentPlayerGlobalPreferences({
       setVideoSaturation(player.normalizeVideoSaturationPreference(Number(parsed?.videoSaturation ?? 100)));
       setVideoHue(player.normalizeVideoHuePreference(Number(parsed?.videoHue ?? 0)));
       setVideoFitMode(player.normalizeVideoFitModePreference(parsed?.videoFitMode));
+      setVideoEffectPresets(player.normalizeVideoEffectPresets(parsed?.videoEffectPresets ?? parsed?.videoEffectPreset));
       setTranscodePrebufferSeconds(player.normalizePrebufferPreference(Number(parsed?.transcodePrebufferSeconds ?? TRANSCODE_PREBUFFER_DEFAULT_SECONDS)));
       setTranscodeOutputResolution(player.normalizeTranscodeOutputResolution(Number(parsed?.outputResolution ?? 0)));
       setSubtitleStylePreset({
@@ -117,6 +123,7 @@ export function useTorrentPlayerGlobalPreferences({
       setVideoSaturation(100);
       setVideoHue(0);
       setVideoFitMode("contain");
+      setVideoEffectPresets([]);
       setTranscodePrebufferSeconds(TRANSCODE_PREBUFFER_DEFAULT_SECONDS);
       setTranscodeOutputResolution(0);
       setSubtitleStylePreset(defaultSubtitleStylePreset);
@@ -130,7 +137,7 @@ export function useTorrentPlayerGlobalPreferences({
         window.clearTimeout(hydrationTimer);
       }
     };
-  }, [hydratedRef, setSubtitleStylePreset, setTranscodeOutputResolution, setTranscodePrebufferSeconds, setVideoBrightness, setVideoContrast, setVideoFitMode, setVideoHue, setVideoPlaybackRate, setVideoSaturation, userId]);
+  }, [hydratedRef, setSubtitleStylePreset, setTranscodeOutputResolution, setTranscodePrebufferSeconds, setVideoBrightness, setVideoContrast, setVideoEffectPresets, setVideoFitMode, setVideoHue, setVideoPlaybackRate, setVideoSaturation, userId]);
 
   useEffect(() => {
     if (!hydratedRef.current) return;
@@ -142,6 +149,7 @@ export function useTorrentPlayerGlobalPreferences({
       videoSaturation: player.normalizeVideoSaturationPreference(videoSaturation),
       videoHue: player.normalizeVideoHuePreference(videoHue),
       videoFitMode: player.normalizeVideoFitModePreference(videoFitMode),
+      videoEffectPresets: player.normalizeVideoEffectPresets(videoEffectPresets),
       transcodePrebufferSeconds: player.normalizePrebufferPreference(transcodePrebufferSeconds),
       outputResolution: player.normalizeTranscodeOutputResolution(transcodeOutputResolution),
       subtitleStyleScale: player.normalizeSubtitleScalePreference(subtitleStylePreset.scale),
@@ -154,7 +162,7 @@ export function useTorrentPlayerGlobalPreferences({
     } catch {
       // ignore storage failures
     }
-  }, [hydratedRef, subtitleStylePreset.backgroundColor, subtitleStylePreset.scale, subtitleStylePreset.textColor, subtitleStylePreset.verticalPercent, transcodeOutputResolution, transcodePrebufferSeconds, userId, videoBrightness, videoContrast, videoFitMode, videoHue, videoPlaybackRate, videoSaturation]);
+  }, [hydratedRef, subtitleStylePreset.backgroundColor, subtitleStylePreset.scale, subtitleStylePreset.textColor, subtitleStylePreset.verticalPercent, transcodeOutputResolution, transcodePrebufferSeconds, userId, videoBrightness, videoContrast, videoEffectPresets, videoFitMode, videoHue, videoPlaybackRate, videoSaturation]);
 }
 
 export function useTorrentPlayerTrackPreferences({

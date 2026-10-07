@@ -25,12 +25,13 @@ export function useTorrentPlayerState() {
   const [videoSourceHeight, setVideoSourceHeight] = useState(0);
   const [isVideoPaused, setIsVideoPaused] = useState(true);
   const [videoPlaybackRate, setVideoPlaybackRate] = useState(1);
-  const [videoImageSettingsOpen, setVideoImageSettingsOpen] = useState(false);
   const [videoBrightness, setVideoBrightness] = useState(100);
   const [videoContrast, setVideoContrast] = useState(100);
   const [videoSaturation, setVideoSaturation] = useState(100);
   const [videoHue, setVideoHue] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [audioTrackMenuOpen, setAudioTrackMenuOpen] = useState(false);
+  const [videoEffectPresets, setVideoEffectPresets] = useState<player.VideoEffectPreset[]>([]);
   const [isPipActive, setIsPipActive] = useState(false);
   const [isFullscreenActive, setIsFullscreenActive] = useState(false);
   const [isSeekingDrag, setIsSeekingDrag] = useState(false);
@@ -87,8 +88,6 @@ export function useTorrentPlayerState() {
     setIsVideoPaused,
     videoPlaybackRate,
     setVideoPlaybackRate,
-    videoImageSettingsOpen,
-    setVideoImageSettingsOpen,
     videoBrightness,
     setVideoBrightness,
     videoContrast,
@@ -97,8 +96,12 @@ export function useTorrentPlayerState() {
     setVideoSaturation,
     videoHue,
     setVideoHue,
+    videoEffectPresets,
+    setVideoEffectPresets,
     settingsOpen,
     setSettingsOpen,
+    audioTrackMenuOpen,
+    setAudioTrackMenuOpen,
     isPipActive,
     setIsPipActive,
     isFullscreenActive,
