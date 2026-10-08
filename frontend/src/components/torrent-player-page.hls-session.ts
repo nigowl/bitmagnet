@@ -7,6 +7,15 @@ import * as player from "./torrent-player/torrent-player-helpers";
 type HlsLike = player.HlsLike;
 type PlayerStatus = player.PlayerStatus;
 type LogFn = (step: string, message: string, details?: unknown) => void;
+type HlsFragmentPayload = {
+  frag?: {
+    duration?: number;
+    stats?: {
+      loaded?: number;
+      total?: number;
+    };
+  };
+};
 
 type UseTorrentPlayerHlsSessionArgs = {
   activePreferTranscode: boolean;
@@ -114,13 +123,14 @@ export function useTorrentPlayerHlsSession({
           }
           return;
         }
+        const browserBufferTargetSeconds = Math.max(10, transcodePrebufferSeconds);
         const hls = new HlsCtor({
           autoStartLoad: false,
           enableWorker: true,
           lowLatencyMode: false,
           startPosition: 0,
-          maxBufferLength: Math.max(30, transcodePrebufferSeconds),
-          maxMaxBufferLength: Math.max(60, transcodePrebufferSeconds),
+          maxBufferLength: browserBufferTargetSeconds,
+          maxMaxBufferLength: browserBufferTargetSeconds,
           maxBufferSize: player.HLS_MAX_BUFFER_SIZE_BYTES,
           backBufferLength: 0,
           appendErrorMaxRetry: 8,
@@ -147,12 +157,23 @@ export function useTorrentPlayerHlsSession({
           startSeconds: transcodeStartOffsetRef.current
         });
 
+        let recentBufferedBytesPerSecond = 0;
+        const rememberFragmentSize = (data?: unknown) => {
+          const payload = data as HlsFragmentPayload | undefined;
+          const duration = Number(payload?.frag?.duration || 0);
+          const bytes = Number(payload?.frag?.stats?.total || payload?.frag?.stats?.loaded || 0);
+          if (duration <= 0 || bytes <= 0) return;
+          const bytesPerSecond = bytes / duration;
+          recentBufferedBytesPerSecond = recentBufferedBytesPerSecond
+            ? recentBufferedBytesPerSecond * 0.7 + bytesPerSecond * 0.3
+            : bytesPerSecond;
+        };
+        const estimateBufferedBytes = (ahead: number) => Math.max(0, ahead * recentBufferedBytesPerSecond);
         const ensureHLSBufferTarget = () => {
-          const maxBufferLength = Math.max(30, transcodePrebufferSeconds);
-          const maxMaxBufferLength = Math.max(60, transcodePrebufferSeconds);
           if (hls.config) {
-            hls.config.maxBufferLength = Math.max(hls.config.maxBufferLength || 0, maxBufferLength);
-            hls.config.maxMaxBufferLength = Math.max(hls.config.maxMaxBufferLength || 0, maxMaxBufferLength);
+            hls.config.maxBufferLength = browserBufferTargetSeconds;
+            hls.config.maxMaxBufferLength = browserBufferTargetSeconds;
+            hls.config.maxBufferSize = player.HLS_MAX_BUFFER_SIZE_BYTES;
           }
         };
 
@@ -179,10 +200,12 @@ export function useTorrentPlayerHlsSession({
           setPlayableCacheAheadSeconds((current) => (Math.abs(current - ahead) < 0.25 ? current : ahead));
           if (!adjustLoading || hlsSuspendedRef.current || hlsReleasedForPauseRef.current) return;
 
-          const catchupThreshold = transcodePrebufferSeconds * player.HLS_NETWORK_CACHE_CATCHUP_RATIO;
-          if (ahead < catchupThreshold) {
+          const bufferedBytes = estimateBufferedBytes(ahead);
+          const shouldStopForSize = bufferedBytes >= player.HLS_MAX_BUFFER_SIZE_BYTES * player.HLS_BROWSER_BUFFER_BYTES_STOP_RATIO;
+          const canResumeForSize = !recentBufferedBytesPerSecond || bufferedBytes <= player.HLS_MAX_BUFFER_SIZE_BYTES * player.HLS_BROWSER_BUFFER_BYTES_RESUME_RATIO;
+          if (ahead < browserBufferTargetSeconds * player.HLS_BROWSER_BUFFER_CATCHUP_RATIO && canResumeForSize) {
             startHLSLoad();
-          } else if (ahead >= transcodePrebufferSeconds && hlsLoadActive) {
+          } else if ((ahead >= browserBufferTargetSeconds || shouldStopForSize) && hlsLoadActive) {
             stopHLSLoad();
           }
         };
@@ -215,7 +238,8 @@ export function useTorrentPlayerHlsSession({
           if (cancelled) return;
           refreshHLSCacheState(true, true);
         });
-        hls.on(HlsCtor.Events.FRAG_BUFFERED, () => {
+        hls.on(HlsCtor.Events.FRAG_BUFFERED, (_event, data) => {
+          rememberFragmentSize(data);
           hlsLastFragmentBufferedAtRef.current = Date.now();
           refreshHLSCacheState(true, true);
         });
@@ -230,9 +254,22 @@ export function useTorrentPlayerHlsSession({
           }
           const details = String(payload?.details || "");
           const type = String(payload?.type || "");
-          const isAppendError = details === "bufferAppendError" || details === "bufferAppendingError";
+          const isBufferFullError = details === "bufferFullError";
+          const isAppendError = details === "bufferAppendError" || details === "bufferAppendingError" || isBufferFullError;
           const isMediaError = type === "mediaError" || isAppendError;
           if (!payload?.fatal) {
+            if (isBufferFullError) {
+              stopHLSLoad();
+              refreshHLSCacheState(true, false);
+              setPlaybackLoading(false);
+              setPlayerStatus(video.paused ? "ready" : "playing");
+              logWarnRef.current("hls", "pause hls load after source buffer full", {
+                details,
+                type,
+                bufferedAhead: resolveHLSNetworkCacheAheadSeconds()
+              });
+              return;
+            }
             if (isMediaError && Date.now() - hlsLastMediaRecoveryAtRef.current > player.HLS_MEDIA_RECOVERY_COOLDOWN_MS) {
               hlsLastMediaRecoveryAtRef.current = Date.now();
               hls.recoverMediaError?.();

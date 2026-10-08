@@ -103,6 +103,7 @@ export type HlsLike = {
   config?: {
     maxBufferLength?: number;
     maxMaxBufferLength?: number;
+    maxBufferSize?: number;
   };
   destroy: () => void;
   loadSource: (url: string) => void;

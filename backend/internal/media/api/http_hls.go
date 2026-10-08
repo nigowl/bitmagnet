@@ -240,12 +240,8 @@ func (b *builder) playerTransmissionHLSHeartbeat(c *gin.Context) {
 		session.LastHeartbeatAt = now
 		session.LastAccessedAt = now
 		cachedAhead, endList := playerHLSCachedAheadSeconds(session, input.CurrentSeconds)
-		playlistAhead := cachedAhead
-		if !math.IsNaN(input.NetworkCacheSeconds) && !math.IsInf(input.NetworkCacheSeconds, 0) && input.NetworkCacheSeconds >= 0 {
-			cachedAhead = math.Min(cachedAhead, input.NetworkCacheSeconds)
-		}
 		targetSeconds := math.Max(0, float64(session.PrebufferSeconds))
-		if endList || playlistAhead >= targetSeconds {
+		if endList || cachedAhead >= targetSeconds {
 			pausePlayerHLSTranscodeLocked(session)
 		} else if playerHLSShouldResumeTranscode(cachedAhead, targetSeconds) {
 			resumePlayerHLSTranscodeLocked(session)
