@@ -129,10 +129,6 @@ export function useTorrentPlayerViewModel({
   const activeCacheSeconds = activePreferTranscode ? networkCacheSeconds : prebufferProgressSeconds;
   const networkCacheLabel = `${player.formatSecondsCounter(activeCacheSeconds)} ${t("media.player.prebufferSeconds")}`;
   const networkCachePercent = Math.round(Math.min(1, Math.max(0, activeCacheSeconds / Math.max(1, transcodePrebufferSeconds))) * 100);
-  const playbackStatusLabel =
-    isVideoPaused && (playerStatus === "playing" || playerStatus === "ready")
-      ? t("media.player.statusPaused")
-      : player.statusToLabel(playerStatus, t);
   const downloadTaskProgress = Math.round((statusSnapshot?.progress || 0) * 100);
   const isDownloadComplete = downloadedRatio >= 100 && playableRatio >= 100;
   const isDownloading = !isDownloadComplete && ((statusSnapshot?.downloadRate || 0) > 0 || downloadTaskProgress < 100);
@@ -177,6 +173,7 @@ export function useTorrentPlayerViewModel({
     ["--torrent-video-saturation" as string]: `${player.normalizeVideoSaturationPreference(videoSaturation)}%`,
     ["--torrent-video-hue" as string]: `${player.normalizeVideoHuePreference(videoHue)}deg`,
     ["--torrent-video-grayscale" as string]: player.normalizeVideoEffectPresets(videoEffectPresets).includes("mono") ? "100%" : "0%",
+    ["--torrent-video-sepia" as string]: player.normalizeVideoEffectPresets(videoEffectPresets).includes("film") ? "12%" : "0%",
     ["--torrent-video-object-fit" as string]: videoFitMode,
     ["--torrent-player-aspect-ratio" as string]: videoAspectRatioCss,
     ["--torrent-player-aspect-ratio-value" as string]: String(videoAspectRatioValue),
@@ -211,7 +208,6 @@ export function useTorrentPlayerViewModel({
     networkCacheLabel,
     networkCachePercent,
     networkCacheLoading,
-    playbackStatusLabel,
     downloadTaskProgress,
     isDownloadComplete,
     isDownloading,

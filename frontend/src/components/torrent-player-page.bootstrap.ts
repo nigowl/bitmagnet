@@ -32,6 +32,7 @@ type BuildHLSPlaylistOptions = (overrides?: {
   outputResolution?: number;
   startSeconds?: number;
   startBytes?: number;
+  normalizeAudioLoudness: boolean;
   prebufferSeconds: number;
   durationSeconds: number;
 };

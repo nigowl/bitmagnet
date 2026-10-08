@@ -22,6 +22,7 @@ type UseTorrentPlayerStreamConfigArgs = {
   selectedAudioTrackId: string;
   selectedAudioTrackQueryIndex: number;
   serverAudioTracks: PlayerTransmissionAudioTrack[];
+  normalizeAudioLoudness: boolean;
   transcodeOutputResolution: number;
   transcodePrebufferSeconds: number;
   videoDuration: number;
@@ -43,6 +44,7 @@ export function useTorrentPlayerStreamConfig({
   selectedAudioTrackId,
   selectedAudioTrackQueryIndex,
   serverAudioTracks,
+  normalizeAudioLoudness,
   transcodeOutputResolution,
   transcodePrebufferSeconds,
   videoDuration,
@@ -82,12 +84,14 @@ export function useTorrentPlayerStreamConfig({
         outputResolution?: number;
         startSeconds?: number;
         startBytes?: number;
+        normalizeAudioLoudness: boolean;
       } = {
         transcode: true,
         audioTrackIndex:
           Number.isInteger(overrides?.audioTrackIndex) && (overrides?.audioTrackIndex ?? -1) >= -1
             ? Math.max(-1, Number(overrides?.audioTrackIndex))
-            : selectedAudioTrackQueryIndex
+            : selectedAudioTrackQueryIndex,
+        normalizeAudioLoudness
       };
       if (transcodeOutputResolution > 0) {
         options.outputResolution = transcodeOutputResolution;
@@ -100,7 +104,7 @@ export function useTorrentPlayerStreamConfig({
       }
       return options;
     },
-    [selectedAudioTrackQueryIndex, transcodeOutputResolution]
+    [normalizeAudioLoudness, selectedAudioTrackQueryIndex, transcodeOutputResolution]
   );
 
   const buildHLSPlaylistOptions = useCallback(
@@ -117,6 +121,7 @@ export function useTorrentPlayerStreamConfig({
         outputResolution: base.outputResolution,
         startSeconds: base.startSeconds,
         startBytes: base.startBytes,
+        normalizeAudioLoudness: base.normalizeAudioLoudness,
         prebufferSeconds,
         durationSeconds
       };

@@ -25,6 +25,8 @@ export function useTorrentPlayerState() {
   const [videoSourceHeight, setVideoSourceHeight] = useState(0);
   const [isVideoPaused, setIsVideoPaused] = useState(true);
   const [videoPlaybackRate, setVideoPlaybackRate] = useState(1);
+  const [audioVolume, setAudioVolume] = useState(100);
+  const [normalizeAudioLoudness, setNormalizeAudioLoudness] = useState(false);
   const [videoBrightness, setVideoBrightness] = useState(100);
   const [videoContrast, setVideoContrast] = useState(100);
   const [videoSaturation, setVideoSaturation] = useState(100);
@@ -88,6 +90,10 @@ export function useTorrentPlayerState() {
     setIsVideoPaused,
     videoPlaybackRate,
     setVideoPlaybackRate,
+    audioVolume,
+    setAudioVolume,
+    normalizeAudioLoudness,
+    setNormalizeAudioLoudness,
     videoBrightness,
     setVideoBrightness,
     videoContrast,

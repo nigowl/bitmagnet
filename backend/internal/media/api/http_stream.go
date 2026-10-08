@@ -37,6 +37,7 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 	preferTranscode := strings.TrimSpace(c.Query("transcode")) == "1"
 	audioTrackIndex := parseInt(c.Query("audioTrack"), -1)
 	outputResolution := parseInt(c.Query("resolution"), 0)
+	normalizeAudioLoudness := c.Query("normalizeAudio") == "1"
 	startSeconds := parseFloat(c.Query("start"), 0)
 	startBytes := parseInt64(c.Query("startBytes"), 0)
 	startedAt := time.Now()
@@ -101,14 +102,15 @@ func (b *builder) playerTransmissionStream(c *gin.Context) {
 	}()
 
 	resolveResult, err := b.service.PlayerTransmissionResolveStream(c.Request.Context(), media.PlayerTransmissionResolveStreamInput{
-		InfoHash:         infoHash,
-		FileIndex:        fileIndex,
-		RangeHeader:      resolveRangeHeader,
-		PreferTranscode:  preferTranscode,
-		AudioTrackIndex:  audioTrackIndex,
-		OutputResolution: outputResolution,
-		StartSeconds:     startSeconds,
-		StartBytes:       startBytes,
+		InfoHash:               infoHash,
+		FileIndex:              fileIndex,
+		RangeHeader:            resolveRangeHeader,
+		PreferTranscode:        preferTranscode,
+		AudioTrackIndex:        audioTrackIndex,
+		OutputResolution:       outputResolution,
+		NormalizeAudioLoudness: normalizeAudioLoudness,
+		StartSeconds:           startSeconds,
+		StartBytes:             startBytes,
 	})
 	if err != nil {
 		responseError = err.Error()

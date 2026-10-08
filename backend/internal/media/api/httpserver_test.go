@@ -30,6 +30,23 @@ func TestBuildPlayerFFmpegArgsUsesRealtimeInputOnlyForIncompleteFiles(t *testing
 	}
 }
 
+func TestBuildPlayerFFmpegArgsAppliesOptionalAudioLoudnessNormalization(t *testing.T) {
+	settings := media.PlayerFFmpegTranscodeSettings{
+		AudioBitrateKbps:       128,
+		NormalizeAudioLoudness: true,
+	}
+
+	args := buildPlayerFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 1080, media.PlayerVideoColorInfo{}, false)
+	if !containsArg(args, "-af") || !containsArg(args, "loudnorm=I=-16:TP=-1.5:LRA=11:linear=false") {
+		t.Fatalf("expected loudnorm filter in regular transcode args, args=%s", strings.Join(args, " "))
+	}
+
+	hlsArgs := buildPlayerHLSFFmpegArgs("/tmp/video.mkv", settings, 0, -1, 1080, media.PlayerVideoColorInfo{}, false, "/tmp/hls-cache")
+	if !containsArg(hlsArgs, "-af") || !containsArg(hlsArgs, "loudnorm=I=-16:TP=-1.5:LRA=11:linear=false") {
+		t.Fatalf("expected loudnorm filter in HLS transcode args, args=%s", strings.Join(hlsArgs, " "))
+	}
+}
+
 func TestBuildPlayerHLSFFmpegArgsWritesSegmentedPlaylist(t *testing.T) {
 	settings := media.PlayerFFmpegTranscodeSettings{
 		Preset:           "veryfast",

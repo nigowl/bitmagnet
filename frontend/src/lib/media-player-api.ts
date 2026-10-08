@@ -262,7 +262,7 @@ export function buildPlayerTransmissionStreamURL(
   infoHash: string,
   fileIndex: number,
   cacheBust?: string,
-  options?: { transcode?: boolean; startSeconds?: number; startBytes?: number; audioTrackIndex?: number; outputResolution?: number }
+  options?: { transcode?: boolean; startSeconds?: number; startBytes?: number; audioTrackIndex?: number; outputResolution?: number; normalizeAudioLoudness?: boolean }
 ): string {
   const query = new URLSearchParams({
     infoHash: normalizePlayerInfoHash(infoHash),
@@ -285,6 +285,9 @@ export function buildPlayerTransmissionStreamURL(
     if (Number.isInteger(options.outputResolution) && (options.outputResolution || 0) > 0) {
       query.set("resolution", String(Math.max(1, Math.floor(options.outputResolution || 0))));
     }
+    if (options.normalizeAudioLoudness) {
+      query.set("normalizeAudio", "1");
+    }
   }
   return `${apiBaseURL}/api/media/player/transmission/stream?${query.toString()}`;
 }
@@ -293,7 +296,7 @@ export function buildPlayerTransmissionHLSPlaylistURL(
   infoHash: string,
   fileIndex: number,
   cacheBust?: string,
-  options?: { startSeconds?: number; startBytes?: number; audioTrackIndex?: number; outputResolution?: number; prebufferSeconds?: number; durationSeconds?: number }
+  options?: { startSeconds?: number; startBytes?: number; audioTrackIndex?: number; outputResolution?: number; prebufferSeconds?: number; durationSeconds?: number; normalizeAudioLoudness?: boolean }
 ): string {
   const query = new URLSearchParams({
     infoHash: normalizePlayerInfoHash(infoHash),
@@ -319,6 +322,9 @@ export function buildPlayerTransmissionHLSPlaylistURL(
   }
   if (Number.isFinite(options?.durationSeconds) && (options?.durationSeconds || 0) > 0) {
     query.set("duration", String(Math.max(0, options?.durationSeconds || 0)));
+  }
+  if (options?.normalizeAudioLoudness) {
+    query.set("normalizeAudio", "1");
   }
   return `${apiBaseURL}/api/media/player/transmission/hls/playlist?${query.toString()}`;
 }

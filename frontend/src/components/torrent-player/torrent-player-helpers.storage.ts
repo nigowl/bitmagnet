@@ -113,6 +113,15 @@ export function normalizePlaybackRatePreference(raw: number): number {
   return matched ?? 1;
 }
 
+export function normalizeAudioVolumePreference(raw: number): number {
+  if (!Number.isFinite(raw)) return 100;
+  return Math.max(0, Math.min(100, Math.round(raw)));
+}
+
+export function normalizeAudioLoudnessPreference(raw: unknown): boolean {
+  return raw === true;
+}
+
 export function normalizePrebufferPreference(raw: number): number {
   if (!Number.isFinite(raw)) return TRANSCODE_PREBUFFER_DEFAULT_SECONDS;
   const rounded = Math.round(raw);
@@ -136,7 +145,7 @@ export function normalizeVideoEffectPresets(raw: unknown): VideoEffectPreset[] {
   const values = Array.isArray(raw) ? raw : [raw];
   const seen = new Set<VideoEffectPreset>();
   for (const value of values) {
-    if (value === "vignette" || value === "mono" || value === "crt") {
+    if (value === "vignette" || value === "mono" || value === "crt" || value === "film") {
       seen.add(value);
     }
   }

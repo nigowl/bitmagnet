@@ -152,10 +152,12 @@ export type SubtitleStylePreset = {
   verticalPercent: number;
 };
 
-export type VideoEffectPreset = "vignette" | "mono" | "crt";
+export type VideoEffectPreset = "vignette" | "mono" | "crt" | "film";
 
 export type PlayerGlobalPreferences = {
   playbackRate?: number;
+  audioVolume?: number;
+  normalizeAudioLoudness?: boolean;
   videoBrightness?: number;
   videoContrast?: number;
   videoSaturation?: number;

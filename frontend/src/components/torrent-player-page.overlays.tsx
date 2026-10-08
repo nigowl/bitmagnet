@@ -10,14 +10,14 @@ type SubtitleStylePreset = player.SubtitleStylePreset;
 type DiagnosticEntry = player.DiagnosticEntry;
 type PlayerSubtitleSiteLink = player.PlayerSubtitleSiteLink;
 
-type TorrentPlayerOverlaysProps = {
+export type TorrentPlayerOverlaysProps = {
   scope?: "all" | "stage" | "global";
+  subtitlePanelMode?: "stage" | "inline" | "hidden";
   t: (key: string) => string;
   formatClock: (seconds: number) => string;
   formatSubtitleOffsetLabel: (seconds: number) => string;
   subtitleManagerOpened: boolean;
   subtitleManagerTab: string | null;
-  setSubtitleManagerOpened: Dispatch<SetStateAction<boolean>>;
   setSubtitleManagerTab: Dispatch<SetStateAction<string | null>>;
   subtitleItems: PlayerSubtitleItem[];
   selectedSubtitleId: string;
@@ -46,12 +46,12 @@ type TorrentPlayerOverlaysProps = {
 export function TorrentPlayerOverlays(props: TorrentPlayerOverlaysProps) {
   const {
     scope = "all",
+    subtitlePanelMode = "stage",
     t,
     formatClock,
     formatSubtitleOffsetLabel,
     subtitleManagerOpened,
     subtitleManagerTab,
-    setSubtitleManagerOpened,
     setSubtitleManagerTab,
     subtitleItems,
     selectedSubtitleId,
@@ -77,22 +77,17 @@ export function TorrentPlayerOverlays(props: TorrentPlayerOverlaysProps) {
     onCloseDiagnostics
   } = props;
 
+  const subtitlePanelClassName = subtitlePanelMode === "inline"
+    ? "torrent-inline-settings-menu"
+    : "torrent-player-floating-panel torrent-player-subtitle-panel";
   const subtitleManagerPanel = subtitleManagerOpened ? (
     <div
-      className="torrent-player-floating-panel torrent-player-subtitle-panel"
+      className={subtitlePanelClassName}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
     >
-      <div className="torrent-player-panel-header">
+      <div className="torrent-player-panel-header torrent-inline-settings-header">
         <div className="torrent-player-panel-title">{t("media.player.subtitleManagerTitle")}</div>
-        <button
-          type="button"
-          className="torrent-inline-title-icon-btn"
-          onClick={() => setSubtitleManagerOpened(false)}
-          aria-label={t("common.close")}
-        >
-          <X size={14} />
-        </button>
       </div>
       <div className="torrent-player-panel-scroll">
         <Tabs value={subtitleManagerTab} onChange={setSubtitleManagerTab} className="torrent-player-panel-tabs">
@@ -406,9 +401,13 @@ export function TorrentPlayerOverlays(props: TorrentPlayerOverlaysProps) {
     </Modal>
   );
 
+  if (subtitlePanelMode === "inline") {
+    return <>{subtitleManagerPanel}</>;
+  }
+
   return (
     <>
-      {scope !== "global" ? subtitleManagerPanel : null}
+      {scope !== "global" && subtitlePanelMode !== "hidden" ? subtitleManagerPanel : null}
       {scope !== "global" ? resumePromptPanel : null}
       {scope !== "stage" ? diagnosticsModal : null}
     </>

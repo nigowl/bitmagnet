@@ -13,6 +13,7 @@ export function useTorrentPlayerRefs(t: (key: string) => string) {
     playerStageRef: useRef<HTMLDivElement | null>(null),
     inlineSettingsRef: useRef<HTMLDivElement | null>(null),
     inlineAudioTrackRef: useRef<HTMLDivElement | null>(null),
+    inlineSubtitleRef: useRef<HTMLDivElement | null>(null),
     transcodeSeekInFlightRef: useRef(false),
     pendingTranscodeSeekDisplayRef: useRef<{ target: number; at: number } | null>(null),
     isSeekingDragRef: useRef(false),

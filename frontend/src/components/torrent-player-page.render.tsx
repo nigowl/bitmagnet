@@ -30,6 +30,8 @@ type TorrentPlayerPageRenderProps = {
     | "seekPreviewLoadedKey"
     | "seekPreviewFailedKey"
     | "videoFitMode"
+    | "audioVolume"
+    | "normalizeAudioLoudness"
     | "videoEffectPresets"
     | "videoBrightness"
     | "videoContrast"
@@ -44,7 +46,6 @@ type TorrentPlayerPageRenderProps = {
     | "statusSnapshot"
   >;
   viewModel: Pick<PlayerViewProps,
-    | "playbackStatusLabel"
     | "transferStatusLabel"
     | "playbackPositionLabel"
     | "stageBootstrapLoading"
@@ -67,7 +68,7 @@ type TorrentPlayerPageRenderProps = {
     | "subtitleOverlayStyle"
     | "availableRanges"
   >;
-  refs: Pick<PlayerViewProps, "playerStageRef" | "inlineSettingsRef" | "inlineAudioTrackRef" | "videoRef">;
+  refs: Pick<PlayerViewProps, "playerStageRef" | "inlineSettingsRef" | "inlineAudioTrackRef" | "inlineSubtitleRef" | "videoRef">;
   seek: Pick<PlayerViewProps, "activeSubtitleCue" | "seekHoverThumbnail" | "seekMax" | "displayedCurrentSeconds">;
   options: Pick<PlayerViewProps, "playbackRateOptions" | "transcodeResolutionOptions">;
   handlers: Pick<PlayerViewProps,
@@ -93,6 +94,8 @@ type TorrentPlayerPageRenderProps = {
     | "onSetPlaybackRate"
     | "onSetTranscodeOutputResolution"
     | "onSetTranscodePrebufferSeconds"
+    | "onSetAudioVolume"
+    | "onSetNormalizeAudioLoudness"
     | "onSetAudioTrackId"
     | "onOpenSubtitleManager"
     | "onRetryPlayback"
@@ -127,7 +130,8 @@ export function TorrentPlayerPageRender({
         {...seek}
         {...options}
         {...handlers}
-        stageOverlayPanel={<TorrentPlayerOverlays {...overlays} scope="stage" />}
+        subtitlePanel={overlays}
+        stageOverlayPanel={<TorrentPlayerOverlays {...overlays} scope="stage" subtitlePanelMode="hidden" />}
       />
       <TorrentPlayerOverlays {...overlays} scope="global" />
     </>

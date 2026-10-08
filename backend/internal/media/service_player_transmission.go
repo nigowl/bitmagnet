@@ -403,25 +403,18 @@ func (s *service) PlayerTransmissionResolveStream(
 		contentType = "application/octet-stream"
 	}
 	videoColor := s.playerTransmissionCachedProbeVideoColor(ctx, settings.FFmpeg.BinaryPath, targetPath, completed)
+	transcodeSettings := settings.FFmpeg
+	transcodeSettings.NormalizeAudioLoudness = input.NormalizeAudioLoudness
 
 	return PlayerTransmissionResolveStreamResult{
-		FilePath:    targetPath,
-		ContentType: contentType,
-		RangeStart:  rangeStart,
-		RangeEnd:    rangeEnd,
-		TotalLength: fileLength,
-		Partial:     partial,
-		Completed:   completed,
-		Transcode: PlayerFFmpegTranscodeSettings{
-			Enabled:              true,
-			BinaryPath:           settings.FFmpeg.BinaryPath,
-			Preset:               settings.FFmpeg.Preset,
-			CRF:                  settings.FFmpeg.CRF,
-			AudioBitrateKbps:     settings.FFmpeg.AudioBitrateKbps,
-			Threads:              settings.FFmpeg.Threads,
-			HardwareAcceleration: settings.FFmpeg.HardwareAcceleration,
-			ExtraArgs:            settings.FFmpeg.ExtraArgs,
-		},
+		FilePath:         targetPath,
+		ContentType:      contentType,
+		RangeStart:       rangeStart,
+		RangeEnd:         rangeEnd,
+		TotalLength:      fileLength,
+		Partial:          partial,
+		Completed:        completed,
+		Transcode:        transcodeSettings,
 		VideoColor:       videoColor,
 		AudioTrackIndex:  input.AudioTrackIndex,
 		OutputResolution: input.OutputResolution,

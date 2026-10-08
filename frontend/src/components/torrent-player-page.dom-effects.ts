@@ -7,8 +7,10 @@ type UseTorrentPlayerDomEffectsArgs = {
   streamUrl: string;
   settingsOpen: boolean;
   audioTrackMenuOpen: boolean;
+  subtitleManagerOpened: boolean;
   inlineSettingsRef: MutableRefObject<HTMLDivElement | null>;
   inlineAudioTrackRef: MutableRefObject<HTMLDivElement | null>;
+  inlineSubtitleRef: MutableRefObject<HTMLDivElement | null>;
   playerStageRef: MutableRefObject<HTMLDivElement | null>;
   stageClickTimerRef: MutableRefObject<number | null>;
   videoRef: MutableRefObject<HTMLVideoElement | null>;
@@ -16,21 +18,25 @@ type UseTorrentPlayerDomEffectsArgs = {
   setIsPipActive: Dispatch<SetStateAction<boolean>>;
   setSettingsOpen: Dispatch<SetStateAction<boolean>>;
   setAudioTrackMenuOpen: Dispatch<SetStateAction<boolean>>;
+  setSubtitleManagerOpened: Dispatch<SetStateAction<boolean>>;
 };
 
 export function useTorrentPlayerDomEffects({
   streamUrl,
   settingsOpen,
   audioTrackMenuOpen,
+  subtitleManagerOpened,
   inlineSettingsRef,
   inlineAudioTrackRef,
+  inlineSubtitleRef,
   playerStageRef,
   stageClickTimerRef,
   videoRef,
   setIsFullscreenActive,
   setIsPipActive,
   setSettingsOpen,
-  setAudioTrackMenuOpen
+  setAudioTrackMenuOpen,
+  setSubtitleManagerOpened
 }: UseTorrentPlayerDomEffectsArgs) {
   useEffect(() => {
     const updateFullscreenState = () => {
@@ -116,6 +122,30 @@ export function useTorrentPlayerDomEffects({
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [audioTrackMenuOpen, inlineAudioTrackRef, setAudioTrackMenuOpen]);
+
+  useEffect(() => {
+    if (!subtitleManagerOpened) return;
+
+    const onPointerDown = (event: MouseEvent) => {
+      const node = inlineSubtitleRef.current;
+      if (!node) return;
+      if (node.contains(event.target as Node)) return;
+      setSubtitleManagerOpened(false);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSubtitleManagerOpened(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [inlineSubtitleRef, setSubtitleManagerOpened, subtitleManagerOpened]);
 
   useEffect(() => {
     return () => {

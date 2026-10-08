@@ -43,6 +43,7 @@ func (b *builder) playerTransmissionHLSPlaylist(c *gin.Context) {
 	fileIndex := parseInt(c.Query("fileIndex"), -1)
 	audioTrackIndex := parseInt(c.Query("audioTrack"), -1)
 	outputResolution := parseInt(c.Query("resolution"), 0)
+	normalizeAudioLoudness := c.Query("normalizeAudio") == "1"
 	startSeconds := parseFloat(c.Query("start"), 0)
 	startBytes := parseInt64(c.Query("startBytes"), 0)
 	prebufferSeconds := normalizePlayerHLSPrebufferSeconds(parseInt(c.Query("prebuffer"), playerHLSDefaultPrebufferSeconds))
@@ -60,6 +61,7 @@ func (b *builder) playerTransmissionHLSPlaylist(c *gin.Context) {
 		PreferTranscode:         true,
 		AudioTrackIndex:         audioTrackIndex,
 		OutputResolution:        outputResolution,
+		NormalizeAudioLoudness:  normalizeAudioLoudness,
 		StartSeconds:            startSeconds,
 		StartBytes:              startBytes,
 		PrebufferSeconds:        prebufferSeconds,
@@ -87,14 +89,15 @@ func (b *builder) playerTransmissionHLSPlaylist(c *gin.Context) {
 	}
 
 	session, err := b.playerHLSStartOrReuseSession(resolveResult, media.PlayerTransmissionResolveStreamInput{
-		InfoHash:         infoHash,
-		FileIndex:        fileIndex,
-		AudioTrackIndex:  audioTrackIndex,
-		OutputResolution: outputResolution,
-		StartSeconds:     startSeconds,
-		StartBytes:       startBytes,
-		PrebufferSeconds: prebufferSeconds,
-		DurationSeconds:  durationSeconds,
+		InfoHash:               infoHash,
+		FileIndex:              fileIndex,
+		AudioTrackIndex:        audioTrackIndex,
+		OutputResolution:       outputResolution,
+		NormalizeAudioLoudness: normalizeAudioLoudness,
+		StartSeconds:           startSeconds,
+		StartBytes:             startBytes,
+		PrebufferSeconds:       prebufferSeconds,
+		DurationSeconds:        durationSeconds,
 	}, prebufferSeconds)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

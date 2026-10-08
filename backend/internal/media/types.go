@@ -302,14 +302,15 @@ type PlayerSubtitleContentResult struct {
 }
 
 type PlayerFFmpegTranscodeSettings struct {
-	Enabled              bool   `json:"enabled"`
-	BinaryPath           string `json:"binaryPath"`
-	Preset               string `json:"preset"`
-	CRF                  int    `json:"crf"`
-	AudioBitrateKbps     int    `json:"audioBitrateKbps"`
-	Threads              int    `json:"threads"`
-	HardwareAcceleration string `json:"hardwareAcceleration"`
-	ExtraArgs            string `json:"extraArgs"`
+	Enabled                bool   `json:"enabled"`
+	BinaryPath             string `json:"binaryPath"`
+	Preset                 string `json:"preset"`
+	CRF                    int    `json:"crf"`
+	AudioBitrateKbps       int    `json:"audioBitrateKbps"`
+	NormalizeAudioLoudness bool   `json:"normalizeAudioLoudness"`
+	Threads                int    `json:"threads"`
+	HardwareAcceleration   string `json:"hardwareAcceleration"`
+	ExtraArgs              string `json:"extraArgs"`
 }
 
 type PlayerVideoColorInfo struct {
@@ -441,6 +442,7 @@ type PlayerTransmissionResolveStreamInput struct {
 	// cache growth without blocking initial playback or seek.
 	StartupPrebufferSeconds int     `json:"startupPrebufferSeconds"`
 	DurationSeconds         float64 `json:"durationSeconds"`
+	NormalizeAudioLoudness  bool    `json:"normalizeAudioLoudness"`
 }
 
 type PlayerTransmissionResolveStreamResult struct {

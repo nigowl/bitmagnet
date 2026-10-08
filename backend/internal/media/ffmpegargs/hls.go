@@ -77,6 +77,9 @@ func BuildPlayerHLSFFmpegArgs(
 		"-max_interleave_delta", "0",
 		"-max_muxing_queue_size", "4096",
 	)
+	if options.NormalizeAudioLoudness {
+		args = append(args, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11:linear=false")
+	}
 	if hardwareAcceleration == media.PlayerFFmpegHardwareAccelerationVAAPI {
 		args = append(args, "-c:v", "h264_vaapi", "-qp", strconv.Itoa(crf))
 	} else {

@@ -76,6 +76,11 @@ func buildPlayerFFmpegArgs(
 		"-sn",
 		"-dn",
 		"-g", "48",
+	)
+	if options.NormalizeAudioLoudness {
+		args = append(args, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11:linear=false")
+	}
+	args = append(args,
 		"-c:a", "aac",
 		"-ac", "2",
 		"-ar", "48000",

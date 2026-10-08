@@ -278,7 +278,7 @@ func normalizePlayerHLSInfoHashKey(infoHash string) string {
 
 func buildPlayerHLSCacheKey(resolveResult media.PlayerTransmissionResolveStreamResult, input media.PlayerTransmissionResolveStreamInput, prebufferSeconds int) string {
 	payload := fmt.Sprintf(
-		"%s|%d|%.3f|%d|%d|%d|%d|%t|%s",
+		"%s|%d|%.3f|%d|%d|%d|%d|%t|%t|%s",
 		normalizePlayerHLSInfoHashKey(input.InfoHash),
 		input.FileIndex,
 		math.Max(0, input.StartSeconds),
@@ -287,6 +287,7 @@ func buildPlayerHLSCacheKey(resolveResult media.PlayerTransmissionResolveStreamR
 		input.OutputResolution,
 		prebufferSeconds,
 		resolveResult.VideoColor.NeedsToneMap,
+		resolveResult.Transcode.NormalizeAudioLoudness,
 		resolveResult.FilePath,
 	)
 	sum := sha1.Sum([]byte(payload))
