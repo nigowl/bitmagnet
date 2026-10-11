@@ -49,6 +49,7 @@ type Service interface {
 	TopicDetail(ctx context.Context, id string, input ListInput) (TopicDetailResult, error)
 	RebuildTopics(ctx context.Context) (TopicRebuildResult, error)
 	ListAdminTopics(ctx context.Context, input TopicAdminListInput) (TopicAdminListResult, error)
+	GetAdminTopic(ctx context.Context, id string) (TopicAdminItem, error)
 	CreateTopic(ctx context.Context, input TopicAdminInput) (TopicAdminItem, error)
 	UpdateTopic(ctx context.Context, id string, input TopicAdminInput) (TopicAdminItem, error)
 	DeleteTopic(ctx context.Context, id string) error

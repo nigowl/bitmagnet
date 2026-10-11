@@ -68,11 +68,11 @@ type TopicRebuildResult struct {
 }
 
 type TopicAdminInput struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	SortOrder   int      `json:"sortOrder"`
-	MediaIDs    []string `json:"mediaIds"`
-	Enabled     *bool    `json:"enabled"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	SortOrder   int       `json:"sortOrder"`
+	MediaIDs    *[]string `json:"mediaIds,omitempty"`
+	Enabled     *bool     `json:"enabled"`
 }
 
 type TopicAdminListInput struct {

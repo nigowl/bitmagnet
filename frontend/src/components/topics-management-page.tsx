@@ -8,120 +8,43 @@ import {
   Card,
   Group,
   Loader,
-  Modal,
-  MultiSelect,
-  NumberInput,
   Pagination,
   ScrollArea,
   Stack,
   Switch,
-  Select,
   Table,
   Text,
-  Textarea,
-  TextInput,
   Title,
   Tooltip
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { LogIn, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { LogIn, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { useI18n } from "@/languages/provider";
 import {
-  createAdminTopic,
   deleteAdminTopic,
   fetchAdminTopics,
-  fetchMediaList,
-  fetchMediaDetail,
   rebuildAdminTopics,
   updateAdminTopic,
-  type MediaListItem,
-  type MediaDetailResponse,
-  type MediaTopicAdminInput,
   type MediaTopicAdminItem
 } from "@/lib/media-api";
-import { getDisplayTitle } from "@/lib/media";
-
-type TopicEditor = MediaTopicAdminInput & { id?: string };
+import { emptyTopicEditor, TopicEditor, TopicEditorModal } from "@/components/topic-editor-modal";
 
 const ADMIN_TOPIC_PAGE_SIZE = 10;
 
-function emptyEditor(): TopicEditor {
-  return { name: "", description: "", sortOrder: 100, mediaIds: [], enabled: true };
-}
-
-function numberValue(value: string | number): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : Number(value) || 0;
-}
-
 export function TopicsManagementPage() {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const { user, isAdmin, loading: authLoading } = useAuth();
   const { openLogin } = useAuthDialog();
   const [topics, setTopics] = useState<MediaTopicAdminItem[]>([]);
-  const [media, setMedia] = useState<MediaListItem[]>([]);
-  const [selectedMediaDetails, setSelectedMediaDetails] = useState<Record<string, MediaDetailResponse["item"]>>({});
-  const [mediaSearch, setMediaSearch] = useState("");
-  const [mediaCategory, setMediaCategory] = useState<"all" | "movie" | "series">("all");
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [mediaLoading, setMediaLoading] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [editor, setEditor] = useState<TopicEditor | null>(null);
   const editorOpened = editor !== null;
-
-  const loadMedia = useCallback(async (search: string, category: "all" | "movie" | "series") => {
-    setMediaLoading(true);
-    try {
-      const result = await fetchMediaList({ search, category, sort: "popular", limit: 120, page: 1 });
-      setMedia(result.items);
-    } catch (error) {
-      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
-    } finally {
-      setMediaLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!editorOpened) return;
-    const timer = window.setTimeout(() => {
-      void loadMedia(mediaSearch, mediaCategory);
-    }, 250);
-    return () => window.clearTimeout(timer);
-  }, [editorOpened, mediaCategory, mediaSearch, loadMedia]);
-
-  useEffect(() => {
-    if (!editorOpened || !editor) return;
-    const mediaIDs = editor.mediaIds.filter((id) => !selectedMediaDetails[id]);
-    if (mediaIDs.length === 0) return;
-
-    let active = true;
-    void Promise.allSettled(
-      mediaIDs.map(async (id) => {
-        const result = await fetchMediaDetail(id);
-        return { id, item: result.item };
-      })
-    ).then((results) => {
-      if (!active) return;
-      setSelectedMediaDetails((current) => {
-        const next = { ...current };
-        for (const result of results) {
-          if (result.status === "fulfilled" && result.value.item) {
-            next[result.value.id] = result.value.item;
-          }
-        }
-        return next;
-      });
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [editor, editorOpened, selectedMediaDetails]);
 
   const load = useCallback(async () => {
     if (!isAdmin) return;
@@ -143,7 +66,7 @@ export function TopicsManagementPage() {
     void load();
   }, [load]);
 
-  const openCreate = () => setEditor(emptyEditor());
+  const openCreate = () => setEditor(emptyTopicEditor());
   const openEdit = (topic: MediaTopicAdminItem) => {
     setEditor({
       id: topic.id,
@@ -153,36 +76,6 @@ export function TopicsManagementPage() {
       mediaIds: topic.mediaIds,
       enabled: topic.enabled
     });
-  };
-
-  const save = async () => {
-    if (!editor || !editor.name.trim()) {
-      notifications.show({ color: "yellow", message: t("topics.manage.name") });
-      return;
-    }
-    setSaving(true);
-    try {
-      const input: MediaTopicAdminInput = {
-        name: editor.name.trim(),
-        description: editor.description.trim(),
-        sortOrder: editor.sortOrder,
-        mediaIds: editor.mediaIds,
-        enabled: editor.enabled
-      };
-      if (editor.id) {
-        await updateAdminTopic(editor.id, input);
-        notifications.show({ color: "green", message: t("topics.manage.updated") });
-      } else {
-        await createAdminTopic(input);
-        notifications.show({ color: "green", message: t("topics.manage.created") });
-      }
-      setEditor(null);
-      await load();
-    } catch (error) {
-      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
-    } finally {
-      setSaving(false);
-    }
   };
 
   const remove = (topic: MediaTopicAdminItem) => {
@@ -244,17 +137,6 @@ export function TopicsManagementPage() {
   if (loading) {
     return <Group justify="center" py="xl"><Loader /></Group>;
   }
-
-  const mediaOptions = media.map((item) => ({
-    value: item.id,
-    label: mediaOptionLabel(item, locale)
-  }));
-  const selectedMediaOptions = (editor?.mediaIds || [])
-    .filter((id) => !media.some((item) => item.id === id))
-    .map((id) => ({
-      value: id,
-      label: selectedMediaDetails[id] ? mediaOptionLabel(selectedMediaDetails[id], locale) : id
-    }));
 
   return (
     <>
@@ -359,100 +241,13 @@ export function TopicsManagementPage() {
         )}
       </Stack>
 
-      <Modal
-        opened={editor !== null}
+      <TopicEditorModal
+        opened={editorOpened}
+        editor={editor}
+        onChange={setEditor}
         onClose={() => setEditor(null)}
-        title={editor?.id ? t("topics.manage.edit") : t("topics.manage.create")}
-        size="lg"
-      >
-        {editor ? (
-          <Stack>
-            <TextInput
-              label={t("topics.manage.name")}
-              value={editor.name}
-              onChange={(event) => setEditor((current) => current ? { ...current, name: event.currentTarget.value } : current)}
-              required
-            />
-            <Textarea
-              label={t("topics.manage.description")}
-              value={editor.description}
-              onChange={(event) => setEditor((current) => current ? { ...current, description: event.currentTarget.value } : current)}
-              minRows={3}
-            />
-            <NumberInput
-              label={t("topics.manage.sortOrder")}
-              value={editor.sortOrder}
-              min={-100000}
-              max={100000}
-              onChange={(value) => setEditor((current) => current ? { ...current, sortOrder: numberValue(value) } : current)}
-            />
-            <Group align="flex-end" wrap="nowrap">
-              <TextInput
-                label={t("topics.manage.mediaSearch")}
-                placeholder={t("topics.manage.mediaPlaceholder")}
-                value={mediaSearch}
-                onChange={(event) => setMediaSearch(event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    void loadMedia(mediaSearch, mediaCategory);
-                  }
-                }}
-                style={{ flex: 1 }}
-              />
-              <Select
-                label={t("topics.manage.mediaType")}
-                data={[
-                  { value: "all", label: t("topics.manage.mediaTypes.all") },
-                  { value: "movie", label: t("topics.manage.mediaTypes.movie") },
-                  { value: "series", label: t("topics.manage.mediaTypes.series") }
-                ]}
-                value={mediaCategory}
-                onChange={(value) => setMediaCategory((value as "all" | "movie" | "series") || "all")}
-                w={140}
-              />
-              <Tooltip label={t("nav.search")} withArrow>
-                <ActionIcon
-                  className="app-icon-btn"
-                  variant="light"
-                  size="lg"
-                  aria-label={t("nav.search")}
-                  loading={mediaLoading}
-                  onClick={() => void loadMedia(mediaSearch, mediaCategory)}
-                >
-                  <Search size={16} />
-                </ActionIcon>
-              </Tooltip>
-            </Group>
-            <MultiSelect
-              label={t("topics.manage.media")}
-              placeholder={t("topics.manage.mediaPlaceholder")}
-              data={[...mediaOptions, ...selectedMediaOptions]}
-              value={editor.mediaIds}
-              onChange={(mediaIds) => setEditor((current) => current ? { ...current, mediaIds } : current)}
-              searchable
-              clearable
-              maxDropdownHeight={280}
-              styles={{
-                pillsList: {
-                  maxHeight: 180,
-                  overflowY: "auto",
-                  alignContent: "flex-start"
-                }
-              }}
-            />
-            <Switch
-              label={t("topics.manage.enabled")}
-              checked={editor.enabled}
-              onChange={(event) => setEditor((current) => current ? { ...current, enabled: event.currentTarget.checked } : current)}
-            />
-            <Group justify="flex-end">
-              <Button variant="default" onClick={() => setEditor(null)}>{t("common.cancel")}</Button>
-              <Button loading={saving} onClick={() => void save()}>{t("topics.manage.save")}</Button>
-            </Group>
-          </Stack>
-        ) : null}
-      </Modal>
+        onSaved={() => void load()}
+      />
     </>
   );
 }
@@ -461,10 +256,6 @@ function topicModuleLabel(module: string, t: (key: string) => string): string {
   const key = `topics.modules.${module}`;
   const label = t(key);
   return label === key ? module : label;
-}
-
-function mediaOptionLabel(item: MediaListItem | MediaDetailResponse["item"], locale: string): string {
-  return getDisplayTitle(item, locale === "en" ? "en" : "zh") || item.title || item.id;
 }
 
 function topicLabel(topic: MediaTopicAdminItem, t: (key: string) => string): string {

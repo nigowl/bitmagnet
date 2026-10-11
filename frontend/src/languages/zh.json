@@ -142,6 +142,7 @@
     "recommended": "推荐专题",
     "series": "电影系列",
     "custom": "自定义专题",
+    "edit": "编辑",
     "modules": {
       "popular": "热门",
       "high-rated": "高分",
@@ -150,17 +151,16 @@
       "custom": "自定义"
     },
     "movieSeries": "电影系列",
+    "updatedAt": "最后更新时间",
     "empty": "暂未生成专题",
     "notFound": "未找到该专题",
+    "search": "搜索专题",
+    "searchPlaceholder": "按专题名称过滤",
     "builtIn": {
       "highRatedMovies": "高分电影",
-      "highRatedMoviesHint": "评分达到 8 分及以上的电影。",
       "popularMovies": "热门电影",
-      "popularMoviesHint": "本地影视库中的热门电影资源。",
       "popularSeries": "热门剧集",
-      "popularSeriesHint": "本地影视库中的热门剧集资源。",
-      "awardWinning": "获奖电影",
-      "awardWinningHint": "包含奖项元数据的电影。"
+      "awardWinning": "获奖电影"
     },
     "manage": {
       "title": "专题",

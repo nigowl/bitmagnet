@@ -142,6 +142,7 @@
     "recommended": "Recommended Topics",
     "series": "Movie Series",
     "custom": "Custom Topics",
+    "edit": "Edit",
     "modules": {
       "popular": "Popular",
       "high-rated": "High Rated",
@@ -150,17 +151,16 @@
       "custom": "Custom"
     },
     "movieSeries": "Movie series",
+    "updatedAt": "Last updated",
     "empty": "No topics have been generated yet",
     "notFound": "Topic not found",
+    "search": "Search topics",
+    "searchPlaceholder": "Filter by topic name",
     "builtIn": {
       "highRatedMovies": "Top Rated Movies",
-      "highRatedMoviesHint": "Movies with a rating of 8 or higher.",
       "popularMovies": "Popular Movies",
-      "popularMoviesHint": "Popular movie resources in the local library.",
       "popularSeries": "Popular Series",
-      "popularSeriesHint": "Popular TV series in the local library.",
-      "awardWinning": "Award-Winning Movies",
-      "awardWinningHint": "Movies with award metadata."
+      "awardWinning": "Award-Winning Movies"
     },
     "manage": {
       "title": "Topics",

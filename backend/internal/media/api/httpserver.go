@@ -59,6 +59,7 @@ func (b *builder) Apply(e *gin.Engine) error {
 	e.GET("/api/topics", b.listTopics)
 	e.GET("/api/topics/:id", b.topicDetail)
 	e.GET("/api/admin/topics", b.requireAdmin(), b.listAdminTopics)
+	e.GET("/api/admin/topics/:id", b.requireAdmin(), b.getAdminTopic)
 	e.POST("/api/admin/topics", b.requireAdmin(), b.createTopic)
 	e.POST("/api/admin/topics/rebuild", b.requireAdmin(), b.rebuildTopics)
 	e.PUT("/api/admin/topics/:id", b.requireAdmin(), b.updateTopic)
@@ -170,6 +171,15 @@ func (b *builder) listAdminTopics(c *gin.Context) {
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) getAdminTopic(c *gin.Context) {
+	result, err := b.service.GetAdminTopic(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		writeTopicError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, result)

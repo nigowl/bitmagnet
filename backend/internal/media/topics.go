@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/nigowl/bitmagnet/internal/database/dao"
@@ -165,7 +167,7 @@ func (s *service) RebuildTopics(ctx context.Context) (TopicRebuildResult, error)
 			Kind:        topicKindCurated,
 			Module:      "high-rated",
 			Name:        "Top Rated Movies",
-			Description: "Movies with a rating of 8 or higher.",
+			Description: "",
 			SortOrder:   10,
 			Where:       "me.torrent_count > 0 AND me.content_type = ? AND me.vote_average >= ?",
 			Order:       "me.vote_average DESC NULLS LAST, me.vote_count DESC NULLS LAST, me.release_year DESC NULLS LAST, me.id",
@@ -177,7 +179,7 @@ func (s *service) RebuildTopics(ctx context.Context) (TopicRebuildResult, error)
 			Kind:        topicKindCurated,
 			Module:      "popular",
 			Name:        "Popular Movies",
-			Description: "Popular movie resources in the local library.",
+			Description: "",
 			SortOrder:   20,
 			Where:       "me.torrent_count > 0 AND me.content_type = ?",
 			Order:       "COALESCE(me.heat_score_recent, 0) DESC, me.torrent_count DESC, me.vote_average DESC NULLS LAST, me.id",
@@ -189,7 +191,7 @@ func (s *service) RebuildTopics(ctx context.Context) (TopicRebuildResult, error)
 			Kind:        topicKindCurated,
 			Module:      "popular",
 			Name:        "Popular Series",
-			Description: "Popular TV series in the local library.",
+			Description: "",
 			SortOrder:   30,
 			Where:       "me.torrent_count > 0 AND me.content_type = ?",
 			Order:       "COALESCE(me.heat_score_recent, 0) DESC, me.torrent_count DESC, me.vote_average DESC NULLS LAST, me.id",
@@ -201,7 +203,7 @@ func (s *service) RebuildTopics(ctx context.Context) (TopicRebuildResult, error)
 			Kind:        topicKindCurated,
 			Module:      "award-winning",
 			Name:        "Award-Winning Movies",
-			Description: "Movies with award metadata.",
+			Description: "",
 			SortOrder:   50,
 			Where:       "me.torrent_count > 0 AND me.content_type = ? AND jsonb_array_length(COALESCE(me.award_names, '[]'::jsonb)) > 0",
 			Order:       "me.vote_average DESC NULLS LAST, me.vote_count DESC NULLS LAST, me.release_year DESC NULLS LAST, me.id",
@@ -231,7 +233,7 @@ func (s *service) RebuildTopics(ctx context.Context) (TopicRebuildResult, error)
 			Kind:        topicKindFranchise,
 			Module:      "series",
 			Name:        localizedFranchiseTopicName(franchise.Name, franchise.LocalizedName),
-			Description: "Movie series from metadata.",
+			Description: "",
 			SortOrder:   1000 + index,
 			MediaIDs:    mediaIDs,
 		})
@@ -249,72 +251,97 @@ func (s *service) RebuildTopics(ctx context.Context) (TopicRebuildResult, error)
 			return err
 		}
 		enabledByID := make(map[string]bool, len(existingTopics))
+		existingByID := make(map[string]model.MediaTopic, len(existingTopics))
+		nameByID := make(map[string]string, len(existingTopics))
+		descriptionByID := make(map[string]string, len(existingTopics))
 		for _, topic := range existingTopics {
 			enabledByID[topic.ID] = topic.Enabled
+			existingByID[topic.ID] = topic
+			nameByID[topic.ID] = topic.Name
+			descriptionByID[topic.ID] = topic.Description
 		}
-
-		var generatedTopicIDs []string
-		if err := tx.Session(&gorm.Session{NewDB: true}).
-			Table(model.TableNameMediaTopic).
-			Where("kind IN ?", []string{topicKindCurated, topicKindFranchise}).
-			Pluck("id", &generatedTopicIDs).Error; err != nil {
+		existingMediaIDsByTopic, err := loadTopicMediaIDMap(ctx, tx, existingTopics)
+		if err != nil {
 			return err
 		}
-		if len(generatedTopicIDs) > 0 {
+
+		desiredTopicIDs := make(map[string]struct{}, len(seeds))
+		for _, seed := range seeds {
+			if len(seed.MediaIDs) == 0 {
+				continue
+			}
+			desiredTopicIDs[seed.ID] = struct{}{}
+			description := seed.Description
+			if existingDescription, ok := descriptionByID[seed.ID]; ok {
+				description = existingDescription
+			}
+			name := topicName(nameByID, seed.ID, seed.Name)
+			enabled := topicEnabled(enabledByID, seed.ID)
+			existingTopic, exists := existingByID[seed.ID]
+			if exists {
+				mediaChanged := !slices.Equal(seed.MediaIDs, existingMediaIDsByTopic[seed.ID])
+				if !topicContentChanged(existingTopic, seed.Kind, seed.Module, name, description, seed.SortOrder, enabled, seed.MediaIDs, existingMediaIDsByTopic[seed.ID]) {
+					topicCount++
+					itemCount += len(seed.MediaIDs)
+					continue
+				}
+				existingTopic.Kind = seed.Kind
+				existingTopic.Module = seed.Module
+				existingTopic.Name = name
+				existingTopic.Description = description
+				existingTopic.SortOrder = seed.SortOrder
+				existingTopic.ItemCount = len(seed.MediaIDs)
+				existingTopic.Enabled = enabled
+				existingTopic.UpdatedAt = now
+				if err := tx.Session(&gorm.Session{NewDB: true}).Save(&existingTopic).Error; err != nil {
+					return err
+				}
+				if mediaChanged {
+					if err := replaceTopicItems(tx, seed.ID, seed.MediaIDs, now); err != nil {
+						return err
+					}
+				}
+			} else {
+				topic := model.MediaTopic{
+					ID:          seed.ID,
+					Kind:        seed.Kind,
+					Module:      seed.Module,
+					Name:        name,
+					Description: description,
+					SortOrder:   seed.SortOrder,
+					ItemCount:   len(seed.MediaIDs),
+					Enabled:     enabled,
+					CreatedAt:   now,
+					UpdatedAt:   now,
+				}
+				if err := tx.Session(&gorm.Session{NewDB: true}).Create(&topic).Error; err != nil {
+					return err
+				}
+				if err := replaceTopicItems(tx, seed.ID, seed.MediaIDs, now); err != nil {
+					return err
+				}
+			}
+			topicCount++
+			itemCount += len(seed.MediaIDs)
+		}
+
+		for _, existingTopic := range existingTopics {
+			if _, ok := desiredTopicIDs[existingTopic.ID]; ok {
+				continue
+			}
 			if err := tx.Session(&gorm.Session{NewDB: true}).
 				Table(model.TableNameMediaTopicItem).
-				Where("topic_id IN ?", generatedTopicIDs).
+				Where("topic_id = ?", existingTopic.ID).
 				Delete(&model.MediaTopicItem{}).Error; err != nil {
 				return err
 			}
 			if err := tx.Session(&gorm.Session{NewDB: true}).
 				Table(model.TableNameMediaTopic).
-				Where("id IN ?", generatedTopicIDs).
+				Where("id = ?", existingTopic.ID).
 				Delete(&model.MediaTopic{}).Error; err != nil {
 				return err
 			}
 		}
-
-		topics := make([]model.MediaTopic, 0, len(seeds))
-		items := make([]model.MediaTopicItem, 0)
-		for _, seed := range seeds {
-			if len(seed.MediaIDs) == 0 {
-				continue
-			}
-			topics = append(topics, model.MediaTopic{
-				ID:          seed.ID,
-				Kind:        seed.Kind,
-				Module:      seed.Module,
-				Name:        seed.Name,
-				Description: seed.Description,
-				SortOrder:   seed.SortOrder,
-				ItemCount:   len(seed.MediaIDs),
-				Enabled:     topicEnabled(enabledByID, seed.ID),
-				CreatedAt:   now,
-				UpdatedAt:   now,
-			})
-			for position, mediaID := range seed.MediaIDs {
-				items = append(items, model.MediaTopicItem{
-					TopicID:   seed.ID,
-					MediaID:   mediaID,
-					Position:  position,
-					CreatedAt: now,
-				})
-			}
-		}
-
-		if len(topics) > 0 {
-			if err := tx.Session(&gorm.Session{NewDB: true}).CreateInBatches(&topics, 100).Error; err != nil {
-				return err
-			}
-		}
-		if len(items) > 0 {
-			if err := tx.Session(&gorm.Session{NewDB: true}).CreateInBatches(&items, 500).Error; err != nil {
-				return err
-			}
-		}
-		itemCount = len(items)
-		topicCount = len(topics)
 		return nil
 	}); err != nil {
 		return TopicRebuildResult{}, err
@@ -372,13 +399,43 @@ func (s *service) ListAdminTopics(ctx context.Context, input TopicAdminListInput
 	return TopicAdminListResult{TotalCount: totalCount, Items: items}, nil
 }
 
+func (s *service) GetAdminTopic(ctx context.Context, id string) (TopicAdminItem, error) {
+	q, err := s.dao.Get()
+	if err != nil {
+		return TopicAdminItem{}, err
+	}
+
+	topicID := strings.TrimSpace(id)
+	if topicID == "" {
+		return TopicAdminItem{}, ErrNotFound
+	}
+
+	db := dbForTopics(q)
+	var topic model.MediaTopic
+	if err := db.WithContext(ctx).
+		Table(model.TableNameMediaTopic).
+		Where("id = ?", topicID).
+		Take(&topic).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return TopicAdminItem{}, ErrNotFound
+		}
+		return TopicAdminItem{}, err
+	}
+
+	mediaIDsByTopic, err := loadTopicMediaIDMap(ctx, db, []model.MediaTopic{topic})
+	if err != nil {
+		return TopicAdminItem{}, err
+	}
+	return topicAdminItemFromModel(topic, mediaIDsByTopic[topic.ID]), nil
+}
+
 func (s *service) CreateTopic(ctx context.Context, input TopicAdminInput) (TopicAdminItem, error) {
 	q, err := s.dao.Get()
 	if err != nil {
 		return TopicAdminItem{}, err
 	}
 
-	name, description, mediaIDs, err := normalizeTopicInput(input)
+	name, description, mediaIDs, _, err := normalizeTopicInput(input)
 	if err != nil {
 		return TopicAdminItem{}, err
 	}
@@ -427,16 +484,12 @@ func (s *service) UpdateTopic(ctx context.Context, id string, input TopicAdminIn
 	if topicID == "" {
 		return TopicAdminItem{}, ErrNotFound
 	}
-	name, description, mediaIDs, err := normalizeTopicInput(input)
+	name, description, mediaIDs, mediaIDsProvided, err := normalizeTopicInput(input)
 	if err != nil {
 		return TopicAdminItem{}, err
 	}
 
 	db := dbForTopics(q)
-	mediaIDs, err = validateTopicMediaIDs(ctx, db, mediaIDs)
-	if err != nil {
-		return TopicAdminItem{}, err
-	}
 
 	var topic model.MediaTopic
 	if err := db.WithContext(ctx).Table(model.TableNameMediaTopic).Where("id = ?", topicID).Take(&topic).Error; err != nil {
@@ -444,6 +497,18 @@ func (s *service) UpdateTopic(ctx context.Context, id string, input TopicAdminIn
 			return TopicAdminItem{}, ErrNotFound
 		}
 		return TopicAdminItem{}, err
+	}
+	if mediaIDsProvided {
+		mediaIDs, err = validateTopicMediaIDs(ctx, db, mediaIDs)
+		if err != nil {
+			return TopicAdminItem{}, err
+		}
+	} else {
+		mediaIDsByTopic, loadErr := loadTopicMediaIDMap(ctx, db, []model.MediaTopic{topic})
+		if loadErr != nil {
+			return TopicAdminItem{}, loadErr
+		}
+		mediaIDs = mediaIDsByTopic[topic.ID]
 	}
 	now := time.Now()
 	topic.Name = name
@@ -458,7 +523,10 @@ func (s *service) UpdateTopic(ctx context.Context, id string, input TopicAdminIn
 		if err := tx.Session(&gorm.Session{NewDB: true}).Save(&topic).Error; err != nil {
 			return err
 		}
-		return replaceTopicItems(tx, topic.ID, mediaIDs, now)
+		if mediaIDsProvided {
+			return replaceTopicItems(tx, topic.ID, mediaIDs, now)
+		}
+		return nil
 	}); err != nil {
 		return TopicAdminItem{}, err
 	}
@@ -628,19 +696,22 @@ func topicIDs(topics []model.MediaTopic) []string {
 	return ids
 }
 
-func normalizeTopicInput(input TopicAdminInput) (string, string, []string, error) {
+func normalizeTopicInput(input TopicAdminInput) (string, string, []string, bool, error) {
 	name := strings.TrimSpace(input.Name)
 	if name == "" || utf8.RuneCountInString(name) > 120 {
-		return "", "", nil, ErrInvalidTopic
+		return "", "", nil, false, ErrInvalidTopic
 	}
 	description := strings.TrimSpace(input.Description)
 	if utf8.RuneCountInString(description) > 500 {
-		return "", "", nil, ErrInvalidTopic
+		return "", "", nil, false, ErrInvalidTopic
 	}
 	if input.SortOrder < -100000 || input.SortOrder > 100000 {
-		return "", "", nil, ErrInvalidTopic
+		return "", "", nil, false, ErrInvalidTopic
 	}
-	return name, description, normalizeTopicMediaIDs(input.MediaIDs), nil
+	if input.MediaIDs == nil {
+		return name, description, []string{}, false, nil
+	}
+	return name, description, normalizeTopicMediaIDs(*input.MediaIDs), true, nil
 }
 
 func inputEnabled(value *bool, fallback bool) bool {
@@ -655,6 +726,31 @@ func topicEnabled(enabledByID map[string]bool, id string) bool {
 		return enabled
 	}
 	return true
+}
+
+func topicName(nameByID map[string]string, id, fallback string) string {
+	if name, ok := nameByID[id]; ok {
+		return name
+	}
+	return fallback
+}
+
+func topicContentChanged(
+	existing model.MediaTopic,
+	kind, module string,
+	name, description string,
+	sortOrder int,
+	enabled bool,
+	mediaIDs, existingMediaIDs []string,
+) bool {
+	return existing.Kind != kind ||
+		existing.Module != module ||
+		existing.Name != name ||
+		existing.Description != description ||
+		existing.SortOrder != sortOrder ||
+		existing.Enabled != enabled ||
+		existing.ItemCount != len(mediaIDs) ||
+		!slices.Equal(mediaIDs, existingMediaIDs)
 }
 
 func normalizeTopicMediaIDs(ids []string) []string {
@@ -759,13 +855,43 @@ func loadFranchiseTopicRows(ctx context.Context, db *gorm.DB) ([]franchiseTopicR
 func localizedFranchiseTopicName(original, localized string) string {
 	original = strings.TrimSpace(original)
 	localized = strings.TrimSpace(localized)
-	if localized == "" || !containsHan(localized) {
+	if localized == "" {
 		return original
 	}
 	if strings.HasSuffix(localized, "系列") || strings.HasSuffix(localized, "合集") {
-		return localized
+		base := strings.TrimSpace(strings.TrimSuffix(strings.TrimSuffix(localized, "系列"), "合集"))
+		runes := []rune(base)
+		allDigits := len(runes) > 0
+		for _, char := range runes {
+			allDigits = allDigits && unicode.IsDigit(char)
+		}
+		if allDigits || len(runes) == 0 || runes[len(runes)-1] < '1' || runes[len(runes)-1] > '9' {
+			return localized
+		}
 	}
-	return localized + "系列"
+	if !containsHan(localized) {
+		return original
+	}
+	normalized := strings.TrimSpace(strings.TrimSuffix(strings.TrimSuffix(localized, "系列"), "合集"))
+	if index := strings.IndexAny(normalized, ":："); index > 0 {
+		normalized = strings.TrimSuffix(strings.TrimSpace(normalized[:index]), "系列")
+	}
+	runes := []rune(normalized)
+	end := len(runes)
+	for end > 0 && unicode.IsSpace(runes[end-1]) {
+		end--
+	}
+	start := end
+	for start > 0 && unicode.IsDigit(runes[start-1]) {
+		start--
+	}
+	if start < end && end-start == 1 && runes[end-1] >= '1' && runes[end-1] <= '9' {
+		normalized = strings.TrimSpace(string(runes[:start]))
+	}
+	if normalized == "" || !containsHan(normalized) {
+		return original
+	}
+	return normalized + "系列"
 }
 
 func loadFranchiseMediaIDs(db *gorm.DB, franchise franchiseTopicRow) ([]string, error) {

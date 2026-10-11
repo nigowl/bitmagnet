@@ -103,7 +103,7 @@ export type MediaTopicAdminInput = {
   name: string;
   description: string;
   sortOrder: number;
-  mediaIds: string[];
+  mediaIds?: string[];
   enabled: boolean;
 };
 
@@ -418,6 +418,10 @@ export async function fetchAdminTopics(params?: { limit?: number; page?: number 
         }))
       : []
   };
+}
+
+export async function fetchAdminTopic(id: string) {
+  return apiRequest<MediaTopicAdminItem>(`/api/admin/topics/${encodeURIComponent(id)}`);
 }
 
 export async function createAdminTopic(input: MediaTopicAdminInput) {

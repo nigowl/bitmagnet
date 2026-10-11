@@ -3,19 +3,26 @@
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Badge, Button, Card, Group, Loader, Pagination, Stack, Text, Title } from "@mantine/core";
-import { ArrowLeft, Layers3 } from "lucide-react";
+import { Badge, Button, Card, Group, Loader, Pagination, Stack, Text, TextInput, Title } from "@mantine/core";
+import { ArrowLeft, Layers3, Pencil, Search } from "lucide-react";
+import { useAuth } from "@/auth/provider";
+import { useAuthDialog } from "@/auth/dialog";
 import { CoverImage } from "@/components/cover-image";
 import { MediaResultsSection } from "@/components/media-page.results";
+import { TopicEditorModal, type TopicEditor } from "@/components/topic-editor-modal";
 import { useI18n } from "@/languages/provider";
 import {
+  fetchAdminTopic,
   fetchMediaTopicDetail,
   fetchMediaTopics,
   type MediaTopic,
+  type MediaTopicAdminItem,
   type MediaListItem
 } from "@/lib/media-api";
+import { notifications } from "@mantine/notifications";
 import { parsePositiveIntParam } from "@/lib/url-params";
 import { getDisplayTitle, getPosterUrl } from "@/lib/media";
+import { formatDateTime, formatRelativeTime } from "@/lib/datetime";
 import { MEDIA_LIST_TARGET_COUNT, resolveAdaptiveMediaListCount } from "./media-page.helpers";
 
 const TOPIC_PAGE_TARGET_COUNT = MEDIA_LIST_TARGET_COUNT;
@@ -29,6 +36,8 @@ export function TopicsPage() {
   const [topics, setTopics] = useState<MediaTopic[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const page = parsePositiveIntParam(searchParams.get("page"), 1);
+  const search = searchParams.get("search") || "";
+  const [searchInput, setSearchInput] = useState(search);
   const pageSizeFromURL = parsePositiveIntParam(searchParams.get("limit"), 0);
   const [pageSize, setPageSize] = useState(pageSizeFromURL || TOPIC_PAGE_TARGET_COUNT);
   const [topicLayoutElement, setTopicLayoutElement] = useState<HTMLDivElement | null>(null);
@@ -54,6 +63,16 @@ export function TopicsPage() {
     },
     [pathname, router, searchParams]
   );
+
+  useEffect(() => {
+    setSearchInput(search);
+  }, [search]);
+
+  const applySearch = useCallback(() => {
+    const nextSearch = searchInput.trim();
+    if (nextSearch === search) return;
+    updateQuery({ search: nextSearch || null, page: "1" });
+  }, [search, searchInput, updateQuery]);
 
   useLayoutEffect(() => {
     const element = topicLayoutElement;
@@ -98,7 +117,7 @@ export function TopicsPage() {
 
   useEffect(() => {
     let active = true;
-    void fetchMediaTopics({ limit: pageSize, page })
+    void fetchMediaTopics({ search, limit: pageSize, page })
       .then((result) => {
         if (!active) return;
         setTopics(result.items);
@@ -116,7 +135,7 @@ export function TopicsPage() {
     return () => {
       active = false;
     };
-  }, [page, pageSize]);
+  }, [page, pageSize, search]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(totalCount / pageSize)), [pageSize, totalCount]);
   const titleLanguage = locale === "en" ? "en" : "zh";
@@ -128,10 +147,28 @@ export function TopicsPage() {
 
   return (
     <Stack gap="lg">
-      <Stack gap={4}>
-        <Title order={2} className="page-title">{t("topics.title")}</Title>
-        <Text c="dimmed" className="page-subtitle">{t("topics.subtitle")}</Text>
-      </Stack>
+      <Group justify="space-between" align="flex-end" wrap="wrap" gap="md">
+        <Stack gap={4}>
+          <Title order={2} className="page-title">{t("topics.title")}</Title>
+          <Text c="dimmed" className="page-subtitle">{t("topics.subtitle")}</Text>
+        </Stack>
+        <TextInput
+          leftSection={<Search size={16} />}
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.currentTarget.value)}
+          onBlur={applySearch}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              applySearch();
+            }
+          }}
+          placeholder={t("topics.searchPlaceholder")}
+          aria-label={t("topics.search")}
+          w={320}
+          maw="100%"
+        />
+      </Group>
 
       {loading ? (
         <Card className="glass-card" withBorder>
@@ -145,7 +182,13 @@ export function TopicsPage() {
         <>
           <div ref={setTopicLayoutRef} className="media-wall">
             {topics.map((topic) => (
-              <TopicCard key={topic.id} topic={topic} titleLanguage={titleLanguage} t={t} />
+              <TopicCard
+                key={topic.id}
+                topic={topic}
+                titleLanguage={titleLanguage}
+                locale={locale}
+                t={t}
+              />
             ))}
           </div>
           <Card className="glass-card media-toolbar-pagination" withBorder>
@@ -172,14 +215,17 @@ export function TopicsPage() {
 function TopicCard({
   topic,
   titleLanguage,
+  locale,
   t
 }: {
   topic: MediaTopic;
   titleLanguage: "zh" | "en";
+  locale: string;
   t: (key: string) => string;
 }) {
   const previews = topic.previews.slice(0, 3);
   const coverCount = Math.max(1, previews.length);
+  const description = topicCardDescription(topic);
 
   return (
     <Link href={`/topics/${encodeURIComponent(topic.id)}`} className="unstyled-link">
@@ -210,17 +256,20 @@ function TopicCard({
                 </div>
               );
             })}
+            <div className="topic-card-member-count">
+              {topic.itemCount} {t("topics.manage.media")}
+            </div>
           </div>
           <div className="media-wall-content">
             <div className="media-wall-title">{topicLabel(topic, t)}</div>
-            <div className="media-wall-facts">
-              {topic.itemCount} {t("topics.manage.media")}
+            <div className="media-wall-facts topic-card-updated-at">
+              {formatRelativeTime(topic.updatedAt, locale)}
             </div>
-            <div className="media-wall-meta">
-              <span className="media-mini-chip">
-                {topic.kind === "franchise" ? t("topics.movieSeries") : topicDescription(topic, t)}
-              </span>
-            </div>
+            {description ? (
+              <div className="media-wall-meta">
+                <span className="media-mini-chip topic-card-description">{description}</span>
+              </div>
+            ) : null}
           </div>
         </article>
       </div>
@@ -243,14 +292,12 @@ function topicLabel(topic: MediaTopic, t: (key: string) => string): string {
   return labels[topic.id] || topic.name;
 }
 
-function topicDescription(topic: MediaTopic, t: (key: string) => string): string {
-  const descriptions: Record<string, string> = {
-    "curated:high-rated-movies": t("topics.builtIn.highRatedMoviesHint"),
-    "curated:popular-movies": t("topics.builtIn.popularMoviesHint"),
-    "curated:popular-series": t("topics.builtIn.popularSeriesHint"),
-    "curated:award-winning": t("topics.builtIn.awardWinningHint")
-  };
-  return descriptions[topic.id] || topic.description;
+function topicDescription(topic: MediaTopic): string {
+  return topic.description.trim();
+}
+
+function topicCardDescription(topic: MediaTopic): string {
+  return topicDescription(topic);
 }
 
 function topicModuleLabel(moduleKey: string, t: (key: string) => string): string {
@@ -270,6 +317,8 @@ function decodeTopicID(value?: string): string {
 
 export function TopicDetailPage() {
   const { t, locale } = useI18n();
+  const { user, isAdmin } = useAuth();
+  const { openLogin } = useAuthDialog();
   const params = useParams<{ topicId: string }>();
   const pathname = usePathname();
   const router = useRouter();
@@ -280,6 +329,7 @@ export function TopicDetailPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [editor, setEditor] = useState<TopicEditor | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -307,6 +357,38 @@ export function TopicDetailPage() {
 
   const titleLanguage = locale === "en" ? "en" : "zh";
   const totalPages = Math.max(1, Math.ceil(totalCount / TOPIC_DETAIL_PAGE_SIZE));
+  const description = topic ? topicDescription(topic) : "";
+
+  const openTopicEdit = async () => {
+    if (!user || !isAdmin) {
+      openLogin();
+      return;
+    }
+    try {
+      const adminTopic = await fetchAdminTopic(topicID);
+      setEditor({
+        id: adminTopic.id,
+        name: adminTopic.name,
+        description: adminTopic.description,
+        sortOrder: adminTopic.sortOrder,
+        mediaIds: adminTopic.mediaIds,
+        enabled: adminTopic.enabled
+      });
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
+  const handleTopicSaved = (saved: MediaTopicAdminItem) => {
+    setTopic((current) => current ? {
+      ...current,
+      name: saved.name,
+      description: saved.description,
+      itemCount: saved.itemCount,
+      enabled: saved.enabled,
+      updatedAt: saved.updatedAt
+    } : current);
+  };
 
   if (loading && !topic) {
     return <Group justify="center" py="xl"><Loader /></Group>;
@@ -325,17 +407,27 @@ export function TopicDetailPage() {
       <Group justify="space-between" align="flex-start" wrap="wrap">
         <Stack gap={4}>
           <Title order={2} className="page-title">{topicLabel(topic, t)}</Title>
-          <Text c="dimmed" className="page-subtitle">
-            {topic.kind === "franchise" ? t("topics.movieSeries") : topic.kind === "custom" ? topic.description : topicDescription(topic, t)}
-          </Text>
+          {description ? <Text c="dimmed" className="page-subtitle">{description}</Text> : null}
+          <Text c="dimmed" size="sm">{formatDateTime(topic.updatedAt)}</Text>
         </Stack>
-        <Button
-          variant="default"
-          leftSection={<ArrowLeft size={15} />}
-          onClick={() => router.push("/topics")}
-        >
-          {t("common.back")}
-        </Button>
+        <Group gap="xs">
+          <Button
+            variant="default"
+            leftSection={<ArrowLeft size={15} />}
+            onClick={() => router.push("/topics")}
+          >
+            {t("common.back")}
+          </Button>
+          {isAdmin ? (
+            <Button
+              variant="default"
+              leftSection={<Pencil size={15} />}
+              onClick={() => void openTopicEdit()}
+            >
+              {t("topics.edit")}
+            </Button>
+          ) : null}
+        </Group>
       </Group>
 
       <MediaResultsSection
@@ -351,6 +443,13 @@ export function TopicDetailPage() {
           setLoading(true);
           setPage(nextPage);
         }}
+      />
+      <TopicEditorModal
+        opened={editor !== null}
+        editor={editor}
+        onChange={setEditor}
+        onClose={() => setEditor(null)}
+        onSaved={handleTopicSaved}
       />
     </Stack>
   );
