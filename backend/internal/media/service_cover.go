@@ -213,7 +213,7 @@ func (s *service) GenerateCover(ctx context.Context, input GenerateCoverInput) e
 		return ErrCoverNotFound
 	}
 
-	remoteURL := s.coverCache.sourceURL(sourcePath)
+	remoteURL := s.coverCache.sourceURL(coverKindValue, sourcePath)
 	if s.logger != nil {
 		s.logger.Info("cover queue job started",
 			zap.String("media_id", mediaID),
@@ -292,6 +292,17 @@ func (s *service) enqueueCoverGeneration(ctx context.Context, mediaID string, ki
 	if tx.Error != nil {
 		return tx.Error
 	}
+	if tx.RowsAffected == 0 {
+		if _, err := q.QueueJob.WithContext(ctx).
+			Where(q.QueueJob.Fingerprint.Eq(job.Fingerprint)).
+			Where(q.QueueJob.Status.In(
+				string(model.QueueJobStatusPending),
+				string(model.QueueJobStatusRetry),
+			)).
+			UpdateColumn(q.QueueJob.Priority, interactiveCoverPriority); err != nil {
+			return err
+		}
+	}
 
 	if s.logger != nil {
 		s.logger.Info("cover queue job enqueued",
@@ -300,7 +311,7 @@ func (s *service) enqueueCoverGeneration(ctx context.Context, mediaID string, ki
 			zap.String("requested_size", string(requestedSize)),
 			zap.String("queue_size", string(queueSize)),
 			zap.String("source_path", sourcePath),
-			zap.String("source_url", s.coverCache.sourceURL(sourcePath)),
+			zap.String("source_url", s.coverCache.sourceURL(kind, sourcePath)),
 			zap.Bool("duplicate", tx.RowsAffected == 0),
 		)
 	}

@@ -110,6 +110,8 @@ tasks:
         --table=content_attributes \
         --table=content_collections \
         --table=content_collections_content \
+        --table=media_topics \
+        --table=media_topic_items \
         --table=torrent_sources \
         --table=torrents \
         --table=torrent_files \

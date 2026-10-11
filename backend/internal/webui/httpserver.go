@@ -88,9 +88,13 @@ func (b *builder) Apply(e *gin.Engine) error {
 	registerFrontendRoute("/login")
 	registerFrontendRoute("/register")
 	registerFrontendRoute("/profile")
-	registerFrontendRoute("/users")
-	registerFrontendRoute("/monitor")
-	registerFrontendRoute("/queue")
+	registerFrontendRoute("/admin/monitor")
+	registerFrontendRoute("/admin/logs")
+	registerFrontendRoute("/admin/queue")
+	registerFrontendRoute("/admin/users")
+	registerFrontendRoute("/admin/settings")
+	registerFrontendRoute("/admin/maintenance")
+	registerFrontendRoute("/admin/topics")
 
 	return nil
 }

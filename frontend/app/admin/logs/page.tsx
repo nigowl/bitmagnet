@@ -6,7 +6,7 @@ export const metadata: Metadata = buildMetadata({
   title: "系统日志",
   description: "查看 bitmagnet（比特磁铁）系统日志，按分类与文件筛选定位问题。",
   keywords: ["bitmagnet", "比特磁铁", "日志", "运维", "排障"],
-  path: "/logs",
+  path: "/admin/logs",
   noIndex: true
 });
 

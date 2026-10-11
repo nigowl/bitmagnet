@@ -30,6 +30,7 @@ const (
 )
 
 var ErrNotFound = errors.New("media not found")
+var ErrInvalidTopic = errors.New("invalid topic")
 var ErrInvalidInfoHash = errors.New("invalid info hash")
 var ErrPlayerDisabled = errors.New("player is disabled")
 var ErrPlayerTransmissionDisabled = errors.New("player transmission is disabled")
@@ -44,6 +45,13 @@ var ErrPlayerSubtitleNotFound = errors.New("player subtitle not found")
 
 type Service interface {
 	List(ctx context.Context, input ListInput) (ListResult, error)
+	ListTopics(ctx context.Context, input TopicListInput) (TopicListResult, error)
+	TopicDetail(ctx context.Context, id string, input ListInput) (TopicDetailResult, error)
+	RebuildTopics(ctx context.Context) (TopicRebuildResult, error)
+	ListAdminTopics(ctx context.Context, input TopicAdminListInput) (TopicAdminListResult, error)
+	CreateTopic(ctx context.Context, input TopicAdminInput) (TopicAdminItem, error)
+	UpdateTopic(ctx context.Context, id string, input TopicAdminInput) (TopicAdminItem, error)
+	DeleteTopic(ctx context.Context, id string) error
 	Detail(ctx context.Context, id string, options ...DetailOptions) (DetailResult, error)
 	PlayerTransmissionBootstrap(ctx context.Context, input PlayerTransmissionBootstrapInput) (PlayerTransmissionBootstrapResult, error)
 	PlayerTransmissionSelectFile(ctx context.Context, input PlayerTransmissionSelectFileInput) (PlayerTransmissionSelectFileResult, error)

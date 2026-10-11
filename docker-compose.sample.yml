@@ -81,6 +81,7 @@ services:
     #    - http_server   : 提供 HTTP API 服务（前端访问后端依赖它）
     #    - queue_server  : 处理队列任务
     #    - dht_crawler   : DHT 爬虫
+    #    - media_topics_maintenance : 定期重建专题与电影系列关系
     #
     # 注意：
     # - --all 与 --keys 二选一；若都不填，会报错 "no workers enabled"

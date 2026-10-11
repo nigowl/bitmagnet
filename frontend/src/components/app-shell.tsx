@@ -29,6 +29,7 @@ import {
   ListOrdered,
   LogIn,
   LogOut,
+  Layers3,
   Radar,
   ScrollText,
   Settings,
@@ -50,12 +51,13 @@ type NavItem = {
 };
 
 const adminItems = [
-  { href: "/monitor", labelKey: "nav.monitor", icon: HeartPulse },
-  { href: "/logs", labelKey: "nav.logs", icon: ScrollText },
-  { href: "/queue", labelKey: "nav.queue", icon: Radar },
-  { href: "/users", labelKey: "nav.users", icon: Users },
-  { href: "/settings", labelKey: "nav.settings", icon: Settings },
-  { href: "/maintenance", labelKey: "nav.maintenance", icon: Wrench }
+  { href: "/admin/monitor", labelKey: "nav.monitor", icon: HeartPulse },
+  { href: "/admin/logs", labelKey: "nav.logs", icon: ScrollText },
+  { href: "/admin/queue", labelKey: "nav.queue", icon: Radar },
+  { href: "/admin/users", labelKey: "nav.users", icon: Users },
+  { href: "/admin/topics", labelKey: "nav.topicManagement", icon: Layers3 },
+  { href: "/admin/settings", labelKey: "nav.settings", icon: Settings },
+  { href: "/admin/maintenance", labelKey: "nav.maintenance", icon: Wrench }
 ] as const;
 
 function isRouteActive(pathname: string, href: string): boolean {
@@ -100,6 +102,7 @@ export function ApplicationShell({ children }: { children: React.ReactNode }) {
     { href: "/", label: t("nav.home"), icon: Gauge },
     { href: buildMediaHref("movie"), label: t("contentTypes.movie"), icon: Film },
     { href: buildMediaHref("series"), label: t("contentTypes.tv_show"), icon: Tv },
+    { href: "/topics", label: t("nav.topics"), icon: Layers3 },
     { href: "/torrents", label: t("nav.torrents"), icon: ListOrdered }
   ];
 

@@ -18,6 +18,20 @@ func TestCoverCacheVariantPathUsesNestedDirectories(t *testing.T) {
 	}
 }
 
+func TestCoverCacheSourceURLUsesSizedTMDBPath(t *testing.T) {
+	cache := &coverCache{imageBaseURL: "https://image.tmdb.org/t/p"}
+
+	if got := cache.sourceURL(coverKindPoster, "/poster.jpg"); got != "https://image.tmdb.org/t/p/w780/poster.jpg" {
+		t.Fatalf("poster source URL = %q", got)
+	}
+	if got := cache.sourceURL(coverKindBackdrop, "/backdrop.jpg"); got != "https://image.tmdb.org/t/p/w1280/backdrop.jpg" {
+		t.Fatalf("backdrop source URL = %q", got)
+	}
+	if got := cache.sourceURL(coverKindPoster, "https://example.com/poster.jpg"); got != "https://example.com/poster.jpg" {
+		t.Fatalf("absolute source URL = %q", got)
+	}
+}
+
 func TestCoverCacheCleanupRemovesLeastRecentlyUsedFiles(t *testing.T) {
 	cache := &coverCache{cacheDir: t.TempDir()}
 	oldPath := cache.variantPath("abcdef123456", coverKindPoster, coverSizeSM)

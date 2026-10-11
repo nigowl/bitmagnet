@@ -24,6 +24,8 @@ var prefixedTables = []string{
 	"media_entries",
 	"media_entry_heat_daily",
 	"media_entry_torrents",
+	"media_topics",
+	"media_topic_items",
 	"torrent_contents",
 	"torrent_hints",
 	"torrent_tags",

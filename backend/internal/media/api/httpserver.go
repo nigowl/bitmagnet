@@ -56,6 +56,13 @@ func (b *builder) Key() string {
 func (b *builder) Apply(e *gin.Engine) error {
 	e.GET("/api/media", b.list)
 	e.GET("/api/media/:id", b.detail)
+	e.GET("/api/topics", b.listTopics)
+	e.GET("/api/topics/:id", b.topicDetail)
+	e.GET("/api/admin/topics", b.requireAdmin(), b.listAdminTopics)
+	e.POST("/api/admin/topics", b.requireAdmin(), b.createTopic)
+	e.POST("/api/admin/topics/rebuild", b.requireAdmin(), b.rebuildTopics)
+	e.PUT("/api/admin/topics/:id", b.requireAdmin(), b.updateTopic)
+	e.DELETE("/api/admin/topics/:id", b.requireAdmin(), b.deleteTopic)
 	e.POST("/api/media/:id/block", b.block)
 	e.DELETE("/api/media/:id/block", b.unblock)
 	e.POST("/api/media/player/transmission/bootstrap", b.playerTransmissionBootstrap)
@@ -120,6 +127,125 @@ func (b *builder) list(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) listTopics(c *gin.Context) {
+	result, err := b.service.ListTopics(c.Request.Context(), media.TopicListInput{
+		Kind:     c.Query("kind"),
+		Search:   c.Query("search"),
+		Limit:    parseInt(c.Query("limit"), 24),
+		Page:     parseInt(c.Query("page"), 1),
+		ViewerID: viewerID(c),
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) topicDetail(c *gin.Context) {
+	result, err := b.service.TopicDetail(c.Request.Context(), c.Param("id"), media.ListInput{
+		Limit:    parseInt(c.Query("limit"), 40),
+		Page:     parseInt(c.Query("page"), 1),
+		ViewerID: viewerID(c),
+	})
+	if err != nil {
+		if errors.Is(err, media.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) listAdminTopics(c *gin.Context) {
+	result, err := b.service.ListAdminTopics(c.Request.Context(), media.TopicAdminListInput{
+		Limit: parseInt(c.Query("limit"), 20),
+		Page:  parseInt(c.Query("page"), 1),
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) createTopic(c *gin.Context) {
+	var input media.TopicAdminInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	result, err := b.service.CreateTopic(c.Request.Context(), input)
+	if err != nil {
+		writeTopicError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) updateTopic(c *gin.Context) {
+	var input media.TopicAdminInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	result, err := b.service.UpdateTopic(c.Request.Context(), c.Param("id"), input)
+	if err != nil {
+		writeTopicError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) deleteTopic(c *gin.Context) {
+	if err := b.service.DeleteTopic(c.Request.Context(), c.Param("id")); err != nil {
+		writeTopicError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (b *builder) rebuildTopics(c *gin.Context) {
+	result, err := b.service.RebuildTopics(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (b *builder) requireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		viewer, ok := auth.ViewerFromContext(c.Request.Context())
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			c.Abort()
+			return
+		}
+		if viewer.Role != auth.RoleAdmin {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+func writeTopicError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, media.ErrInvalidTopic):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid topic"})
+	case errors.Is(err, media.ErrNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
 }
 
 func (b *builder) detail(c *gin.Context) {

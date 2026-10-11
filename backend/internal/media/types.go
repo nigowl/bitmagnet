@@ -30,6 +30,74 @@ type ListResult struct {
 	Items             []ListItem `json:"items"`
 }
 
+type TopicListInput struct {
+	Kind     string
+	Search   string
+	Limit    int
+	Page     int
+	ViewerID int64
+}
+
+type TopicListResult struct {
+	TotalCount int64       `json:"totalCount"`
+	Items      []TopicItem `json:"items"`
+}
+
+type TopicDetailResult struct {
+	Topic             TopicItem  `json:"topic"`
+	TotalCount        int64      `json:"totalCount"`
+	TotalTorrentCount int64      `json:"totalTorrentCount"`
+	Items             []ListItem `json:"items"`
+}
+
+type TopicItem struct {
+	ID          string     `json:"id"`
+	Kind        string     `json:"kind"`
+	Module      string     `json:"module"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	ItemCount   int        `json:"itemCount"`
+	Enabled     bool       `json:"enabled"`
+	UpdatedAt   time.Time  `json:"updatedAt"`
+	Previews    []ListItem `json:"previews"`
+}
+
+type TopicRebuildResult struct {
+	TopicCount int `json:"topicCount"`
+	ItemCount  int `json:"itemCount"`
+}
+
+type TopicAdminInput struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	SortOrder   int      `json:"sortOrder"`
+	MediaIDs    []string `json:"mediaIds"`
+	Enabled     *bool    `json:"enabled"`
+}
+
+type TopicAdminListInput struct {
+	Limit int
+	Page  int
+}
+
+type TopicAdminItem struct {
+	ID          string    `json:"id"`
+	Kind        string    `json:"kind"`
+	Module      string    `json:"module"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	SortOrder   int       `json:"sortOrder"`
+	ItemCount   int       `json:"itemCount"`
+	Enabled     bool      `json:"enabled"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+	MediaIDs    []string  `json:"mediaIds"`
+}
+
+type TopicAdminListResult struct {
+	TotalCount int64            `json:"totalCount"`
+	Items      []TopicAdminItem `json:"items"`
+}
+
 type ListItem struct {
 	ID                  string           `json:"id"`
 	ContentType         string           `json:"contentType"`

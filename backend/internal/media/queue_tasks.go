@@ -9,8 +9,9 @@ const (
 	QueueTaskTypeRefreshMetadata = "refresh_media_metadata"
 	QueueTaskTypeBackfillCover   = "backfill_cover_cache"
 
-	refreshMetadataPriority = 2
-	backfillCoverPriority   = 3
+	refreshMetadataPriority  = 2
+	backfillCoverPriority    = 3
+	interactiveCoverPriority = 0
 )
 
 type QueueTaskMessage struct {
@@ -55,7 +56,7 @@ func NewGenerateCoverQueueJob(mediaID string, kind coverKind, size coverSize, so
 		},
 		append([]model.QueueJobOption{
 			model.QueueJobMaxRetries(1),
-			model.QueueJobPriority(backfillCoverPriority),
+			model.QueueJobPriority(interactiveCoverPriority),
 		}, options...)...,
 	)
 }

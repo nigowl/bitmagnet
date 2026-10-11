@@ -57,6 +57,61 @@ export type MediaListResponse = {
   items: MediaListItem[];
 };
 
+export type MediaTopic = {
+  id: string;
+  kind: string;
+  module: string;
+  name: string;
+  description: string;
+  itemCount: number;
+  enabled: boolean;
+  updatedAt: string;
+  previews: MediaListItem[];
+};
+
+export type MediaTopicListResponse = {
+  totalCount: number;
+  items: MediaTopic[];
+};
+
+export type MediaTopicDetailResponse = {
+  topic: MediaTopic | null;
+  totalCount: number;
+  totalTorrentCount: number;
+  items: MediaListItem[];
+};
+
+export type MediaTopicAdminItem = {
+  id: string;
+  kind: string;
+  module: string;
+  name: string;
+  description: string;
+  sortOrder: number;
+  itemCount: number;
+  enabled: boolean;
+  updatedAt: string;
+  mediaIds: string[];
+};
+
+export type MediaTopicAdminListResponse = {
+  totalCount: number;
+  items: MediaTopicAdminItem[];
+};
+
+export type MediaTopicAdminInput = {
+  name: string;
+  description: string;
+  sortOrder: number;
+  mediaIds: string[];
+  enabled: boolean;
+};
+
+export type MediaTopicRebuildResponse = {
+  topicCount: number;
+  itemCount: number;
+};
+
 export type MediaDetailLanguage = {
   id?: string;
   name: string;
@@ -189,6 +244,28 @@ function normalizeSubtitleTemplates(value: MediaSubtitleTemplate[] | null | unde
     .filter((item) => item.id && item.urlTemplate);
 }
 
+function normalizeMediaListItem(item: MediaListItem): MediaListItem {
+  return {
+    ...item,
+    genres: normalizeStringArray(item.genres),
+    languages: normalizeStringArray(item.languages),
+    productionCountries: normalizeStringArray((item as Partial<MediaListItem>).productionCountries),
+    spokenLanguages: normalizeStringArray((item as Partial<MediaListItem>).spokenLanguages),
+    premiereDates: normalizeStringArray((item as Partial<MediaListItem>).premiereDates),
+    networkNames: normalizeStringArray((item as Partial<MediaListItem>).networkNames),
+    studioNames: normalizeStringArray((item as Partial<MediaListItem>).studioNames),
+    awardNames: normalizeStringArray((item as Partial<MediaListItem>).awardNames),
+    creatorNames: normalizeStringArray((item as Partial<MediaListItem>).creatorNames),
+    titleAliases: normalizeStringArray((item as Partial<MediaListItem>).titleAliases),
+    castMembers: normalizeStringArray((item as Partial<MediaListItem>).castMembers),
+    directorNames: normalizeStringArray((item as Partial<MediaListItem>).directorNames),
+    writerNames: normalizeStringArray((item as Partial<MediaListItem>).writerNames),
+    qualityTags: normalizeStringArray(item.qualityTags),
+    collections: normalizeDetailCollections((item as Partial<MediaListItem>).collections),
+    attributes: normalizeDetailAttributes((item as Partial<MediaListItem>).attributes)
+  };
+}
+
 export async function fetchMediaList(params: {
   category?: "all" | "movie" | "series" | "anime";
   search?: string;
@@ -249,33 +326,120 @@ export async function fetchMediaList(params: {
   }
 
   const suffix = query.toString() ? `?${query.toString()}` : "";
-  const response = await apiRequest<MediaListResponse>(`/api/media${suffix}`);
+  const response = (await apiRequest<MediaListResponse | null>(`/api/media${suffix}`)) || {
+    totalCount: 0,
+    totalTorrentCount: 0,
+    items: []
+  };
 
   return {
     totalCount: response.totalCount || 0,
     totalTorrentCount: response.totalTorrentCount || 0,
     items: Array.isArray(response.items)
-      ? response.items.map((item) => ({
-          ...item,
-          genres: normalizeStringArray(item.genres),
-          languages: normalizeStringArray(item.languages),
-          productionCountries: normalizeStringArray((item as Partial<MediaListItem>).productionCountries),
-          spokenLanguages: normalizeStringArray((item as Partial<MediaListItem>).spokenLanguages),
-          premiereDates: normalizeStringArray((item as Partial<MediaListItem>).premiereDates),
-          networkNames: normalizeStringArray((item as Partial<MediaListItem>).networkNames),
-          studioNames: normalizeStringArray((item as Partial<MediaListItem>).studioNames),
-          awardNames: normalizeStringArray((item as Partial<MediaListItem>).awardNames),
-          creatorNames: normalizeStringArray((item as Partial<MediaListItem>).creatorNames),
-          titleAliases: normalizeStringArray((item as Partial<MediaListItem>).titleAliases),
-          castMembers: normalizeStringArray((item as Partial<MediaListItem>).castMembers),
-          directorNames: normalizeStringArray((item as Partial<MediaListItem>).directorNames),
-          writerNames: normalizeStringArray((item as Partial<MediaListItem>).writerNames),
-          qualityTags: normalizeStringArray(item.qualityTags),
-          collections: normalizeDetailCollections((item as Partial<MediaListItem>).collections),
-          attributes: normalizeDetailAttributes((item as Partial<MediaListItem>).attributes)
+      ? response.items.map(normalizeMediaListItem)
+      : []
+  };
+}
+
+export async function fetchMediaTopics(params?: {
+  kind?: string;
+  search?: string;
+  limit?: number;
+  page?: number;
+}) {
+  const query = new URLSearchParams();
+  if (params?.kind?.trim()) query.set("kind", params.kind.trim());
+  if (params?.search?.trim()) query.set("search", params.search.trim());
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.page) query.set("page", String(params.page));
+
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  const response = (await apiRequest<MediaTopicListResponse | null>(`/api/topics${suffix}`)) || {
+    totalCount: 0,
+    items: []
+  };
+
+  return {
+    totalCount: response.totalCount || 0,
+    items: Array.isArray(response.items)
+      ? response.items.map((topic) => ({
+          ...topic,
+          previews: Array.isArray(topic.previews) ? topic.previews.map(normalizeMediaListItem) : []
         }))
       : []
   };
+}
+
+export async function fetchMediaTopicDetail(id: string, params?: { limit?: number; page?: number }) {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.page) query.set("page", String(params.page));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  const response = (await apiRequest<MediaTopicDetailResponse | null>(
+    `/api/topics/${encodeURIComponent(id)}${suffix}`
+  )) || {
+    topic: null,
+    totalCount: 0,
+    totalTorrentCount: 0,
+    items: []
+  };
+
+  return {
+    ...response,
+    totalCount: response.totalCount || 0,
+    totalTorrentCount: response.totalTorrentCount || 0,
+    topic: response.topic
+      ? {
+          ...response.topic,
+          previews: Array.isArray(response.topic.previews)
+            ? response.topic.previews.map(normalizeMediaListItem)
+            : []
+        }
+      : null,
+    items: Array.isArray(response.items) ? response.items.map(normalizeMediaListItem) : []
+  };
+}
+
+export async function fetchAdminTopics(params?: { limit?: number; page?: number }) {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.page) query.set("page", String(params.page));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  const response = (await apiRequest<MediaTopicAdminListResponse | null>(`/api/admin/topics${suffix}`)) || {
+    totalCount: 0,
+    items: []
+  };
+  return {
+    totalCount: response.totalCount || 0,
+    items: Array.isArray(response.items)
+      ? response.items.map((topic) => ({
+          ...topic,
+          mediaIds: Array.isArray(topic.mediaIds) ? topic.mediaIds : []
+        }))
+      : []
+  };
+}
+
+export async function createAdminTopic(input: MediaTopicAdminInput) {
+  return apiRequest<MediaTopicAdminItem>("/api/admin/topics", {
+    method: "POST",
+    data: input
+  });
+}
+
+export async function updateAdminTopic(id: string, input: MediaTopicAdminInput) {
+  return apiRequest<MediaTopicAdminItem>(`/api/admin/topics/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    data: input
+  });
+}
+
+export async function deleteAdminTopic(id: string) {
+  await apiRequest<{ ok: boolean }>(`/api/admin/topics/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export async function rebuildAdminTopics() {
+  return apiRequest<MediaTopicRebuildResponse>("/api/admin/topics/rebuild", { method: "POST" });
 }
 
 export async function fetchMediaDetail(id: string, options?: { refresh?: boolean }) {

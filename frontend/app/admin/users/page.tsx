@@ -6,7 +6,7 @@ export const metadata: Metadata = buildMetadata({
   title: "用户管理",
   description: "管理站点用户与邀请码。",
   keywords: ["bitmagnet", "用户管理", "邀请码"],
-  path: "/users",
+  path: "/admin/users",
   noIndex: true
 });
 

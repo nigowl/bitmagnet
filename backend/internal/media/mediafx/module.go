@@ -18,6 +18,7 @@ func New() fx.Option {
 			media.NewRefreshMetadataQueueHandler,
 			media.NewBackfillCoverQueueHandler,
 			media.NewCoverCacheCleanupWorker,
+			media.NewTopicsMaintenanceWorker,
 			mediaapi.NewHTTPServer,
 		),
 	)

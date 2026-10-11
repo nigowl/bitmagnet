@@ -85,7 +85,7 @@ func (c *coverCache) resolvePath(ctx context.Context, mediaID string, kind cover
 		return cachePath, nil
 	}
 
-	sourceImage, err := c.loadSourceImage(ctx, sourcePath)
+	sourceImage, err := c.loadSourceImage(ctx, kind, sourcePath)
 	if err != nil {
 		return "", err
 	}
@@ -126,8 +126,8 @@ func (c *coverCache) writeAllVariants(mediaID string, kind coverKind, source ima
 	return nil
 }
 
-func (c *coverCache) loadSourceImage(ctx context.Context, sourcePath string) (image.Image, error) {
-	sourceURL := c.sourceURL(sourcePath)
+func (c *coverCache) loadSourceImage(ctx context.Context, kind coverKind, sourcePath string) (image.Image, error) {
+	sourceURL := c.sourceURL(kind, sourcePath)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
@@ -163,12 +163,16 @@ func (c *coverCache) loadSourceImage(ctx context.Context, sourcePath string) (im
 	return img, nil
 }
 
-func (c *coverCache) sourceURL(sourcePath string) string {
+func (c *coverCache) sourceURL(kind coverKind, sourcePath string) string {
 	sourceURL := strings.TrimSpace(sourcePath)
 	if strings.HasPrefix(sourceURL, "http://") || strings.HasPrefix(sourceURL, "https://") {
 		return sourceURL
 	}
-	return fmt.Sprintf("%s/original/%s", c.imageBaseURL, strings.TrimLeft(sourceURL, "/"))
+	sourceSize := "w780"
+	if kind == coverKindBackdrop {
+		sourceSize = "w1280"
+	}
+	return fmt.Sprintf("%s/%s/%s", c.imageBaseURL, sourceSize, strings.TrimLeft(sourceURL, "/"))
 }
 
 func (c *coverCache) variantPath(mediaID string, kind coverKind, size coverSize) string {

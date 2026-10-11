@@ -6,14 +6,19 @@ import { Stack } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { apiRequest } from "@/lib/api";
 import { useI18n } from "@/languages/provider";
-import { fetchMediaList, type MediaListItem } from "@/lib/media-api";
+import { fetchMediaList, fetchMediaTopicDetail, type MediaListItem } from "@/lib/media-api";
 import { DailyPicksCarousel, HomeLoadingSkeleton, HomeSection } from "./home-page.sections";
 
 const HOME_SECTION_TARGET_COUNT = 20;
-const HOME_SECTION_POOL_LIMIT = 48;
 const HOME_SECTION_MIN_CARD_WIDTH = 188;
 const HOME_SECTION_GRID_GAP = 16;
-const HIGH_SCORE_FETCH_MAX_PAGES = 8;
+const HOME_TOPIC_LIMIT = 48;
+
+const HOME_TOPIC_IDS = {
+  highRatedMovies: "curated:high-rated-movies",
+  popularMovies: "curated:popular-movies",
+  popularSeries: "curated:popular-series"
+} as const;
 
 type HomeSettings = {
   daily: {
@@ -125,81 +130,11 @@ function buildRecommendationDayToken(refreshHour: number, now: Date = new Date()
   return (year * 10000) + (month * 100) + date;
 }
 
-function seededUnit(seed: number): number {
-  const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453123;
-  return x - Math.floor(x);
-}
-
-function stringSeed(value: string): number {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = ((hash << 5) - hash) + value.charCodeAt(index);
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
-
 function pickDailyRecommendations(items: MediaListItem[], count: number, dayToken: number): MediaListItem[] {
   if (items.length <= count) return items;
   const start = dayToken % items.length;
   const rotated = [...items.slice(start), ...items.slice(0, start)];
   return rotated.slice(0, count);
-}
-
-function pickHighScoreRecommendations(
-  items: MediaListItem[],
-  count: number,
-  dayToken: number
-): MediaListItem[] {
-  if (items.length <= count) return items;
-  const randomized = [...items].sort((left, right) => {
-    const leftSeed = seededUnit(dayToken + (stringSeed(String(left.id || "")) * 0.001));
-    const rightSeed = seededUnit(dayToken + (stringSeed(String(right.id || "")) * 0.001));
-    if (leftSeed === rightSeed) {
-      return String(left.id).localeCompare(String(right.id));
-    }
-    return leftSeed - rightSeed;
-  });
-  return randomized.slice(0, count);
-}
-
-async function fetchHighScorePool(
-  config: HomeSettings["highScore"],
-  minimumPoolSize: number
-): Promise<MediaListItem[]> {
-  const minScore = clampNumber(config.minScore, 0, 10);
-  const maxScore = clampNumber(Math.max(config.maxScore, minScore), 0, 10);
-  const targetPoolSize = Math.max(1, Math.round(Math.max(config.poolLimit, minimumPoolSize)));
-  const perPage = Math.max(1, Math.min(120, targetPoolSize));
-  const result: MediaListItem[] = [];
-  const seen = new Set<string>();
-
-  for (let page = 1; page <= HIGH_SCORE_FETCH_MAX_PAGES; page += 1) {
-    const data = await fetchMediaList({
-      sort: "rating",
-      scoreMin: minScore,
-      scoreMax: maxScore,
-      limit: perPage,
-      page
-    });
-    const items = data.items || [];
-    if (items.length === 0) {
-      break;
-    }
-
-    for (const item of items) {
-      const id = String(item.id || "").trim();
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      result.push(item);
-    }
-
-    if (result.length >= targetPoolSize || items.length < perPage) {
-      break;
-    }
-  }
-
-  return result.slice(0, targetPoolSize);
 }
 
 async function fetchHomeSettings(): Promise<HomeSettings> {
@@ -229,11 +164,10 @@ export function HomePage() {
   const [highScorePool, setHighScorePool] = useState<MediaListItem[]>([]);
   const [movies, setMovies] = useState<MediaListItem[]>([]);
   const [series, setSeries] = useState<MediaListItem[]>([]);
-  const [anime, setAnime] = useState<MediaListItem[]>([]);
 
-  const loadSection = useCallback(async (category: "movie" | "series" | "anime", heatDays: number) => {
-    const data = await fetchMediaList({ category, sort: "popular", heatDays, limit: HOME_SECTION_POOL_LIMIT, page: 1 });
-    return data.items || [];
+  const loadTopic = useCallback(async (topicID: string) => {
+    const result = await fetchMediaTopicDetail(topicID, { limit: HOME_TOPIC_LIMIT, page: 1 });
+    return result.items || [];
   }, []);
 
   const load = useCallback(async () => {
@@ -242,12 +176,11 @@ export function HomePage() {
       const latestHomeSettings = await fetchHomeSettings();
       const dayToken = buildRecommendationDayToken(latestHomeSettings.daily.refreshHour);
       const hotDays = latestHomeSettings.hot.days;
-      const [popularData, highScoreItems, movieItems, seriesItems, animeItems] = await Promise.all([
+      const [popularData, highScoreItems, movieItems, seriesItems] = await Promise.all([
         fetchMediaList({ sort: "popular", heatDays: hotDays, limit: latestHomeSettings.daily.poolLimit, page: 1 }),
-        fetchHighScorePool(latestHomeSettings.highScore, HOME_SECTION_POOL_LIMIT),
-        loadSection("movie", hotDays),
-        loadSection("series", hotDays),
-        loadSection("anime", hotDays)
+        loadTopic(HOME_TOPIC_IDS.highRatedMovies),
+        loadTopic(HOME_TOPIC_IDS.popularMovies),
+        loadTopic(HOME_TOPIC_IDS.popularSeries)
       ]);
 
       setHomeSettings(latestHomeSettings);
@@ -256,13 +189,12 @@ export function HomePage() {
       setHighScorePool(highScoreItems);
       setMovies(movieItems);
       setSeries(seriesItems);
-      setAnime(animeItems);
     } catch (error) {
       notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
     } finally {
       setLoading(false);
     }
-  }, [loadSection]);
+  }, [loadTopic]);
 
   useEffect(() => {
     void load();
@@ -322,11 +254,6 @@ export function HomePage() {
     () => pickDailyRecommendations(dailyPicksPool, displayLimit, activeDayToken),
     [activeDayToken, dailyPicksPool, displayLimit]
   );
-  const highScore = useMemo(
-    () => pickHighScoreRecommendations(highScorePool, displayLimit, activeDayToken),
-    [activeDayToken, displayLimit, highScorePool]
-  );
-
   if (loading) {
     return <div ref={homeLayoutRef}><HomeLoadingSkeleton /></div>;
   }
@@ -369,10 +296,9 @@ export function HomePage() {
         titleLanguage={titleLanguage}
         sourceHref={currentPageHref}
       />
-      <HomeSection title={t("home.highRated")} items={highScore} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} sourceHref={currentPageHref} />
+      <HomeSection title={t("home.highRated")} items={highScorePool} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} sourceHref={currentPageHref} />
       <HomeSection title={t("home.hotMovies")} items={movies} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} sourceHref={currentPageHref} />
       <HomeSection title={t("home.hotSeries")} items={series} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} sourceHref={currentPageHref} />
-      <HomeSection title={t("home.hotAnime")} items={anime} displayLimit={displayLimit} loading={loading} emptyText={t("media.noResults")} t={t} titleLanguage={titleLanguage} sourceHref={currentPageHref} />
       </Stack>
     </div>
   );
