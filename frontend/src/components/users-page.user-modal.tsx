@@ -59,7 +59,7 @@ export function UserEditorModal({
           onChange={(value) => onChange((current) => ({ ...current, role: (value as "admin" | "user") || "user" }))}
         />
         <Group justify="flex-end">
-          <Button variant="default" onClick={onClose} disabled={saving}>
+          <Button variant="subtle" onClick={onClose} disabled={saving}>
             {t("common.cancel")}
           </Button>
           <Button onClick={onSubmit} loading={saving}>

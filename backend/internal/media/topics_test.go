@@ -14,6 +14,40 @@ func TestTopicIDsUseStablePrefixes(t *testing.T) {
 	}
 }
 
+func TestTopicOrderBy(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: "", want: "sort_order DESC, item_count DESC, updated_at DESC, id ASC"},
+		{input: "updated", want: "sort_order DESC, updated_at DESC, id ASC"},
+		{input: "name", want: "sort_order DESC, name ASC, id ASC"},
+		{input: "members", want: "sort_order DESC, item_count DESC, updated_at DESC, id ASC"},
+		{input: "unknown", want: "sort_order DESC, item_count DESC, updated_at DESC, id ASC"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.input, func(t *testing.T) {
+			if got := topicOrderBy(test.input); got != test.want {
+				t.Fatalf("topicOrderBy(%q) = %q, want %q", test.input, got, test.want)
+			}
+		})
+	}
+}
+
+func TestTopicSortWeightKeepsSeriesAtOne(t *testing.T) {
+	t.Parallel()
+
+	if got := topicSortWeight(topicKindFranchise, "series", 1001); got != 1 {
+		t.Fatalf("topicSortWeight() = %d, want 1", got)
+	}
+	if got := topicSortWeight(topicKindCustom, "custom", 1001); got != 1001 {
+		t.Fatalf("topicSortWeight() custom = %d, want 1001", got)
+	}
+}
+
 func TestNormalizeTopicMediaIDs(t *testing.T) {
 	t.Parallel()
 

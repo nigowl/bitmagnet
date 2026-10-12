@@ -42,6 +42,7 @@
     "close": "Close",
     "cancel": "Cancel",
     "delete": "Delete",
+    "edit": "Edit",
     "yes": "Yes",
     "no": "No",
     "desc": "DESC",
@@ -156,6 +157,12 @@
     "notFound": "Topic not found",
     "search": "Search topics",
     "searchPlaceholder": "Filter by topic name",
+    "sort": {
+      "label": "Topic sort",
+      "updated": "Recently updated",
+      "name": "Topic name",
+      "members": "Member count (default)"
+    },
     "builtIn": {
       "highRatedMovies": "Top Rated Movies",
       "popularMovies": "Popular Movies",
@@ -175,7 +182,7 @@
       "type": "Type",
       "status": "Status",
       "actions": "Actions",
-      "sortOrder": "Sort Order",
+      "sortWeight": "Sort Weight",
       "media": "Media Members",
       "mediaSearch": "Search Media",
       "mediaType": "Type",

@@ -42,6 +42,7 @@
     "close": "关闭",
     "cancel": "取消",
     "delete": "删除",
+    "edit": "编辑",
     "yes": "是",
     "no": "否",
     "desc": "降序",
@@ -156,6 +157,12 @@
     "notFound": "未找到该专题",
     "search": "搜索专题",
     "searchPlaceholder": "按专题名称过滤",
+    "sort": {
+      "label": "专题排序",
+      "updated": "最近更新",
+      "name": "专题名称",
+      "members": "成员数量（默认）"
+    },
     "builtIn": {
       "highRatedMovies": "高分电影",
       "popularMovies": "热门电影",
@@ -175,7 +182,7 @@
       "type": "类型",
       "status": "状态",
       "actions": "操作",
-      "sortOrder": "排序值",
+      "sortWeight": "排序权重",
       "media": "媒体成员",
       "mediaSearch": "搜索媒体",
       "mediaType": "类型",

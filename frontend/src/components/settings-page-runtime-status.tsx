@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ActionIcon, Badge, Button, Card, Group, ScrollArea, SimpleGrid, Stack, Text, Tooltip } from "@mantine/core";
-import { RotateCcw } from "lucide-react";
+import { ActionIcon, Badge, Card, Group, ScrollArea, SimpleGrid, Stack, Text, Tooltip } from "@mantine/core";
+import { RefreshCw, RotateCcw } from "lucide-react";
 import type { RuntimeWorkerDetail } from "./settings-page.logic";
 import type { RuntimeStatus } from "./settings-page.types";
 import type { TFunction } from "./settings-page-tabs";
@@ -35,9 +35,19 @@ export function SettingsRuntimeStatusPanel({
       <Stack gap="sm">
         <Group justify="space-between" align="flex-start" wrap="wrap">
           <Text c="dimmed" size="sm">{t("settings.runtimeStatusHint")}</Text>
-          <Button size="xs" variant="default" loading={runtimeStatusLoading} onClick={onReloadRuntimeStatus}>
-            {t("common.refresh")}
-          </Button>
+          <Tooltip label={t("common.refresh")} withArrow>
+            <ActionIcon
+              className="app-icon-btn spin-on-active"
+              data-spinning={runtimeStatusLoading ? "true" : "false"}
+              size="lg"
+              variant="default"
+              loading={runtimeStatusLoading}
+              onClick={onReloadRuntimeStatus}
+              aria-label={t("common.refresh")}
+            >
+              <RefreshCw size={16} />
+            </ActionIcon>
+          </Tooltip>
         </Group>
         <Text size="sm" c="dimmed">
           {t("settings.runtimeStatusCheckedAt")}: {formatRuntimeCheckedAt(runtimeStatus?.checkedAt || "")}
@@ -60,7 +70,7 @@ export function SettingsRuntimeStatusPanel({
                             <ActionIcon
                               className="app-icon-btn spin-on-active"
                               data-spinning={workerRestarting[worker.key] ? "true" : "false"}
-                              variant="subtle"
+                              variant="default"
                               color="slate"
                               size="sm"
                               loading={Boolean(workerRestarting[worker.key])}

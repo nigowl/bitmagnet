@@ -1,7 +1,7 @@
 "use client";
 
 import { ActionIcon, Button, Group, Loader, ScrollArea, Stack, Table, Text, Tooltip } from "@mantine/core";
-import { Trash2 } from "lucide-react";
+import { RefreshCw, Trash2 } from "lucide-react";
 import { formatBytes } from "@/lib/format";
 import type { TransmissionTaskItem } from "./maintenance-page.types";
 
@@ -33,10 +33,20 @@ export function MaintenanceTransmissionPanel({
       <Group justify="space-between" align="center" wrap="wrap">
         <Text size="sm" c="dimmed">{t("settings.playerTransmissionTasksHint")}</Text>
         <Group gap="xs">
-          <Button size="xs" variant="default" loading={loading} onClick={onRefresh}>
-            {t("common.refresh")}
-          </Button>
-          <Button size="xs" variant="light" loading={cleanupRunning} onClick={onCleanup}>
+          <Tooltip label={t("common.refresh")} withArrow>
+            <ActionIcon
+              className="app-icon-btn spin-on-active"
+              data-spinning={loading ? "true" : "false"}
+              size="md"
+              variant="default"
+              loading={loading}
+              onClick={onRefresh}
+              aria-label={t("common.refresh")}
+            >
+              <RefreshCw size={14} />
+            </ActionIcon>
+          </Tooltip>
+          <Button size="xs" variant="subtle" loading={cleanupRunning} onClick={onCleanup}>
             {t("settings.playerTransmissionRunCleanup")}
           </Button>
         </Group>
@@ -82,7 +92,7 @@ export function MaintenanceTransmissionPanel({
                     <Tooltip label={t("settings.playerTransmissionTaskDelete")} withArrow>
                       <ActionIcon
                         className="app-icon-btn"
-                        variant="light"
+                        variant="default"
                         color="red"
                         loading={Boolean(deleting[item.id])}
                         onClick={() => onDelete(item.id)}

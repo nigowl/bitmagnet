@@ -55,7 +55,7 @@ export function SettingsPageSubtitleModal({
           }}
         />
         <Group justify="flex-end">
-          <Button variant="default" onClick={onClose} disabled={saving}>
+          <Button variant="subtle" onClick={onClose} disabled={saving}>
             {t("common.cancel")}
           </Button>
           <Button loading={saving} onClick={onSubmit}>

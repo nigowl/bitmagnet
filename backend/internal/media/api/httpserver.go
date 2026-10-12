@@ -134,6 +134,7 @@ func (b *builder) listTopics(c *gin.Context) {
 	result, err := b.service.ListTopics(c.Request.Context(), media.TopicListInput{
 		Kind:     c.Query("kind"),
 		Search:   c.Query("search"),
+		Sort:     c.Query("sort"),
 		Limit:    parseInt(c.Query("limit"), 24),
 		Page:     parseInt(c.Query("page"), 1),
 		ViewerID: viewerID(c),

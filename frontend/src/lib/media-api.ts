@@ -344,12 +344,14 @@ export async function fetchMediaList(params: {
 export async function fetchMediaTopics(params?: {
   kind?: string;
   search?: string;
+  sort?: string;
   limit?: number;
   page?: number;
 }) {
   const query = new URLSearchParams();
   if (params?.kind?.trim()) query.set("kind", params.kind.trim());
   if (params?.search?.trim()) query.set("search", params.search.trim());
+  if (params?.sort?.trim()) query.set("sort", params.sort.trim());
   if (params?.limit) query.set("limit", String(params.limit));
   if (params?.page) query.set("page", String(params.page));
 

@@ -96,7 +96,7 @@ export function QueueCacheTable({
                         <Tooltip label={t("common.cancel")} withArrow>
                           <ActionIcon
                             className="app-icon-btn"
-                            variant="light"
+                            variant="default"
                             color="orange"
                             loading={loadingItem}
                             onClick={() => onCancel(item.infoHash)}
@@ -109,7 +109,7 @@ export function QueueCacheTable({
                       <Tooltip label={t("common.delete")} withArrow>
                         <ActionIcon
                           className="app-icon-btn"
-                          variant="light"
+                          variant="default"
                           color="red"
                           loading={loadingItem}
                           onClick={() => onDelete(item.infoHash)}

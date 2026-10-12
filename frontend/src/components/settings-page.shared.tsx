@@ -149,7 +149,7 @@ export function SubtitleTemplateTable({
                     <ActionIcon
                       className="app-icon-btn"
                       color="red"
-                      variant="light"
+                      variant="default"
                       size={30}
                       loading={Boolean(deleting[template.id])}
                       aria-label={deleteLabel}

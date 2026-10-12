@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Badge, Button, Card, Group, Loader, Pagination, Stack, Text, TextInput, Title } from "@mantine/core";
+import { Badge, Button, Card, Group, Loader, Pagination, Select, Stack, Text, TextInput, Title } from "@mantine/core";
 import { ArrowLeft, Layers3, Pencil, Search } from "lucide-react";
 import { useAuth } from "@/auth/provider";
 import { useAuthDialog } from "@/auth/dialog";
@@ -37,6 +37,8 @@ export function TopicsPage() {
   const [totalCount, setTotalCount] = useState(0);
   const page = parsePositiveIntParam(searchParams.get("page"), 1);
   const search = searchParams.get("search") || "";
+  const sortParam = searchParams.get("sort") || "members";
+  const sort = sortParam === "updated" || sortParam === "name" ? sortParam : "members";
   const [searchInput, setSearchInput] = useState(search);
   const pageSizeFromURL = parsePositiveIntParam(searchParams.get("limit"), 0);
   const [pageSize, setPageSize] = useState(pageSizeFromURL || TOPIC_PAGE_TARGET_COUNT);
@@ -117,7 +119,7 @@ export function TopicsPage() {
 
   useEffect(() => {
     let active = true;
-    void fetchMediaTopics({ search, limit: pageSize, page })
+    void fetchMediaTopics({ search, sort, limit: pageSize, page })
       .then((result) => {
         if (!active) return;
         setTopics(result.items);
@@ -135,7 +137,7 @@ export function TopicsPage() {
     return () => {
       active = false;
     };
-  }, [page, pageSize, search]);
+  }, [page, pageSize, search, sort]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(totalCount / pageSize)), [pageSize, totalCount]);
   const titleLanguage = locale === "en" ? "en" : "zh";
@@ -152,22 +154,39 @@ export function TopicsPage() {
           <Title order={2} className="page-title">{t("topics.title")}</Title>
           <Text c="dimmed" className="page-subtitle">{t("topics.subtitle")}</Text>
         </Stack>
-        <TextInput
-          leftSection={<Search size={16} />}
-          value={searchInput}
-          onChange={(event) => setSearchInput(event.currentTarget.value)}
-          onBlur={applySearch}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              applySearch();
-            }
-          }}
-          placeholder={t("topics.searchPlaceholder")}
-          aria-label={t("topics.search")}
-          w={320}
-          maw="100%"
-        />
+        <Group gap="sm" align="flex-end" wrap="wrap" maw="100%">
+          <TextInput
+            leftSection={<Search size={16} />}
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.currentTarget.value)}
+            onBlur={applySearch}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                applySearch();
+              }
+            }}
+            placeholder={t("topics.searchPlaceholder")}
+            aria-label={t("topics.search")}
+            w={320}
+            maw="100%"
+          />
+          <Select
+            aria-label={t("topics.sort.label")}
+            data={[
+              { value: "updated", label: t("topics.sort.updated") },
+              { value: "name", label: t("topics.sort.name") },
+              { value: "members", label: t("topics.sort.members") }
+            ]}
+            value={sort}
+            onChange={(value) => {
+              setLoading(true);
+              updateQuery({ sort: value === "members" ? null : value, page: "1" });
+            }}
+            w={220}
+            maw="100%"
+          />
+        </Group>
       </Group>
 
       {loading ? (

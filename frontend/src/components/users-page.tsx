@@ -352,16 +352,26 @@ export function UsersPage() {
             <Text c="dimmed" className="page-subtitle">{t("users.subtitle")}</Text>
           </Stack>
           <Group gap="xs">
-            <Button variant="default" leftSection={<RefreshCw size={14} />} loading={usersLoading} onClick={() => void loadUsers()}>
-              {t("users.refreshUsers")}
-            </Button>
-            <Tooltip label={t("users.createUser")}>
-              <ActionIcon className="app-icon-btn" size="lg" variant="default" onClick={openCreateUserEditor}>
+            <Tooltip label={t("users.refreshUsers")} withArrow>
+              <ActionIcon
+                className="app-icon-btn spin-on-active"
+                data-spinning={usersLoading ? "true" : "false"}
+                size="lg"
+                variant="default"
+                loading={usersLoading}
+                onClick={() => void loadUsers()}
+                aria-label={t("users.refreshUsers")}
+              >
+                <RefreshCw size={16} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label={t("users.createUser")} withArrow>
+              <ActionIcon className="app-icon-btn" size="lg" variant="default" onClick={openCreateUserEditor} aria-label={t("users.createUser")}>
                 <UserPlus size={16} />
               </ActionIcon>
             </Tooltip>
-            <Tooltip label={t("users.inviteManage")}>
-              <ActionIcon className="app-icon-btn" size="lg" variant="light" color="orange" onClick={() => void openInviteModal()}>
+            <Tooltip label={t("users.inviteManage")} withArrow>
+              <ActionIcon className="app-icon-btn" size="lg" variant="default" color="orange" onClick={() => void openInviteModal()} aria-label={t("users.inviteManage")}>
                 <KeyRound size={16} />
               </ActionIcon>
             </Tooltip>

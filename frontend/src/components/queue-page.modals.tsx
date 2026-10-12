@@ -65,7 +65,7 @@ function QueuePurgeForm({ t, reload, queueAggregationItems }: QueuePurgeFormProp
         onChange={(value) => setTaskQueue(value || ALL_FILTER_OPTION)}
       />
       <Group justify="flex-end">
-        <Button variant="default" onClick={() => modals.closeAll()}>
+        <Button variant="subtle" onClick={() => modals.closeAll()}>
           {t("common.cancel")}
         </Button>
         <Button color="red" onClick={() => void submit()} loading={submitting}>
@@ -159,7 +159,7 @@ function QueueCleanupSettingsForm({ t }: { t: TFunction }) {
         </SimpleGrid>
       )}
       <Group justify="flex-end">
-        <Button variant="default" onClick={() => modals.closeAll()}>
+        <Button variant="subtle" onClick={() => modals.closeAll()}>
           {t("common.cancel")}
         </Button>
         <Button onClick={() => void submit()} loading={savingSettings} disabled={loadingSettings}>
@@ -227,7 +227,7 @@ function QueueEnqueueForm({ t, reload }: QueueModalProps) {
         onChange={setSelectedTypes}
       />
       <Group justify="flex-end" className="modal-footer">
-        <Button onClick={() => modals.closeAll()} variant="default">
+        <Button onClick={() => modals.closeAll()} variant="subtle">
           {t("common.cancel")}
         </Button>
         <Button onClick={() => void submit()}>{t("queue.enqueue")}</Button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { ActionIcon, Badge, Card, Group, Loader, ScrollArea, Table, Text } from "@mantine/core";
+import { ActionIcon, Badge, Card, Group, Loader, ScrollArea, Table, Text, Tooltip } from "@mantine/core";
 import { Pencil } from "lucide-react";
 import type { AdminUserItem } from "./users-page.helpers";
 import { formatDate } from "./users-page.helpers";
@@ -46,9 +46,11 @@ export function UsersTable({ t, users, loading, onEditUser }: UsersTableProps) {
                   <Table.Td>{item.inviteNote?.trim() || "-"}</Table.Td>
                   <Table.Td>
                     <Group gap={6}>
-                      <ActionIcon className="app-icon-btn" variant="default" size="sm" onClick={() => onEditUser(item)}>
-                        <Pencil size={13} />
-                      </ActionIcon>
+                      <Tooltip label={t("common.edit")} withArrow>
+                        <ActionIcon className="app-icon-btn" variant="default" size="sm" aria-label={t("common.edit")} onClick={() => onEditUser(item)}>
+                          <Pencil size={13} />
+                        </ActionIcon>
+                      </Tooltip>
                     </Group>
                   </Table.Td>
                 </Table.Tr>

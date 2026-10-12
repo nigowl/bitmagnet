@@ -191,7 +191,7 @@ export function TopicEditorModal({
             minRows={3}
           />
           <NumberInput
-            label={t("topics.manage.sortOrder")}
+            label={t("topics.manage.sortWeight")}
             value={editor.sortOrder}
             min={-100000}
             max={100000}
@@ -238,7 +238,7 @@ export function TopicEditorModal({
                 <Tooltip label={t("nav.search")} withArrow>
                   <ActionIcon
                     className="app-icon-btn"
-                    variant="light"
+                    variant="default"
                     size="lg"
                     aria-label={t("nav.search")}
                     loading={mediaLoading}
@@ -273,7 +273,7 @@ export function TopicEditorModal({
             onChange={(event) => onChange({ ...editor, enabled: event.currentTarget.checked })}
           />
           <Group justify="flex-end">
-            <Button variant="default" onClick={onClose}>{t("common.cancel")}</Button>
+            <Button variant="subtle" onClick={onClose}>{t("common.cancel")}</Button>
             <Button loading={saving} onClick={() => void save()}>{t("topics.manage.save")}</Button>
           </Group>
         </Stack>

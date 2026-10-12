@@ -33,6 +33,7 @@ type ListResult struct {
 type TopicListInput struct {
 	Kind     string
 	Search   string
+	Sort     string
 	Limit    int
 	Page     int
 	ViewerID int64

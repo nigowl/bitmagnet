@@ -340,17 +340,17 @@ export function QueuePage() {
         </div>
         <Group>
           <Tooltip label={t("queue.enqueue")} withArrow>
-            <ActionIcon className="app-icon-btn" variant="light" size="lg" onClick={openEnqueueModal} aria-label={t("queue.enqueue")}>
+            <ActionIcon className="app-icon-btn" variant="default" size="lg" onClick={openEnqueueModal} aria-label={t("queue.enqueue")}>
               <CalendarSync size={16} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label={t("queue.purge")} withArrow>
-            <ActionIcon className="app-icon-btn" color="red" variant="light" size="lg" onClick={openPurgeModal} aria-label={t("queue.purge")}>
+            <ActionIcon className="app-icon-btn" color="red" variant="default" size="lg" onClick={openPurgeModal} aria-label={t("queue.purge")}>
               <Trash2 size={16} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label={t("queue.cleanupSettings.button")} withArrow>
-            <ActionIcon className="app-icon-btn" variant="light" size="lg" onClick={openCleanupSettingsModal} aria-label={t("queue.cleanupSettings.button")}>
+            <ActionIcon className="app-icon-btn" variant="default" size="lg" onClick={openCleanupSettingsModal} aria-label={t("queue.cleanupSettings.button")}>
               <Settings2 size={16} />
             </ActionIcon>
           </Tooltip>

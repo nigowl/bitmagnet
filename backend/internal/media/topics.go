@@ -22,6 +22,10 @@ const (
 	topicKindFranchise = "franchise"
 	topicKindCustom    = "custom"
 
+	topicSortUpdated = "updated"
+	topicSortName    = "name"
+	topicSortMembers = "members"
+
 	topicPreviewLimit = 4
 	topicItemLimit    = 100
 )
@@ -83,7 +87,7 @@ func (s *service) ListTopics(ctx context.Context, input TopicListInput) (TopicLi
 	}
 
 	var topics []model.MediaTopic
-	if err := db.Order("sort_order ASC, name ASC").
+	if err := db.Order(topicOrderBy(input.Sort)).
 		Offset((page - 1) * limit).
 		Limit(limit).
 		Find(&topics).Error; err != nil {
@@ -168,7 +172,7 @@ func (s *service) RebuildTopics(ctx context.Context) (TopicRebuildResult, error)
 			Module:      "high-rated",
 			Name:        "Top Rated Movies",
 			Description: "",
-			SortOrder:   10,
+			SortOrder:   40,
 			Where:       "me.torrent_count > 0 AND me.content_type = ? AND me.vote_average >= ?",
 			Order:       "me.vote_average DESC NULLS LAST, me.vote_count DESC NULLS LAST, me.release_year DESC NULLS LAST, me.id",
 			Args:        []any{model.ContentTypeMovie, 8},
@@ -180,7 +184,7 @@ func (s *service) RebuildTopics(ctx context.Context) (TopicRebuildResult, error)
 			Module:      "popular",
 			Name:        "Popular Movies",
 			Description: "",
-			SortOrder:   20,
+			SortOrder:   30,
 			Where:       "me.torrent_count > 0 AND me.content_type = ?",
 			Order:       "COALESCE(me.heat_score_recent, 0) DESC, me.torrent_count DESC, me.vote_average DESC NULLS LAST, me.id",
 			Args:        []any{model.ContentTypeMovie},
@@ -192,7 +196,7 @@ func (s *service) RebuildTopics(ctx context.Context) (TopicRebuildResult, error)
 			Module:      "popular",
 			Name:        "Popular Series",
 			Description: "",
-			SortOrder:   30,
+			SortOrder:   20,
 			Where:       "me.torrent_count > 0 AND me.content_type = ?",
 			Order:       "COALESCE(me.heat_score_recent, 0) DESC, me.torrent_count DESC, me.vote_average DESC NULLS LAST, me.id",
 			Args:        []any{model.ContentTypeTvShow},
@@ -204,7 +208,7 @@ func (s *service) RebuildTopics(ctx context.Context) (TopicRebuildResult, error)
 			Module:      "award-winning",
 			Name:        "Award-Winning Movies",
 			Description: "",
-			SortOrder:   50,
+			SortOrder:   10,
 			Where:       "me.torrent_count > 0 AND me.content_type = ? AND jsonb_array_length(COALESCE(me.award_names, '[]'::jsonb)) > 0",
 			Order:       "me.vote_average DESC NULLS LAST, me.vote_count DESC NULLS LAST, me.release_year DESC NULLS LAST, me.id",
 			Args:        []any{model.ContentTypeMovie},
@@ -223,7 +227,7 @@ func (s *service) RebuildTopics(ctx context.Context) (TopicRebuildResult, error)
 	if err != nil {
 		return TopicRebuildResult{}, err
 	}
-	for index, franchise := range franchises {
+	for _, franchise := range franchises {
 		mediaIDs, loadErr := loadFranchiseMediaIDs(db, franchise)
 		if loadErr != nil {
 			return TopicRebuildResult{}, loadErr
@@ -234,7 +238,7 @@ func (s *service) RebuildTopics(ctx context.Context) (TopicRebuildResult, error)
 			Module:      "series",
 			Name:        localizedFranchiseTopicName(franchise.Name, franchise.LocalizedName),
 			Description: "",
-			SortOrder:   1000 + index,
+			SortOrder:   1,
 			MediaIDs:    mediaIDs,
 		})
 	}
@@ -380,7 +384,7 @@ func (s *service) ListAdminTopics(ctx context.Context, input TopicAdminListInput
 	var topics []model.MediaTopic
 	if err := db.WithContext(ctx).
 		Table(model.TableNameMediaTopic).
-		Order("sort_order ASC, name ASC").
+		Order(topicOrderBy(topicSortName)).
 		Offset((page - 1) * limit).
 		Limit(limit).
 		Find(&topics).Error; err != nil {
@@ -397,6 +401,30 @@ func (s *service) ListAdminTopics(ctx context.Context, input TopicAdminListInput
 		items = append(items, topicAdminItemFromModel(topic, mediaIDsByTopic[topic.ID]))
 	}
 	return TopicAdminListResult{TotalCount: totalCount, Items: items}, nil
+}
+
+func normalizeTopicSort(value string) string {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case topicSortName:
+		return topicSortName
+	case topicSortMembers:
+		return topicSortMembers
+	case topicSortUpdated:
+		return topicSortUpdated
+	default:
+		return topicSortMembers
+	}
+}
+
+func topicOrderBy(value string) string {
+	switch normalizeTopicSort(value) {
+	case topicSortName:
+		return "sort_order DESC, name ASC, id ASC"
+	case topicSortUpdated:
+		return "sort_order DESC, updated_at DESC, id ASC"
+	default:
+		return "sort_order DESC, item_count DESC, updated_at DESC, id ASC"
+	}
 }
 
 func (s *service) GetAdminTopic(ctx context.Context, id string) (TopicAdminItem, error) {
@@ -513,7 +541,7 @@ func (s *service) UpdateTopic(ctx context.Context, id string, input TopicAdminIn
 	now := time.Now()
 	topic.Name = name
 	topic.Description = description
-	topic.SortOrder = input.SortOrder
+	topic.SortOrder = topicSortWeight(topic.Kind, topic.Module, input.SortOrder)
 	topic.ItemCount = len(mediaIDs)
 	if input.Enabled != nil {
 		topic.Enabled = *input.Enabled
@@ -712,6 +740,13 @@ func normalizeTopicInput(input TopicAdminInput) (string, string, []string, bool,
 		return name, description, []string{}, false, nil
 	}
 	return name, description, normalizeTopicMediaIDs(*input.MediaIDs), true, nil
+}
+
+func topicSortWeight(kind, module string, requested int) int {
+	if kind == topicKindFranchise || module == "series" {
+		return 1
+	}
+	return requested
 }
 
 func inputEnabled(value *bool, fallback bool) bool {

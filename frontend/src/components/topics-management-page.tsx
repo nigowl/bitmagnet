@@ -147,10 +147,24 @@ export function TopicsManagementPage() {
             <Text c="dimmed" className="page-subtitle">{t("topics.manage.subtitle")}</Text>
           </div>
           <Group gap="sm">
-            <Button variant="default" leftSection={<RefreshCw size={15} />} loading={rebuilding} onClick={() => void rebuild()}>
-              {rebuilding ? t("topics.manage.rebuilding") : t("topics.manage.rebuild")}
-            </Button>
-            <Button leftSection={<Plus size={15} />} onClick={openCreate}>{t("topics.manage.create")}</Button>
+            <Tooltip label={rebuilding ? t("topics.manage.rebuilding") : t("topics.manage.rebuild")} withArrow>
+              <ActionIcon
+                className="app-icon-btn spin-on-active"
+                data-spinning={rebuilding ? "true" : "false"}
+                variant="default"
+                size="lg"
+                loading={rebuilding}
+                onClick={() => void rebuild()}
+                aria-label={t("topics.manage.rebuild")}
+              >
+                <RefreshCw size={16} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label={t("topics.manage.create")} withArrow>
+              <ActionIcon className="app-icon-btn" variant="default" size="lg" onClick={openCreate} aria-label={t("topics.manage.create")}>
+                <Plus size={16} />
+              </ActionIcon>
+            </Tooltip>
           </Group>
         </Group>
 
@@ -168,7 +182,7 @@ export function TopicsManagementPage() {
                     <Table.Th>{t("topics.manage.type")}</Table.Th>
                     <Table.Th>{t("topics.manage.status")}</Table.Th>
                     <Table.Th>{t("topics.manage.media")}</Table.Th>
-                    <Table.Th>{t("topics.manage.sortOrder")}</Table.Th>
+                    <Table.Th>{t("topics.manage.sortWeight")}</Table.Th>
                     <Table.Th>{t("topics.manage.actions")}</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
@@ -211,12 +225,12 @@ export function TopicsManagementPage() {
                       <Table.Td>
                         <Group gap={6} wrap="nowrap">
                           <Tooltip label={t("topics.manage.edit")} withArrow>
-                            <ActionIcon className="app-icon-btn" variant="light" aria-label={t("topics.manage.edit")} onClick={() => openEdit(topic)}>
+                            <ActionIcon className="app-icon-btn" variant="default" aria-label={t("topics.manage.edit")} onClick={() => openEdit(topic)}>
                               <Pencil size={15} />
                             </ActionIcon>
                           </Tooltip>
                           <Tooltip label={t("common.delete")} withArrow>
-                            <ActionIcon className="app-icon-btn" color="red" variant="light" aria-label={t("common.delete")} onClick={() => remove(topic)}>
+                            <ActionIcon className="app-icon-btn" color="red" variant="default" aria-label={t("common.delete")} onClick={() => remove(topic)}>
                               <Trash2 size={15} />
                             </ActionIcon>
                           </Tooltip>

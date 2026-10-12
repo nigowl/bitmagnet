@@ -63,7 +63,7 @@ export function SettingsPagePlayerTab({
             <Text fw={700}>{t("settings.playerTitle")}</Text>
             <Text c="dimmed" size="sm">{t("settings.playerHint")}</Text>
           </Stack>
-          <Button variant="default" size="xs" leftSection={<RotateCcw size={14} />} onClick={onResetDefaults}>
+          <Button variant="subtle" size="xs" leftSection={<RotateCcw size={14} />} onClick={onResetDefaults}>
             {t("settings.playerResetDefaults")}
           </Button>
         </Group>
@@ -131,10 +131,10 @@ export function SettingsPagePlayerTab({
                     <Stack gap="sm" className="settings-toggle-panel">
                       <Group justify="flex-end" align="flex-start" wrap="wrap">
                         <Group gap="xs">
-                          <Button variant="default" size="xs" loading={downloadMappingTesting} onClick={onTestDownloadMapping}>
+                          <Button variant="subtle" size="xs" loading={downloadMappingTesting} onClick={onTestDownloadMapping}>
                             {t("settings.playerDownloadMappingTestButton")}
                           </Button>
-                          <Button variant="light" size="xs" loading={transmissionTesting} onClick={onTestTransmission}>
+                          <Button variant="subtle" size="xs" loading={transmissionTesting} onClick={onTestTransmission}>
                             {t("settings.playerTransmissionTestButton")}
                           </Button>
                         </Group>
@@ -395,7 +395,7 @@ export function SettingsPagePlayerTab({
                     <Badge variant="light" color="blue">{t("settings.playerRequiredEnabled")}</Badge>
                     <Stack gap="sm" className="settings-toggle-panel">
                       <Group justify="flex-end">
-                        <Button variant="light" size="xs" loading={ffmpegTesting} onClick={onTestFfmpeg}>
+                        <Button variant="subtle" size="xs" loading={ffmpegTesting} onClick={onTestFfmpeg}>
                           {t("settings.playerFfmpegTestButton")}
                         </Button>
                       </Group>

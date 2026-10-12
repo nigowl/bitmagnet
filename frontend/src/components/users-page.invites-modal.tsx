@@ -134,7 +134,7 @@ export function InviteManagerModals({
                 </ActionIcon>
               </Tooltip>
               <Tooltip label={t("users.batchCreateInvite")}>
-                <ActionIcon className="app-icon-btn" size="lg" variant="light" color="orange" onClick={onOpenInviteBatchModal}>
+                <ActionIcon className="app-icon-btn" size="lg" variant="default" color="orange" onClick={onOpenInviteBatchModal}>
                   <KeyRound size={14} />
                 </ActionIcon>
               </Tooltip>
@@ -172,12 +172,14 @@ export function InviteManagerModals({
                       <Table.Td>{formatDate(item.expiresAt)}</Table.Td>
                       <Table.Td>
                         <Group gap={6}>
-                          <ActionIcon className="app-icon-btn" variant="default" size="sm" onClick={() => onOpenEditInviteEditor(item)}>
-                            <Pencil size={13} />
-                          </ActionIcon>
+                          <Tooltip label={t("common.edit")} withArrow>
+                            <ActionIcon className="app-icon-btn" variant="default" size="sm" aria-label={t("common.edit")} onClick={() => onOpenEditInviteEditor(item)}>
+                              <Pencil size={13} />
+                            </ActionIcon>
+                          </Tooltip>
                           <ActionIcon
                             className="app-icon-btn"
-                            variant="light"
+                            variant="default"
                             color="red"
                             size="sm"
                             loading={Boolean(inviteDeleting[item.id])}
@@ -210,7 +212,7 @@ export function InviteManagerModals({
             codeEditable={inviteEditorMode !== "edit"}
           />
           <Group justify="flex-end">
-            <Button variant="default" onClick={onCloseInviteEditor} disabled={inviteSaving}>
+            <Button variant="subtle" onClick={onCloseInviteEditor} disabled={inviteSaving}>
               {t("common.cancel")}
             </Button>
             <Button onClick={onSubmitInvite} loading={inviteSaving}>
@@ -256,7 +258,7 @@ export function InviteManagerModals({
             onChange={(event) => onChangeBatchOptions((current) => ({ ...current, enabled: event.currentTarget.checked }))}
           />
           <Group justify="flex-end">
-            <Button variant="default" onClick={onCloseInviteBatchModal} disabled={inviteBatchSubmitting}>
+            <Button variant="subtle" onClick={onCloseInviteBatchModal} disabled={inviteBatchSubmitting}>
               {t("common.cancel")}
             </Button>
             <Button onClick={onBatchCreate} loading={inviteBatchSubmitting}>
@@ -354,7 +356,7 @@ function InviteFormFields({
           onChange={(event) => onChange((current) => ({ ...current, code: event.currentTarget.value }))}
         />
         {codeEditable ? (
-          <Button size="xs" variant="default" onClick={() => onChange((current) => ({ ...current, code: DEFAULT_INVITE_FORM.code }))}>
+          <Button size="xs" variant="subtle" onClick={() => onChange((current) => ({ ...current, code: DEFAULT_INVITE_FORM.code }))}>
             {t("users.inviteAutoGenerate")}
           </Button>
         ) : null}

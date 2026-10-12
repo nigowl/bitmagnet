@@ -196,7 +196,7 @@ export function SettingsPageView(props: SettingsPageViewProps) {
             <Tooltip label={t("settings.save")} withArrow>
               <ActionIcon
                 className="app-icon-btn"
-                variant="light"
+                variant="default"
                 size="lg"
                 loading={saving}
                 disabled={dhtScheduleInvalid}
