@@ -404,11 +404,13 @@ type PlayerTransmissionBatchStatusResult struct {
 }
 
 type PlayerTransmissionCacheQueueInput struct {
-	InfoHash string `json:"infoHash"`
+	InfoHash  string `json:"infoHash"`
+	FileIndex *int   `json:"fileIndex,omitempty"`
 }
 
 type PlayerTransmissionCacheQueueResult struct {
 	InfoHash   string `json:"infoHash"`
+	FileIndex  int    `json:"fileIndex,omitempty"`
 	QueueState string `json:"queueState"`
 	Position   int    `json:"position"`
 }
@@ -419,6 +421,7 @@ type PlayerTransmissionCacheQueueListResult struct {
 
 type PlayerTransmissionCacheQueueItem struct {
 	InfoHash      string    `json:"infoHash"`
+	FileIndex     int       `json:"fileIndex,omitempty"`
 	QueueState    string    `json:"queueState"`
 	QueuePosition int       `json:"queuePosition,omitempty"`
 	ErrorMessage  string    `json:"errorMessage,omitempty"`

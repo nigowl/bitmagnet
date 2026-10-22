@@ -58,6 +58,7 @@ export type PlayerTransmissionClearCacheResponse = {
 
 export type PlayerTransmissionCacheQueueResponse = {
   infoHash: string;
+  fileIndex?: number;
   queueState: string;
   position: number;
 };
@@ -180,14 +181,18 @@ export async function clearPlayerTransmissionCache(infoHashes: string[]): Promis
   });
 }
 
-export async function enqueuePlayerTransmissionCache(infoHash: string): Promise<PlayerTransmissionCacheQueueResponse> {
+export async function enqueuePlayerTransmissionCache(infoHash: string, fileIndex?: number): Promise<PlayerTransmissionCacheQueueResponse> {
   const normalized = normalizePlayerInfoHash(infoHash);
   if (!normalized) {
     throw new Error("Missing infoHash.");
   }
+  const data: { infoHash: string; fileIndex?: number } = { infoHash: normalized };
+  if (Number.isInteger(fileIndex) && (fileIndex as number) >= 0) {
+    data.fileIndex = fileIndex;
+  }
   const result = await apiRequest<PlayerTransmissionCacheQueueResponse | null>("/api/media/player/transmission/cache/queue", {
     method: "POST",
-    data: { infoHash: normalized }
+    data
   });
   return result || {
     infoHash: normalized,

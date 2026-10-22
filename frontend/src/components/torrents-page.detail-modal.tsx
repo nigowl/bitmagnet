@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { Badge, Button, Group, Loader, Modal, Stack, Table, Text } from "@mantine/core";
-import { Copy, ExternalLink, Trash2, WandSparkles } from "lucide-react";
+import { Copy, ExternalLink, Eye } from "lucide-react";
 import type { TorrentFilesResponse, TorrentRow } from "./torrents-page.helpers";
 import { formatBytes } from "./torrents-page.helpers";
 
@@ -14,11 +15,10 @@ type TorrentDetailModalProps = {
   detailFiles: TorrentDetailFile[];
   loadingFiles: boolean;
   renderContentType: (type?: string | null) => string;
+  detailHref: string;
   onClose: () => void;
   onCopyHash: (hash: string) => void;
   onOpenMagnet: (magnetUri?: string | null) => void;
-  onReprocess: () => void;
-  onDelete: () => void;
 };
 
 export function TorrentDetailModal({
@@ -28,11 +28,10 @@ export function TorrentDetailModal({
   detailFiles,
   loadingFiles,
   renderContentType,
+  detailHref,
   onClose,
   onCopyHash,
-  onOpenMagnet,
-  onReprocess,
-  onDelete
+  onOpenMagnet
 }: TorrentDetailModalProps) {
   return (
     <Modal
@@ -107,11 +106,13 @@ export function TorrentDetailModal({
               <Button size="xs" leftSection={<ExternalLink size={14} />} variant="light" onClick={() => onOpenMagnet(activeItem.torrent.magnetUri)}>
                 {t("torrents.openMagnet")}
               </Button>
-              <Button size="xs" leftSection={<WandSparkles size={14} />} variant="light" onClick={onReprocess}>
-                {t("torrents.reprocess")}
-              </Button>
-              <Button size="xs" leftSection={<Trash2 size={14} />} color="red" variant="light" onClick={onDelete}>
-                {t("torrents.delete")}
+              <Button
+                size="xs"
+                leftSection={<Eye size={14} />}
+                variant="light"
+                renderRoot={(props) => <Link href={detailHref} {...props} />}
+              >
+                {t("torrents.details")}
               </Button>
             </Group>
             <Button size="xs" variant="default" onClick={onClose}>

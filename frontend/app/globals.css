@@ -1814,6 +1814,10 @@ body {
   margin-inline: auto;
 }
 
+.torrent-page-subtitle {
+  margin-top: 8px;
+}
+
 .torrent-results-flex {
   flex: 1;
 }
@@ -1829,6 +1833,63 @@ body {
 
 .torrent-search-bar {
   padding: 12px 16px;
+}
+
+.torrent-history-card {
+  padding: 14px 16px;
+}
+
+.torrent-history-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
+  gap: 8px;
+}
+
+.torrent-history-item {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--card-bg) 88%, var(--muted-surface));
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.torrent-history-item:hover {
+  border-color: var(--card-hover-border);
+  background: color-mix(in srgb, var(--brand-muted) 34%, var(--card-bg));
+}
+
+.torrent-history-value {
+  min-width: 0;
+  flex: 1;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--page-text);
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.torrent-history-remove {
+  flex: 0 0 auto;
+  margin-right: 4px;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.torrent-history-item:hover .torrent-history-remove,
+.torrent-history-remove:focus-visible {
+  opacity: 1;
+}
+
+@media (max-width: 48em) {
+  .torrent-history-remove {
+    opacity: 1;
+  }
 }
 
 .torrent-file-preview {

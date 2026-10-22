@@ -4,17 +4,25 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActionIcon, Badge, Button, Card, Group, Loader, Stack, Table, Text, Title, Tooltip } from "@mantine/core";
+import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { ArrowLeft, ExternalLink, Heart, HeartOff, Play, RefreshCw } from "lucide-react";
+import { ArrowLeft, Download, ExternalLink, Heart, HeartOff, Play, RefreshCw } from "lucide-react";
 import { useAuthDialog } from "@/auth/dialog";
 import { useAuth } from "@/auth/provider";
 import { graphqlRequest } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { TORRENT_CONTENT_SEARCH_QUERY, TORRENT_FILES_QUERY } from "@/lib/graphql";
+import {
+  enqueuePlayerTransmissionCache,
+  fetchPlayerTransmissionBatchStatus,
+  deletePlayerTransmissionCache,
+  type PlayerTransmissionTaskStatus
+} from "@/lib/media-api";
 import { normalizeContentType } from "@/lib/media";
 import { resolveInternalHref } from "@/lib/navigation";
 import { isVideoFile } from "@/lib/video-file";
 import { useI18n } from "@/languages/provider";
+import { MediaDetailCacheStatusModal } from "./media-detail-page.cache-modal";
 
 type DetailResponse = {
   torrentContent: {
@@ -69,6 +77,10 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
   const [loading, setLoading] = useState(true);
   const [item, setItem] = useState<DetailResponse["torrentContent"]["search"]["items"][number] | null>(null);
   const [files, setFiles] = useState<FilesResponse["torrent"]["files"]["items"]>([]);
+  const [cachingFileIndex, setCachingFileIndex] = useState<number | null>(null);
+  const [cacheStatusTarget, setCacheStatusTarget] = useState<FilesResponse["torrent"]["files"]["items"][number] | null>(null);
+  const [cacheStatus, setCacheStatus] = useState<PlayerTransmissionTaskStatus | undefined>();
+  const [cacheActioning, setCacheActioning] = useState(false);
   const backToListHref = resolveInternalHref(searchParams.get("from"), "/torrents");
 
   const renderContentType = useCallback(
@@ -178,6 +190,92 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
       setLoading(false);
     }
   }, [infoHash]);
+
+  const refreshCacheStatus = useCallback(async () => {
+    const result = await fetchPlayerTransmissionBatchStatus([infoHash]);
+    return result.items[0];
+  }, [infoHash]);
+
+  const queueFileCache = useCallback(async (file: FilesResponse["torrent"]["files"]["items"][number]) => {
+    try {
+      const currentStatus = await refreshCacheStatus();
+      if (currentStatus?.exists || currentStatus?.queueState) {
+        setCacheStatusTarget(file);
+        setCacheStatus(currentStatus);
+        return;
+      }
+    } catch {
+      // The enqueue request below provides the actionable error message.
+    }
+
+    modals.openConfirmModal({
+      title: t("media.detail.cacheTorrent"),
+      children: <Text size="sm">{t("media.detail.cacheQueueConfirm").replace("{title}", file.path)}</Text>,
+      labels: { confirm: t("media.detail.cacheTorrent"), cancel: t("common.cancel") },
+      confirmProps: { color: "orange" },
+      onConfirm: async () => {
+        setCachingFileIndex(file.index);
+        setCacheStatusTarget(file);
+        setCacheStatus(undefined);
+        try {
+          const result = await enqueuePlayerTransmissionCache(infoHash, file.index);
+          notifications.show({
+            color: "green",
+            message: `${t("media.detail.cacheQueued")} (${result.position || 1})`
+          });
+        } catch (error) {
+          setCacheStatusTarget(null);
+          notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+        } finally {
+          setCachingFileIndex(null);
+        }
+      }
+    });
+  }, [infoHash, refreshCacheStatus, t]);
+
+  useEffect(() => {
+    if (!cacheStatusTarget) return;
+    let cancelled = false;
+    let timer: number | null = null;
+
+    const poll = async () => {
+      try {
+        const nextStatus = await refreshCacheStatus();
+        if (cancelled) return;
+        setCacheStatus(nextStatus);
+        const queueState = nextStatus?.queueState?.trim().toLowerCase();
+        const finished = Boolean(nextStatus?.exists && (nextStatus.progress || 0) >= 0.999);
+        if (!finished && queueState !== "failed" && queueState !== "canceled") {
+          timer = window.setTimeout(() => void poll(), 2000);
+        }
+      } catch {
+        if (!cancelled) {
+          timer = window.setTimeout(() => void poll(), 3000);
+        }
+      }
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [cacheStatusTarget, refreshCacheStatus]);
+
+  const deleteCache = useCallback(async () => {
+    if (!cacheStatusTarget) return;
+    setCacheActioning(true);
+    try {
+      await deletePlayerTransmissionCache(infoHash);
+      notifications.show({ color: "green", message: t("media.detail.cacheDeleted") });
+      setCacheStatusTarget(null);
+      setCacheStatus(undefined);
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setCacheActioning(false);
+    }
+  }, [cacheStatusTarget, infoHash, t]);
 
   useEffect(() => {
     void load();
@@ -312,7 +410,7 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
               <Table.Th>{t("torrents.table.path")}</Table.Th>
               <Table.Th>{t("torrents.table.type")}</Table.Th>
               <Table.Th>{t("torrents.table.size")}</Table.Th>
-              <Table.Th>{t("media.player.play")}</Table.Th>
+              <Table.Th>{t("torrents.table.actions")}</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -333,22 +431,36 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
                   <Table.Td>{formatBytes(file.size)}</Table.Td>
                   <Table.Td>
                     {isVideoFile(file.path, file.fileType) ? (
-                      <Tooltip label={t("media.player.play")} withArrow>
-                        <ActionIcon
-                          className="app-icon-btn"
-                          variant="light"
-                          color="orange"
-                          aria-label={t("media.player.play")}
-                          renderRoot={(props) => (
-                            <Link
-                              href={`/player/${encodeURIComponent(infoHash)}?fileIndex=${encodeURIComponent(String(file.index))}`}
-                              {...props}
-                            />
-                          )}
-                        >
-                          <Play size={14} />
-                        </ActionIcon>
-                      </Tooltip>
+                      <Group gap={6} wrap="nowrap">
+                        <Tooltip label={t("media.player.play")} withArrow>
+                          <ActionIcon
+                            className="app-icon-btn"
+                            variant="light"
+                            color="orange"
+                            aria-label={t("media.player.play")}
+                            renderRoot={(props) => (
+                              <Link
+                                href={`/player/${encodeURIComponent(infoHash)}?fileIndex=${encodeURIComponent(String(file.index))}`}
+                                {...props}
+                              />
+                            )}
+                          >
+                            <Play size={14} />
+                          </ActionIcon>
+                        </Tooltip>
+                        <Tooltip label={t("media.detail.cacheTorrent")} withArrow>
+                          <ActionIcon
+                            className="app-icon-btn"
+                            variant="default"
+                            color="slate"
+                            aria-label={t("media.detail.cacheTorrent")}
+                            disabled={cachingFileIndex !== null}
+                            onClick={() => void queueFileCache(file)}
+                          >
+                            {cachingFileIndex === file.index ? <Loader size={14} /> : <Download size={14} />}
+                          </ActionIcon>
+                        </Tooltip>
+                      </Group>
                     ) : null}
                   </Table.Td>
                 </Table.Tr>
@@ -357,6 +469,22 @@ export function TorrentDetailPage({ infoHash }: { infoHash: string }) {
           </Table.Tbody>
         </Table>
       </Card>
+      <MediaDetailCacheStatusModal
+        t={t}
+        item={cacheStatusTarget ? {
+          infoHash,
+          title: cacheStatusTarget.path,
+          torrent: { name: cacheStatusTarget.path }
+        } : null}
+        status={cacheStatus}
+        opened={Boolean(cacheStatusTarget)}
+        loading={cacheActioning}
+        onDelete={() => void deleteCache()}
+        onClose={() => {
+          setCacheStatusTarget(null);
+          setCacheStatus(undefined);
+        }}
+      />
     </Stack>
   );
 }

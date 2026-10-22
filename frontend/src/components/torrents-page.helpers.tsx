@@ -22,7 +22,6 @@ export type TorrentRow = {
     seeders?: number | null;
     leechers?: number | null;
     magnetUri?: string | null;
-    tagNames: string[];
     sources: Array<{ key: string; name: string }>;
   };
   content?: {
@@ -56,17 +55,6 @@ export type TorrentFilesResponse = {
     };
   };
 };
-
-export function parseTags(input: string): string[] {
-  return Array.from(
-    new Set(
-      input
-        .split(/[\s,]+/)
-        .map((item) => item.trim().toLowerCase())
-        .filter(Boolean)
-    )
-  );
-}
 
 export function buildTorrentDetailHref(infoHash: string, sourceHref: string): string {
   const baseHref = `/torrents/${encodeURIComponent(infoHash)}`;

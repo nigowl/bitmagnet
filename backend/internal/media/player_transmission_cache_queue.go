@@ -25,42 +25,55 @@ type playerTransmissionCacheQueue struct {
 }
 
 type playerTransmissionCacheQueueItem struct {
-	infoHash string
-	state    string
-	err      string
-	updated  time.Time
+	infoHash  string
+	fileIndex int
+	state     string
+	err       string
+	updated   time.Time
 }
 
 type playerTransmissionCacheQueueSnapshot struct {
-	infoHash string
-	state    string
-	position int
-	err      string
-	updated  time.Time
+	infoHash  string
+	fileIndex int
+	state     string
+	position  int
+	err       string
+	updated   time.Time
 }
 
 func newPlayerTransmissionCacheQueue() playerTransmissionCacheQueue {
 	return playerTransmissionCacheQueue{items: make(map[string]*playerTransmissionCacheQueueItem)}
 }
 
-func (q *playerTransmissionCacheQueue) enqueue(infoHash string) playerTransmissionCacheQueueSnapshot {
+func (q *playerTransmissionCacheQueue) enqueue(infoHash string, requestedFileIndex ...int) playerTransmissionCacheQueueSnapshot {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
 	now := time.Now()
+	fileIndex := -1
+	if len(requestedFileIndex) > 0 {
+		fileIndex = requestedFileIndex[0]
+	}
 	if item, ok := q.items[infoHash]; ok {
+		if len(requestedFileIndex) > 0 && item.state == playerCacheQueuePending {
+			item.fileIndex = fileIndex
+		}
 		if item.state == playerCacheQueueFailed || item.state == playerCacheQueueDone || item.state == playerCacheQueueCanceled {
 			item.state = playerCacheQueuePending
 			item.err = ""
+			if len(requestedFileIndex) > 0 {
+				item.fileIndex = fileIndex
+			}
 			item.updated = now
 		}
 		return q.snapshotLocked(infoHash)
 	}
 
 	q.items[infoHash] = &playerTransmissionCacheQueueItem{
-		infoHash: infoHash,
-		state:    playerCacheQueuePending,
-		updated:  now,
+		infoHash:  infoHash,
+		fileIndex: fileIndex,
+		state:     playerCacheQueuePending,
+		updated:   now,
 	}
 	q.order = append(q.order, infoHash)
 	return q.snapshotLocked(infoHash)
@@ -104,11 +117,12 @@ func (q *playerTransmissionCacheQueue) snapshotLocked(infoHash string) playerTra
 		}
 	}
 	return playerTransmissionCacheQueueSnapshot{
-		infoHash: item.infoHash,
-		state:    item.state,
-		position: position,
-		err:      item.err,
-		updated:  item.updated,
+		infoHash:  item.infoHash,
+		fileIndex: item.fileIndex,
+		state:     item.state,
+		position:  position,
+		err:       item.err,
+		updated:   item.updated,
 	}
 }
 
@@ -241,10 +255,19 @@ func (s *service) PlayerTransmissionEnqueueCache(
 		return PlayerTransmissionCacheQueueResult{}, ErrPlayerCacheQueueDisabled
 	}
 
-	snapshot := s.playerCacheQueue.enqueue(infoHash)
+	var snapshot playerTransmissionCacheQueueSnapshot
+	if input.FileIndex == nil {
+		snapshot = s.playerCacheQueue.enqueue(infoHash)
+	} else {
+		if *input.FileIndex < 0 {
+			return PlayerTransmissionCacheQueueResult{}, ErrPlayerFileNotFound
+		}
+		snapshot = s.playerCacheQueue.enqueue(infoHash, *input.FileIndex)
+	}
 	s.startPlayerCacheQueueWorker()
 	return PlayerTransmissionCacheQueueResult{
 		InfoHash:   infoHash,
+		FileIndex:  snapshot.fileIndex,
 		QueueState: snapshot.state,
 		Position:   snapshot.position,
 	}, nil
@@ -318,6 +341,7 @@ func (s *service) loadPlayerCacheQueueItems(ctx context.Context) ([]PlayerTransm
 		infoHashes = append(infoHashes, snapshot.infoHash)
 		items = append(items, PlayerTransmissionCacheQueueItem{
 			InfoHash:      snapshot.infoHash,
+			FileIndex:     snapshot.fileIndex,
 			QueueState:    snapshot.state,
 			QueuePosition: snapshot.position,
 			ErrorMessage:  snapshot.err,
@@ -389,7 +413,8 @@ func (s *service) processPlayerCacheQueue(ctx context.Context) time.Duration {
 	s.monitorRunningPlayerCacheItems(ctx, settings)
 	capacity := settings.TransmissionCacheQueueMaxActive - s.playerCacheQueue.runningCount()
 	for _, infoHash := range s.playerCacheQueue.claimPending(capacity) {
-		go s.startPlayerCacheItem(infoHash)
+		snapshot := s.playerCacheQueue.snapshot(infoHash)
+		go s.startPlayerCacheItem(infoHash, snapshot.fileIndex)
 	}
 	return interval
 }
@@ -425,7 +450,7 @@ func (s *service) monitorRunningPlayerCacheItems(ctx context.Context, settings p
 	}
 }
 
-func (s *service) startPlayerCacheItem(infoHash string) {
+func (s *service) startPlayerCacheItem(infoHash string, requestedFileIndex int) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -444,7 +469,10 @@ func (s *service) startPlayerCacheItem(infoHash string) {
 		s.playerCacheQueue.setState(infoHash, playerCacheQueuePending, "")
 		return
 	}
-	selected := playerTransmissionDefaultFileIndex(snapshot.Files, settings.TransmissionDownloadVideoFormats)
+	selected := requestedFileIndex
+	if selected < 0 {
+		selected = playerTransmissionDefaultFileIndex(snapshot.Files, settings.TransmissionDownloadVideoFormats)
+	}
 	if err := s.playerTransmissionSetOnlyWantedFile(ctx, settings, normalized, selected, snapshot, 0); err != nil {
 		s.playerCacheQueue.setState(infoHash, playerCacheQueueFailed, err.Error())
 		return

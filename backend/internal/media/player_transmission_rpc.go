@@ -228,30 +228,8 @@ func (s *service) playerTransmissionSetOnlyWantedFile(
 		return ErrPlayerFileNotFound
 	}
 
-	wantedSet := make(map[int]struct{}, fileCount)
-	wantedSet[fileIndex] = struct{}{}
-	allowedVideoExtensions := playerTransmissionAllowedVideoExtensions(settings.TransmissionDownloadVideoFormats)
-	for idx, file := range files {
-		if idx == fileIndex {
-			continue
-		}
-		if playerTransmissionIsVideoFile(file.Name, allowedVideoExtensions) {
-			wantedSet[idx] = struct{}{}
-		}
-	}
-	wanted := make([]int, 0, len(wantedSet))
-	priorityNormal := make([]int, 0, len(wantedSet))
-	unwanted := make([]int, 0, fileCount)
-	for idx := 0; idx < fileCount; idx++ {
-		if _, ok := wantedSet[idx]; ok {
-			wanted = append(wanted, idx)
-			if idx != fileIndex {
-				priorityNormal = append(priorityNormal, idx)
-			}
-			continue
-		}
-		unwanted = append(unwanted, idx)
-	}
+	wanted, unwanted := playerTransmissionWantedFileIndices(fileCount, fileIndex)
+	priorityNormal := []int{}
 
 	args := playerTransmissionRPCArguments{
 		IDs:            []any{infoHash},
@@ -295,6 +273,17 @@ func (s *service) playerTransmissionSetOnlyWantedFile(
 	}
 
 	return nil
+}
+
+func playerTransmissionWantedFileIndices(fileCount, fileIndex int) ([]int, []int) {
+	wanted := []int{fileIndex}
+	unwanted := make([]int, 0, fileCount)
+	for idx := 0; idx < fileCount; idx++ {
+		if idx != fileIndex {
+			unwanted = append(unwanted, idx)
+		}
+	}
+	return wanted, unwanted
 }
 
 func (s *service) playerTransmissionTryStart(

@@ -55,7 +55,6 @@ func (h torrentContentTorrentHydrator) GetSubs(
 					q.Torrent.Sources.RelationField,
 					q.Torrent.Sources.TorrentSource.RelationField,
 					q.Torrent.Hint.RelationField,
-					q.Torrent.Tags.RelationField,
 				}
 			}))
 	if err != nil {

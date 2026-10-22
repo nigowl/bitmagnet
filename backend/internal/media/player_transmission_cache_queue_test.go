@@ -4,6 +4,11 @@ import "testing"
 
 func TestPlayerTransmissionCacheQueue(t *testing.T) {
 	queue := newPlayerTransmissionCacheQueue()
+	fileRequest := queue.enqueue("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 3)
+	if fileRequest.fileIndex != 3 {
+		t.Fatalf("file request index = %d, want 3", fileRequest.fileIndex)
+	}
+	queue.remove(fileRequest.infoHash)
 
 	first := queue.enqueue("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	if first.state != playerCacheQueuePending || first.position != 1 {

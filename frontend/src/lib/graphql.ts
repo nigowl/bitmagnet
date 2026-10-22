@@ -98,7 +98,6 @@ query TorrentContentSearch($input: TorrentContentSearchQueryInput!) {
           }
           seeders
           leechers
-          tagNames
           magnetUri
           createdAt
           updatedAt
@@ -164,14 +163,6 @@ query TorrentFiles($input: TorrentFilesQueryInput!) {
 }
 `;
 
-export const TORRENT_DELETE_MUTATION = `
-mutation TorrentDelete($infoHashes: [Hash20!]!) {
-  torrent {
-    delete(infoHashes: $infoHashes)
-  }
-}
-`;
-
 export const TORRENT_PUT_TAGS_MUTATION = `
 mutation TorrentPutTags($infoHashes: [Hash20!]!, $tagNames: [String!]!) {
   torrent {
@@ -192,14 +183,6 @@ export const TORRENT_DELETE_TAGS_MUTATION = `
 mutation TorrentDeleteTags($infoHashes: [Hash20!], $tagNames: [String!]) {
   torrent {
     deleteTags(infoHashes: $infoHashes, tagNames: $tagNames)
-  }
-}
-`;
-
-export const TORRENT_REPROCESS_MUTATION = `
-mutation TorrentReprocess($input: TorrentReprocessInput!) {
-  torrent {
-    reprocess(input: $input)
   }
 }
 `;

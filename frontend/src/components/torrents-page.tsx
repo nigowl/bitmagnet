@@ -11,15 +11,12 @@ import {
   Text,
   Title
 } from "@mantine/core";
-import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { RefreshCw } from "lucide-react";
 import { graphqlRequest } from "@/lib/api";
 import {
   TORRENT_CONTENT_SEARCH_QUERY,
-  TORRENT_DELETE_MUTATION,
-  TORRENT_FILES_QUERY,
-  TORRENT_REPROCESS_MUTATION
+  TORRENT_FILES_QUERY
 } from "@/lib/graphql";
 import { torrentOrderFields } from "@/lib/domain";
 import { useI18n } from "@/languages/provider";
@@ -28,13 +25,42 @@ import {
   type SearchResult,
   type TorrentFilesResponse,
   type TorrentRow,
+  buildTorrentDetailHref,
   normalizeTorrentContentType,
   parseBooleanParam,
   parsePositiveIntParam
 } from "./torrents-page.helpers";
 import { TorrentDetailModal } from "./torrents-page.detail-modal";
 import { TorrentSearchBar } from "./torrents-page.filters";
+import { TorrentHomePanels } from "./torrents-page.home";
 import { TorrentResultsCard } from "./torrents-page.results";
+
+const SEARCH_HISTORY_STORAGE_KEY = "bitmagnet:torrent-search-history";
+const SEARCH_HISTORY_LIMIT = 100;
+const LATEST_TORRENT_LIMIT = 100;
+const LATEST_TORRENT_PAGE_SIZE = 10;
+
+function saveSearchHistory(items: string[]) {
+  try {
+    window.localStorage.setItem(SEARCH_HISTORY_STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    return;
+  }
+}
+
+function readSearchHistory(): string[] {
+  try {
+    const raw = window.localStorage.getItem(SEARCH_HISTORY_STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    const items = Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0).slice(0, SEARCH_HISTORY_LIMIT)
+      : [];
+    saveSearchHistory(items);
+    return items;
+  } catch {
+    return [];
+  }
+}
 
 export function TorrentsPage() {
   const router = useRouter();
@@ -45,6 +71,11 @@ export function TorrentsPage() {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState(queryString);
   const [result, setResult] = useState<SearchResult | null>(null);
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [latestItems, setLatestItems] = useState<TorrentRow[]>([]);
+  const [latestPage, setLatestPage] = useState(1);
+  const [loadingLatest, setLoadingLatest] = useState(false);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [activeItem, setActiveItem] = useState<TorrentRow | null>(null);
@@ -143,8 +174,36 @@ export function TorrentsPage() {
   const commitSearch = useCallback(() => {
     const nextSearch = search.trim();
     if (nextSearch === queryString.trim()) return;
+    if (nextSearch) {
+      setSearchHistory((previous) => {
+        const next = [nextSearch, ...previous.filter((item) => item !== nextSearch)].slice(0, SEARCH_HISTORY_LIMIT);
+        saveSearchHistory(next);
+        return next;
+      });
+      setHistoryPage(1);
+    }
     updateQuery({ q: nextSearch || null, page: null });
   }, [queryString, search, updateQuery]);
+
+  const removeSearchHistory = useCallback((value: string) => {
+    setSearchHistory((previous) => {
+      const next = previous.filter((item) => item !== value);
+      saveSearchHistory(next);
+      return next;
+    });
+    setHistoryPage(1);
+  }, []);
+
+  const clearSearchHistory = useCallback(() => {
+    setSearchHistory([]);
+    setHistoryPage(1);
+    saveSearchHistory([]);
+  }, []);
+
+  const selectSearchHistory = useCallback((value: string) => {
+    setSearch(value);
+    updateQuery({ q: value, page: null, order: null, desc: null });
+  }, [updateQuery]);
 
   const renderContentType = useCallback(
     (type?: string | null) => {
@@ -215,6 +274,44 @@ export function TorrentsPage() {
     }
   }, [descending, limit, orderBy, page, queryString]);
 
+  const loadLatest = useCallback(async () => {
+    setLoadingLatest(true);
+    try {
+      const data = await graphqlRequest<SearchResponse>(TORRENT_CONTENT_SEARCH_QUERY, {
+        input: {
+          limit: LATEST_TORRENT_LIMIT,
+          page: 1,
+          totalCount: false,
+          hasNextPage: false,
+          orderBy: [{ field: "updated_at", descending: true }]
+        }
+      });
+      setLatestItems(data.torrentContent.search.items || []);
+      setLatestPage(1);
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setLoadingLatest(false);
+    }
+  }, []);
+
+  const latestPageItems = useMemo(() => {
+    const start = (latestPage - 1) * LATEST_TORRENT_PAGE_SIZE;
+    return latestItems.slice(start, start + LATEST_TORRENT_PAGE_SIZE);
+  }, [latestItems, latestPage]);
+
+  const latestTotalPages = Math.max(1, Math.ceil(latestItems.length / LATEST_TORRENT_PAGE_SIZE));
+
+  useEffect(() => {
+    setSearchHistory(readSearchHistory());
+  }, []);
+
+  useEffect(() => {
+    if (!queryString.trim()) {
+      void loadLatest();
+    }
+  }, [loadLatest, queryString]);
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -262,53 +359,15 @@ export function TorrentsPage() {
     void loadFilesFor(item.infoHash);
   };
 
-  const reprocessActive = async () => {
-    if (!activeItem) return;
-    try {
-      await graphqlRequest(TORRENT_REPROCESS_MUTATION, {
-        input: {
-          infoHashes: [activeItem.infoHash],
-          classifierRematch: false,
-          apisDisabled: true,
-          localSearchDisabled: true
-        }
-      });
-      notifications.show({ color: "green", message: t("torrents.actionDone") });
-    } catch (error) {
-      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
-    }
-  };
-
-  const deleteActive = () => {
-    if (!activeItem) return;
-    modals.openConfirmModal({
-      title: t("torrents.deleteTitle"),
-      children: <Text size="sm">{t("torrents.deleteHint")}</Text>,
-      labels: { confirm: t("torrents.delete"), cancel: t("common.cancel") },
-      confirmProps: { color: "red" },
-      onConfirm: async () => {
-        try {
-          await graphqlRequest(TORRENT_DELETE_MUTATION, { infoHashes: [activeItem.infoHash] });
-          notifications.show({ color: "green", message: t("torrents.actionDone") });
-          setDetailOpen(false);
-          setActiveItem(null);
-          await load();
-        } catch (error) {
-          notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
-        }
-      }
-    });
-  };
-
   return (
     <Stack gap="md" className="torrent-page-shell">
       <Group justify="space-between">
         <div>
           <Title order={2} className="page-title">{t("torrents.title")}</Title>
-          <Text c="dimmed" className="page-subtitle">{t("torrents.subtitle")}</Text>
+          <Text c="dimmed" className="page-subtitle torrent-page-subtitle">{t("torrents.subtitle")}</Text>
         </div>
         <Group>
-          <Button leftSection={<RefreshCw size={16} />} variant="default" onClick={() => void load()}>
+          <Button leftSection={<RefreshCw size={16} />} variant="default" onClick={() => void (queryString.trim() ? load() : loadLatest())}>
             {t("common.refresh")}
           </Button>
         </Group>
@@ -334,7 +393,7 @@ export function TorrentsPage() {
               queryString={queryString}
               currentListHref={currentListHref}
               renderContentType={renderContentType}
-              onChangeOrder={(field) => updateQuery({ order: field, page: null })}
+              onChangeOrder={(field) => updateQuery({ order: orderBy === field ? null : field, page: null })}
               onChangeDescending={(nextDescending) => updateQuery({ desc: nextDescending, page: null })}
               onCopyHash={(hash) => void copyHash(hash)}
               onOpenMagnet={openMagnet}
@@ -365,9 +424,29 @@ export function TorrentsPage() {
             </Group>
           </>
         ) : (
-          <Text c="dimmed" ta="center" py="xl">
-            {t("torrents.searchHint")}
-          </Text>
+          <>
+            <TorrentHomePanels
+              t={t}
+              searchHistory={searchHistory}
+              historyPage={historyPage}
+              onHistoryPageChange={setHistoryPage}
+              onSelectHistory={selectSearchHistory}
+              onRemoveHistory={removeSearchHistory}
+              onClearHistory={clearSearchHistory}
+              loadingLatest={loadingLatest}
+              latestItems={latestItems}
+              latestPage={latestPage}
+              latestPageItems={latestPageItems}
+              latestTotalPages={latestTotalPages}
+              onLatestPageChange={setLatestPage}
+              orderLabels={orderLabels}
+              currentListHref={currentListHref}
+              renderContentType={renderContentType}
+              onCopyHash={(hash) => void copyHash(hash)}
+              onOpenMagnet={openMagnet}
+              onOpenDetail={openDetail}
+            />
+          </>
         )}
       </Stack>
 
@@ -378,11 +457,10 @@ export function TorrentsPage() {
         detailFiles={detailDisplayFiles}
         loadingFiles={loadingDetailFiles}
         renderContentType={renderContentType}
+        detailHref={activeItem ? buildTorrentDetailHref(activeItem.infoHash, currentListHref) : "/torrents"}
         onClose={() => setDetailOpen(false)}
         onCopyHash={(hash) => void copyHash(hash)}
         onOpenMagnet={openMagnet}
-        onReprocess={() => void reprocessActive()}
-        onDelete={deleteActive}
       />
     </Stack>
   );

@@ -11,6 +11,9 @@ type TorrentResultsCardProps = {
   t: (key: string) => string;
   loading: boolean;
   items: TorrentRow[];
+  heading?: string;
+  showSortControls?: boolean;
+  emptyMessage?: string;
   orderBy: (typeof torrentOrderFields)[number] | null;
   descending: boolean;
   orderLabels: Record<(typeof torrentOrderFields)[number], string>;
@@ -28,6 +31,9 @@ export function TorrentResultsCard({
   t,
   loading,
   items,
+  heading,
+  showSortControls = true,
+  emptyMessage,
   orderBy,
   descending,
   orderLabels,
@@ -43,39 +49,42 @@ export function TorrentResultsCard({
   return (
     <Card className="glass-card torrent-results-card" withBorder>
       <Stack gap="sm">
-        <Group justify="space-between" wrap="wrap">
-          <Group gap={8} className="sort-button-group">
-            {torrentOrderFields.map((field) => (
+        {heading ? <Text fw={700}>{heading}</Text> : null}
+        {showSortControls ? (
+          <Group justify="space-between" wrap="wrap">
+            <Group gap={8} className="sort-button-group">
+              {torrentOrderFields.map((field) => (
+                <Button
+                  key={field}
+                  size="xs"
+                  variant={orderBy === field ? "light" : "subtle"}
+                  color={orderBy === field ? "cyan" : "slate"}
+                  onClick={() => onChangeOrder(field)}
+                >
+                  {orderLabels[field]}
+                </Button>
+              ))}
+            </Group>
+            <Group gap={8} className="sort-button-group">
               <Button
-                key={field}
                 size="xs"
-                variant={orderBy === field ? "light" : "subtle"}
-                color={orderBy === field ? "cyan" : "slate"}
-                onClick={() => onChangeOrder(field)}
+                variant={orderBy && descending ? "light" : "subtle"}
+                color={orderBy && descending ? "cyan" : "slate"}
+                onClick={() => onChangeDescending(true)}
               >
-                {orderLabels[field]}
+                {t("common.desc")}
               </Button>
-            ))}
+              <Button
+                size="xs"
+                variant={orderBy && !descending ? "light" : "subtle"}
+                color={orderBy && !descending ? "cyan" : "slate"}
+                onClick={() => onChangeDescending(false)}
+              >
+                {t("common.asc")}
+              </Button>
+            </Group>
           </Group>
-          <Group gap={8} className="sort-button-group">
-            <Button
-              size="xs"
-              variant={orderBy && descending ? "light" : "subtle"}
-              color={orderBy && descending ? "cyan" : "slate"}
-              onClick={() => onChangeDescending(true)}
-            >
-              {t("common.desc")}
-            </Button>
-            <Button
-              size="xs"
-              variant={orderBy && !descending ? "light" : "subtle"}
-              color={orderBy && !descending ? "cyan" : "slate"}
-              onClick={() => onChangeDescending(false)}
-            >
-              {t("common.asc")}
-            </Button>
-          </Group>
-        </Group>
+        ) : null}
 
         {loading ? (
           <Group justify="center" py="md">
@@ -83,7 +92,7 @@ export function TorrentResultsCard({
           </Group>
         ) : items.length === 0 ? (
           <Text c="dimmed" ta="center" py="md">
-            {t("torrents.noResults")}
+            {emptyMessage || t("torrents.noResults")}
           </Text>
         ) : (
           items.map((item) => (
