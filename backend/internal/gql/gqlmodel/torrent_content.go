@@ -130,14 +130,18 @@ func (t TorrentContentQuery) Search(
 	ctx context.Context,
 	input TorrentContentSearchQueryInput,
 ) (TorrentContentSearchResult, error) {
+	hasQueryString := input.QueryString.Valid
 	options := []q.Option{
 		q.DefaultOption(),
 		search.TorrentContentCoreJoins(),
 		search.HydrateTorrentContentContent(),
-		search.HydrateTorrentContentTorrent(),
+	}
+	if hasQueryString {
+		options = append(options, search.HydrateTorrentContentTorrent(search.HydrateTorrentContentTorrentWithFiles()))
+	} else {
+		options = append(options, search.HydrateTorrentContentTorrent())
 	}
 	options = append(options, input.Option())
-	hasQueryString := input.QueryString.Valid
 
 	if input.Facets != nil {
 		options = append(options, torrentContentFacetsOption(*input.Facets))

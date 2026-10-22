@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"sort"
 
 	"github.com/nigowl/bitmagnet/internal/database/dao"
 	"github.com/nigowl/bitmagnet/internal/database/query"
@@ -50,20 +51,42 @@ func (h torrentContentTorrentHydrator) GetSubs(
 		Torrents(ctx,
 			query.Where(TorrentInfoHashCriteria(ids...)),
 			query.Preload(func(q *dao.Query) []field.RelationField {
-				preload := []field.RelationField{
+				return []field.RelationField{
 					q.Torrent.Sources.RelationField,
 					q.Torrent.Sources.TorrentSource.RelationField,
 					q.Torrent.Hint.RelationField,
 					q.Torrent.Tags.RelationField,
 				}
-				if h.files {
-					preload = append(preload, q.Torrent.Files.RelationField)
-				}
-
-				return preload
 			}))
 	if err != nil {
 		return nil, err
+	}
+
+	if h.files && len(result.Items) > 0 {
+		fileResult, fileErr := search{dbCtx.Query()}.TorrentFiles(
+			ctx,
+			query.Where(
+				TorrentFileInfoHashCriteria(ids...),
+				query.DBCriteria{
+					SQL:  model.TableNameTorrentFile + ".index < ?",
+					Args: []interface{}{5},
+				},
+			),
+		)
+		if fileErr != nil {
+			return nil, fileErr
+		}
+
+		filesByHash := make(map[protocol.ID][]model.TorrentFile, len(ids))
+		for _, file := range fileResult.Items {
+			filesByHash[file.InfoHash] = append(filesByHash[file.InfoHash], file)
+		}
+		for i := range result.Items {
+			result.Items[i].Files = filesByHash[result.Items[i].InfoHash]
+			sort.Slice(result.Items[i].Files, func(left, right int) bool {
+				return result.Items[i].Files[left].Index < result.Items[i].Files[right].Index
+			})
+		}
 	}
 
 	return result.Items, nil

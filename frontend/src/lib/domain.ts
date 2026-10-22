@@ -21,7 +21,6 @@ export const torrentOrderFields = [
   "files_count",
   "seeders",
   "leechers",
-  "relevance",
   "name",
   "info_hash"
 ] as const;

@@ -10,6 +10,7 @@ import {
   Group,
   Loader,
   Stack,
+  Table,
   Tabs,
   Text,
   Title
@@ -42,7 +43,13 @@ type FavoriteItem = {
   contentSource?: string | null;
   contentId?: string | null;
   torrent: {
+    infoHash: string;
+    name: string;
     size: number;
+    filesCount?: number | null;
+    seeders?: number | null;
+    leechers?: number | null;
+    magnetUri?: string | null;
   };
   content?: {
     id?: string | null;
@@ -77,21 +84,7 @@ type FavoriteSearchResponse = {
   };
 };
 
-type FavoriteCategory = "movie" | "series" | "anime";
-
-function classifyFavorite(item: FavoriteItem): FavoriteCategory {
-  if (isAnimeItem(item as MediaLikeItem)) {
-    return "anime";
-  }
-  const type = (item.contentType || "").toLowerCase();
-  if (type === "movie") {
-    return "movie";
-  }
-  if (type === "tv_show" || type === "series") {
-    return "series";
-  }
-  return "movie";
-}
+type FavoriteTab = "media" | "torrents";
 
 function getFavoriteMediaHref(item: FavoriteItem, sourceHref: string): string | null {
   const resolvedType = item.content?.type ?? item.contentType;
@@ -124,7 +117,7 @@ export function FavoritesPage() {
   const [favoriteItems, setFavoriteItems] = useState<FavoriteItem[]>([]);
   const [favoriteMediaDetails, setFavoriteMediaDetails] = useState<Record<string, MediaDetailResponse["item"]>>({});
   const [loadingFavorites, setLoadingFavorites] = useState(false);
-  const [activeTab, setActiveTab] = useState<FavoriteCategory>("movie");
+  const [activeTab, setActiveTab] = useState<FavoriteTab>("media");
   const titleLanguage = locale === "en" ? "en" : "zh";
   const tabsRef = useTabsUnderline();
   const currentPageHref = useMemo(() => {
@@ -207,15 +200,22 @@ export function FavoritesPage() {
     };
   }, [favorites, user]);
 
-  const groupedItems = useMemo(() => {
-    const groups: Record<FavoriteCategory, FavoriteItem[]> = { movie: [], series: [], anime: [] };
+  const mediaItems = useMemo(() => {
+    const items = new Map<string, FavoriteItem>();
     for (const item of favoriteItems) {
-      groups[classifyFavorite(item)].push(item);
+      const mediaId = buildMediaEntryIdFromContentRef(
+        item.content?.type ?? item.contentType,
+        item.content?.source ?? item.contentSource,
+        item.content?.id ?? item.contentId
+      );
+      if (mediaId && !items.has(mediaId)) {
+        items.set(mediaId, item);
+      }
     }
-    return groups;
+    return Array.from(items.values());
   }, [favoriteItems]);
 
-  const currentItems = groupedItems[activeTab];
+  const currentItems = activeTab === "media" ? mediaItems : favoriteItems;
 
   if (loading) {
     return (
@@ -254,27 +254,21 @@ export function FavoritesPage() {
             <Title order={2}>{t("favorites.title")}</Title>
             <Text c="dimmed" className="page-subtitle">{t("favorites.subtitle")}</Text>
           </Stack>
-          <Button variant="default" leftSection={<RefreshCw size={14} />} onClick={() => void refreshFavorites()}>
-            {t("common.refresh")}
-          </Button>
         </Group>
       </Card>
 
       <Card className="glass-card" withBorder>
-        <Tabs ref={tabsRef} className="app-tabs" value={activeTab} onChange={(value) => setActiveTab((value as FavoriteCategory) || "movie")}>
+        <Tabs ref={tabsRef} className="app-tabs" value={activeTab} onChange={(value) => setActiveTab((value as FavoriteTab) || "media")}>
           <Tabs.List grow>
-            <Tabs.Tab value="movie">
-              {t("favorites.tabs.movie")} ({groupedItems.movie.length})
+            <Tabs.Tab value="media">
+              {t("favorites.tabs.media")} ({mediaItems.length})
             </Tabs.Tab>
-            <Tabs.Tab value="series">
-              {t("favorites.tabs.series")} ({groupedItems.series.length})
-            </Tabs.Tab>
-            <Tabs.Tab value="anime">
-              {t("favorites.tabs.anime")} ({groupedItems.anime.length})
+            <Tabs.Tab value="torrents">
+              {t("favorites.tabs.torrents")} ({favoriteItems.length})
             </Tabs.Tab>
           </Tabs.List>
 
-          <Tabs.Panel value={activeTab} pt="md">
+          <Tabs.Panel value="media" pt="md">
             <Group justify="space-between" mb="sm">
               <Group gap="xs">
                 <Text fw={600}>{t("profile.favorites")}</Text>
@@ -317,7 +311,7 @@ export function FavoritesPage() {
                   };
                   const poster = getPosterUrl(mediaLike, "md");
                   const titleText = getDisplayTitle(mediaLike, titleLanguage);
-                  const categoryLabel = (detailItem?.isAnime || classifyFavorite(item) === "anime")
+                  const categoryLabel = (detailItem?.isAnime || isAnimeItem(item as MediaLikeItem))
                     ? t("nav.anime")
                     : (detailItem?.contentType || resolvedType)
                       ? t(`contentTypes.${detailItem?.contentType || resolvedType}`)
@@ -402,6 +396,72 @@ export function FavoritesPage() {
                   );
                 })}
               </div>
+            )}
+          </Tabs.Panel>
+
+          <Tabs.Panel value="torrents" pt="md">
+            <Group justify="space-between" mb="sm">
+              <Group gap="xs">
+                <Text fw={600}>{t("favorites.tabs.torrents")}</Text>
+                <Badge variant="light">{favoriteItems.length}</Badge>
+              </Group>
+              <Button variant="default" size="xs" leftSection={<RefreshCw size={13} />} onClick={() => void refreshFavorites()}>
+                {t("common.refresh")}
+              </Button>
+            </Group>
+
+            {loadingFavorites ? (
+              <Group justify="center" py="xl">
+                <Loader />
+              </Group>
+            ) : favoriteItems.length === 0 ? (
+              <Text c="dimmed">{t("favorites.empty")}</Text>
+            ) : (
+              <Table.ScrollContainer minWidth={720}>
+                <Table highlightOnHover>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>{t("torrents.table.name")}</Table.Th>
+                      <Table.Th>{t("torrents.table.size")}</Table.Th>
+                      <Table.Th>{t("torrents.table.seeders")}</Table.Th>
+                      <Table.Th>{t("torrents.table.leechers")}</Table.Th>
+                      <Table.Th>{t("torrents.table.actions")}</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {favoriteItems.map((item) => (
+                      <Table.Tr key={item.infoHash}>
+                        <Table.Td maw={420}>
+                          <Link href={`/torrents/${encodeURIComponent(item.infoHash)}`} className="unstyled-link">
+                            <Text fw={600} lineClamp={1} title={item.torrent.name}>{item.torrent.name}</Text>
+                          </Link>
+                          <Text size="xs" c="dimmed" ff="monospace">{item.infoHash}</Text>
+                        </Table.Td>
+                        <Table.Td>{formatBytes(item.torrent.size)}</Table.Td>
+                        <Table.Td>{item.seeders ?? item.torrent.seeders ?? "-"}</Table.Td>
+                        <Table.Td>{item.torrent.leechers ?? "-"}</Table.Td>
+                        <Table.Td>
+                          <Button
+                            size="xs"
+                            variant="subtle"
+                            color="red"
+                            leftSection={<HeartOff size={14} />}
+                            onClick={() => {
+                              void toggleFavorite(item.infoHash).then(() => {
+                                notifications.show({ color: "green", message: t("profile.favoriteRemoved") });
+                              }).catch((error: unknown) => {
+                                notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
+                              });
+                            }}
+                          >
+                            {t("profile.removeFavorite")}
+                          </Button>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
             )}
           </Tabs.Panel>
         </Tabs>

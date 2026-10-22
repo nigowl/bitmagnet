@@ -129,12 +129,11 @@
   },
   "favorites": {
     "title": "My Favorites",
-    "subtitle": "Manage favorites by movies, series, and anime.",
+    "subtitle": "Manage saved media and torrents in one place.",
     "empty": "No favorites in this category",
     "tabs": {
-      "movie": "Movies",
-      "series": "Series",
-      "anime": "Anime"
+      "media": "Media",
+      "torrents": "Torrents"
     }
   },
   "topics": {
@@ -791,8 +790,9 @@
   },
   "torrents": {
     "title": "Torrents",
-    "subtitle": "Fast filters and detail-first workflows to find better releases quicker",
+    "subtitle": "Search by keyword to find better releases faster",
     "search": "Search",
+    "searchHint": "Enter a keyword to search",
     "contentType": "Content Type",
     "orderBy": "Order By",
     "direction": "Direction",

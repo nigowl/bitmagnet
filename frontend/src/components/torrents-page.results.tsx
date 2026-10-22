@@ -11,7 +11,7 @@ type TorrentResultsCardProps = {
   t: (key: string) => string;
   loading: boolean;
   items: TorrentRow[];
-  orderBy: (typeof torrentOrderFields)[number];
+  orderBy: (typeof torrentOrderFields)[number] | null;
   descending: boolean;
   orderLabels: Record<(typeof torrentOrderFields)[number], string>;
   queryString: string;
@@ -60,16 +60,16 @@ export function TorrentResultsCard({
           <Group gap={8} className="sort-button-group">
             <Button
               size="xs"
-              variant={descending ? "light" : "subtle"}
-              color={descending ? "cyan" : "slate"}
+              variant={orderBy && descending ? "light" : "subtle"}
+              color={orderBy && descending ? "cyan" : "slate"}
               onClick={() => onChangeDescending(true)}
             >
               {t("common.desc")}
             </Button>
             <Button
               size="xs"
-              variant={!descending ? "light" : "subtle"}
-              color={!descending ? "cyan" : "slate"}
+              variant={orderBy && !descending ? "light" : "subtle"}
+              color={orderBy && !descending ? "cyan" : "slate"}
               onClick={() => onChangeDescending(false)}
             >
               {t("common.asc")}
@@ -112,6 +112,16 @@ export function TorrentResultsCard({
                     {item.torrent.sources[0]?.name || "-"}
                   </Badge>
                 </Group>
+
+                {item.torrent.files?.length ? (
+                  <div className="torrent-file-preview">
+                    {item.torrent.files.slice(0, 5).map((file) => (
+                      <Text key={file.path} size="xs" c="dimmed" title={file.path} className="torrent-file-preview-item">
+                        {file.path}
+                      </Text>
+                    ))}
+                  </div>
+                ) : null}
 
                 <Group justify="space-between" wrap="wrap" gap={8}>
                   <Group gap={8} wrap="wrap" className="card-meta-row">

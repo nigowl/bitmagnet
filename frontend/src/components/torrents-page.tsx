@@ -13,19 +13,15 @@ import {
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { FilterX, RefreshCw } from "lucide-react";
-import { useAuth } from "@/auth/provider";
+import { RefreshCw } from "lucide-react";
 import { graphqlRequest } from "@/lib/api";
 import {
   TORRENT_CONTENT_SEARCH_QUERY,
   TORRENT_DELETE_MUTATION,
-  TORRENT_DELETE_TAGS_MUTATION,
   TORRENT_FILES_QUERY,
-  TORRENT_PUT_TAGS_MUTATION,
-  TORRENT_REPROCESS_MUTATION,
-  TORRENT_SET_TAGS_MUTATION
+  TORRENT_REPROCESS_MUTATION
 } from "@/lib/graphql";
-import { contentTypes, torrentOrderFields } from "@/lib/domain";
+import { torrentOrderFields } from "@/lib/domain";
 import { useI18n } from "@/languages/provider";
 import {
   type SearchResponse,
@@ -34,12 +30,10 @@ import {
   type TorrentRow,
   normalizeTorrentContentType,
   parseBooleanParam,
-  parseListParam,
-  parsePositiveIntParam,
-  parseTags
+  parsePositiveIntParam
 } from "./torrents-page.helpers";
 import { TorrentDetailModal } from "./torrents-page.detail-modal";
-import { TorrentFiltersSidebar } from "./torrents-page.filters";
+import { TorrentSearchBar } from "./torrents-page.filters";
 import { TorrentResultsCard } from "./torrents-page.results";
 
 export function TorrentsPage() {
@@ -54,12 +48,10 @@ export function TorrentsPage() {
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [activeItem, setActiveItem] = useState<TorrentRow | null>(null);
-  const [detailTagInput, setDetailTagInput] = useState("");
   const [detailFiles, setDetailFiles] = useState<TorrentFilesResponse["torrent"]["files"]["items"]>([]);
   const [loadingDetailFiles, setLoadingDetailFiles] = useState(false);
 
   const { t } = useI18n();
-  const { favorites } = useAuth();
 
   const queryState = useMemo(() => {
     const parsedParams = new URLSearchParams(searchParamsString);
@@ -67,39 +59,20 @@ export function TorrentsPage() {
     const limitRaw = parsePositiveIntParam(parsedParams.get("limit"), 20);
     const allowedLimits = new Set([10, 20, 40, 60, 100]);
     const nextLimit = allowedLimits.has(limitRaw) ? limitRaw : 20;
-    const nextTypes = parseListParam(parsedParams.get("types")).filter((item): item is (typeof contentTypes)[number] =>
-      (contentTypes as readonly string[]).includes(item)
-    );
-    const nextSources = parseListParam(parsedParams.get("sources"));
-    const nextTags = parseListParam(parsedParams.get("tags"));
     const nextOrder = ((torrentOrderFields as readonly string[]).includes(parsedParams.get("order") || "")
       ? parsedParams.get("order")
-      : "updated_at") as (typeof torrentOrderFields)[number];
+      : null) as (typeof torrentOrderFields)[number] | null;
     const nextDescending = parseBooleanParam(parsedParams.get("desc"), true);
-    const nextFavoriteOnly = parseBooleanParam(parsedParams.get("favorite"), false);
 
     return {
       page: nextPage,
       limit: nextLimit,
-      contentTypeFilters: nextTypes,
-      sourceFilters: nextSources,
-      tagFilters: nextTags,
       orderBy: nextOrder,
-      descending: nextDescending,
-      favoriteOnly: nextFavoriteOnly
+      descending: nextDescending
     };
   }, [searchParamsString]);
 
-  const {
-    page,
-    limit,
-    contentTypeFilters,
-    sourceFilters,
-    tagFilters,
-    orderBy,
-    descending,
-    favoriteOnly
-  } = queryState;
+  const { page, limit, orderBy, descending } = queryState;
 
   const currentListHref = useMemo(
     () => (searchParamsString ? `${pathname}?${searchParamsString}` : pathname),
@@ -111,14 +84,13 @@ export function TorrentsPage() {
       q?: string | null;
       page?: number | null;
       limit?: number | null;
-      types?: string[] | null;
-      sources?: string[] | null;
-      tags?: string[] | null;
-      order?: (typeof torrentOrderFields)[number];
-      desc?: boolean;
-      favorite?: boolean | null;
+      order?: (typeof torrentOrderFields)[number] | null;
+      desc?: boolean | null;
     }) => {
       const params = new URLSearchParams(searchParams.toString());
+      params.delete("types");
+      params.delete("sources");
+      params.delete("tags");
 
       const setMaybeString = (key: string, value: string | null | undefined) => {
         if (!value || !value.trim()) {
@@ -128,23 +100,11 @@ export function TorrentsPage() {
         params.set(key, value.trim());
       };
 
-      const setMaybeArray = (key: string, value: string[] | null | undefined) => {
-        if (!value || value.length === 0) {
-          params.delete(key);
-          return;
-        }
-        params.set(key, value.join(","));
-      };
-
       const nextQ = updates.q !== undefined ? updates.q : queryString;
       const nextPage = updates.page !== undefined ? updates.page : page;
       const nextLimit = updates.limit !== undefined ? updates.limit : limit;
-      const nextTypes = updates.types !== undefined ? updates.types : contentTypeFilters;
-      const nextSources = updates.sources !== undefined ? updates.sources : sourceFilters;
-      const nextTags = updates.tags !== undefined ? updates.tags : tagFilters;
       const nextOrder = updates.order !== undefined ? updates.order : orderBy;
       const nextDesc = updates.desc !== undefined ? updates.desc : descending;
-      const nextFavoriteOnly = updates.favorite !== undefined ? updates.favorite : favoriteOnly;
 
       setMaybeString("q", nextQ);
       if (!nextPage || nextPage <= 1) {
@@ -157,16 +117,14 @@ export function TorrentsPage() {
       } else {
         params.set("limit", String(nextLimit));
       }
-      setMaybeArray("types", nextTypes);
-      setMaybeArray("sources", nextSources);
-      setMaybeArray("tags", nextTags);
-      params.set("order", nextOrder);
-      params.set("desc", nextDesc ? "1" : "0");
-      if (nextFavoriteOnly) {
-        params.set("favorite", "1");
+      if (nextOrder) {
+        params.set("order", nextOrder);
+        params.set("desc", nextDesc ? "1" : "0");
       } else {
-        params.delete("favorite");
+        params.delete("order");
+        params.delete("desc");
       }
+      params.delete("favorite");
 
       const nextQuery = params.toString();
       const currentQuery = searchParams.toString();
@@ -175,7 +133,7 @@ export function TorrentsPage() {
       }
       router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
     },
-    [contentTypeFilters, descending, favoriteOnly, limit, orderBy, page, pathname, queryString, router, searchParams, sourceFilters, tagFilters]
+    [descending, limit, orderBy, page, pathname, queryString, router, searchParams]
   );
 
   useEffect(() => {
@@ -201,7 +159,6 @@ export function TorrentsPage() {
 
   const orderLabels: Record<(typeof torrentOrderFields)[number], string> = useMemo(
     () => ({
-      relevance: t("torrents.order.relevance"),
       published_at: t("torrents.order.publishedAt"),
       updated_at: t("torrents.order.updatedAt"),
       size: t("torrents.order.size"),
@@ -212,30 +169,6 @@ export function TorrentsPage() {
       info_hash: t("torrents.order.infoHash")
     }),
     [t]
-  );
-
-  const contentTypeCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    (result?.aggregations.contentType || []).forEach((item) => {
-      const normalizedValue = normalizeTorrentContentType(item.value);
-      if (!normalizedValue) return;
-      counts.set(normalizedValue, item.count);
-    });
-    return counts;
-  }, [result?.aggregations.contentType]);
-
-  const contentTypeBlockOptions = useMemo(
-    () => {
-      const selected = new Set(contentTypeFilters);
-      return contentTypes
-        .map((key) => ({
-          value: key,
-          label: t(`contentTypes.${key}`),
-          count: contentTypeCounts.get(key) ?? 0
-        }))
-        .filter((item) => item.count > 0 || selected.has(item.value));
-    },
-    [contentTypeCounts, contentTypeFilters, t]
   );
 
   const totalPages = useMemo(() => {
@@ -260,39 +193,18 @@ export function TorrentsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      if (favoriteOnly && favorites.length === 0) {
-        setResult({
-          totalCount: 0,
-          hasNextPage: false,
-          items: [],
-          aggregations: { contentType: [], torrentSource: [], torrentTag: [] }
-        });
+      if (!queryString.trim()) {
+        setResult(null);
         return;
       }
-      const resolvedOrder = orderBy === "relevance" && !queryString.trim() ? "updated_at" : orderBy;
       const data = await graphqlRequest<SearchResponse>(TORRENT_CONTENT_SEARCH_QUERY, {
         input: {
           queryString: queryString.trim() || undefined,
-          infoHashes: favoriteOnly ? favorites : undefined,
           limit,
           page,
           totalCount: true,
           hasNextPage: true,
-          orderBy: [{ field: resolvedOrder, descending }],
-          facets: {
-            contentType: {
-              aggregate: true,
-              filter: contentTypeFilters.length ? contentTypeFilters : undefined
-            },
-            torrentSource: {
-              aggregate: true,
-              filter: sourceFilters.length ? sourceFilters : undefined
-            },
-            torrentTag: {
-              aggregate: true,
-              filter: tagFilters.length ? tagFilters : undefined
-            }
-          }
+          orderBy: orderBy ? [{ field: orderBy, descending }] : undefined
         }
       });
       setResult(data.torrentContent.search);
@@ -301,26 +213,11 @@ export function TorrentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [contentTypeFilters, descending, favoriteOnly, favorites, limit, orderBy, page, queryString, sourceFilters, tagFilters]);
+  }, [descending, limit, orderBy, page, queryString]);
 
   useEffect(() => {
     void load();
   }, [load]);
-
-  const clearFilters = () => {
-    setSearch("");
-    updateQuery({
-      q: null,
-      page: null,
-      limit: 20,
-      types: null,
-      sources: null,
-      tags: null,
-      order: "updated_at",
-      desc: true,
-      favorite: null
-    });
-  };
 
   const copyHash = async (hash: string) => {
     try {
@@ -360,33 +257,9 @@ export function TorrentsPage() {
 
   const openDetail = (item: TorrentRow) => {
     setActiveItem(item);
-    setDetailTagInput((item.torrent.tagNames || []).join(","));
     setDetailFiles([]);
     setDetailOpen(true);
     void loadFilesFor(item.infoHash);
-  };
-
-  const mutateTags = async (mode: "set" | "put" | "delete") => {
-    if (!activeItem) return;
-    const tags = parseTags(detailTagInput);
-    if (!tags.length) {
-      notifications.show({ color: "yellow", message: t("torrents.enterTags") });
-      return;
-    }
-    const mutation =
-      mode === "set"
-        ? TORRENT_SET_TAGS_MUTATION
-        : mode === "put"
-          ? TORRENT_PUT_TAGS_MUTATION
-          : TORRENT_DELETE_TAGS_MUTATION;
-
-    try {
-      await graphqlRequest(mutation, { infoHashes: [activeItem.infoHash], tagNames: tags });
-      notifications.show({ color: "green", message: t("torrents.actionDone") });
-      await load();
-    } catch (error) {
-      notifications.show({ color: "red", message: error instanceof Error ? error.message : String(error) });
-    }
   };
 
   const reprocessActive = async () => {
@@ -428,92 +301,84 @@ export function TorrentsPage() {
   };
 
   return (
-    <Stack gap="md">
+    <Stack gap="md" className="torrent-page-shell">
       <Group justify="space-between">
         <div>
           <Title order={2} className="page-title">{t("torrents.title")}</Title>
           <Text c="dimmed" className="page-subtitle">{t("torrents.subtitle")}</Text>
         </div>
         <Group>
-          <Button leftSection={<FilterX size={16} />} variant="light" onClick={clearFilters}>
-            {t("torrents.clearFilters")}
-          </Button>
           <Button leftSection={<RefreshCw size={16} />} variant="default" onClick={() => void load()}>
             {t("common.refresh")}
           </Button>
         </Group>
       </Group>
 
-      <Group align="flex-start" wrap="wrap" className="torrents-layout">
-        <TorrentFiltersSidebar
+      <Stack className="torrent-results-column torrent-results-flex">
+        <TorrentSearchBar
           t={t}
           search={search}
-          favoriteOnly={favoriteOnly}
-          contentTypeFilters={contentTypeFilters}
-          tagFilters={tagFilters}
-          contentTypeOptions={contentTypeBlockOptions}
-          tagOptions={result?.aggregations.torrentTag || []}
           onSearchChange={setSearch}
           onCommitSearch={commitSearch}
-          onToggleFavorite={() => updateQuery({ favorite: favoriteOnly ? null : true, page: null })}
-          onChangeContentTypes={(value) => updateQuery({ types: value, page: null })}
-          onChangeTags={(value) => updateQuery({ tags: value, page: null })}
         />
 
-        <Stack className="torrent-results-column torrent-results-flex">
-          <TorrentResultsCard
-            t={t}
-            loading={loading}
-            items={result?.items || []}
-            orderBy={orderBy}
-            descending={descending}
-            orderLabels={orderLabels}
-            queryString={queryString}
-            currentListHref={currentListHref}
-            renderContentType={renderContentType}
-            onChangeOrder={(field) => updateQuery({ order: field, page: null })}
-            onChangeDescending={(nextDescending) => updateQuery({ desc: nextDescending, page: null })}
-            onCopyHash={(hash) => void copyHash(hash)}
-            onOpenMagnet={openMagnet}
-            onOpenDetail={openDetail}
-          />
+        {queryString.trim() ? (
+          <>
+            <TorrentResultsCard
+              t={t}
+              loading={loading}
+              items={result?.items || []}
+              orderBy={orderBy}
+              descending={descending}
+              orderLabels={orderLabels}
+              queryString={queryString}
+              currentListHref={currentListHref}
+              renderContentType={renderContentType}
+              onChangeOrder={(field) => updateQuery({ order: field, page: null })}
+              onChangeDescending={(nextDescending) => updateQuery({ desc: nextDescending, page: null })}
+              onCopyHash={(hash) => void copyHash(hash)}
+              onOpenMagnet={openMagnet}
+              onOpenDetail={openDetail}
+            />
 
-          <Group justify="space-between">
-            <Group gap="sm" wrap="wrap">
-              <Text size="sm" c="dimmed">{t("common.total")}: {result?.totalCount || 0}</Text>
-              <Select
-                size="xs"
-                w={140}
-                data={[
-                  { value: "10", label: `10 / ${t("common.page")}` },
-                  { value: "20", label: `20 / ${t("common.page")}` },
-                  { value: "40", label: `40 / ${t("common.page")}` },
-                  { value: "60", label: `60 / ${t("common.page")}` },
-                  { value: "100", label: `100 / ${t("common.page")}` }
-                ]}
-                value={String(limit)}
-                onChange={(value) => {
-                  const nextLimit = parsePositiveIntParam(value, 20);
-                  updateQuery({ limit: nextLimit, page: null });
-                }}
-              />
+            <Group justify="space-between">
+              <Group gap="sm" wrap="wrap">
+                <Text size="sm" c="dimmed">{t("common.total")}: {result?.totalCount || 0}</Text>
+                <Select
+                  size="xs"
+                  w={140}
+                  data={[
+                    { value: "10", label: `10 / ${t("common.page")}` },
+                    { value: "20", label: `20 / ${t("common.page")}` },
+                    { value: "40", label: `40 / ${t("common.page")}` },
+                    { value: "60", label: `60 / ${t("common.page")}` },
+                    { value: "100", label: `100 / ${t("common.page")}` }
+                  ]}
+                  value={String(limit)}
+                  onChange={(value) => {
+                    const nextLimit = parsePositiveIntParam(value, 20);
+                    updateQuery({ limit: nextLimit, page: null });
+                  }}
+                />
+              </Group>
+              <Pagination total={totalPages} value={page} onChange={(value) => updateQuery({ page: value })} />
             </Group>
-            <Pagination total={totalPages} value={page} onChange={(value) => updateQuery({ page: value })} />
-          </Group>
-        </Stack>
-      </Group>
+          </>
+        ) : (
+          <Text c="dimmed" ta="center" py="xl">
+            {t("torrents.searchHint")}
+          </Text>
+        )}
+      </Stack>
 
       <TorrentDetailModal
         t={t}
         opened={detailOpen}
         activeItem={activeItem}
-        detailTagInput={detailTagInput}
         detailFiles={detailDisplayFiles}
         loadingFiles={loadingDetailFiles}
         renderContentType={renderContentType}
         onClose={() => setDetailOpen(false)}
-        onChangeTags={setDetailTagInput}
-        onMutateTags={(mode) => void mutateTags(mode)}
         onCopyHash={(hash) => void copyHash(hash)}
         onOpenMagnet={openMagnet}
         onReprocess={() => void reprocessActive()}

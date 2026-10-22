@@ -93,6 +93,9 @@ query TorrentContentSearch($input: TorrentContentSearchQueryInput!) {
           hasFilesInfo
           singleFile
           fileType
+          files {
+            path
+          }
           seeders
           leechers
           tagNames
@@ -135,62 +138,6 @@ query TorrentContentSearch($input: TorrentContentSearchQueryInput!) {
         }
         videoResolution
         videoSource
-      }
-      aggregations {
-        contentType {
-          value
-          label
-          count
-          isEstimate
-        }
-        contentSource {
-          value
-          label
-          count
-          isEstimate
-        }
-        genre {
-          value
-          label
-          count
-          isEstimate
-        }
-        releaseYear {
-          value
-          label
-          count
-          isEstimate
-        }
-        torrentSource {
-          value
-          label
-          count
-          isEstimate
-        }
-        torrentTag {
-          value
-          label
-          count
-          isEstimate
-        }
-        language {
-          value
-          label
-          count
-          isEstimate
-        }
-        videoResolution {
-          value
-          label
-          count
-          isEstimate
-        }
-        videoSource {
-          value
-          label
-          count
-          isEstimate
-        }
       }
     }
   }

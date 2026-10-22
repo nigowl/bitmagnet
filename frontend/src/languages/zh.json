@@ -129,12 +129,11 @@
   },
   "favorites": {
     "title": "我的收藏",
-    "subtitle": "按电影、剧集、动画分类管理收藏内容。",
+    "subtitle": "集中管理已收藏的媒体与种子。",
     "empty": "当前分类暂无收藏",
     "tabs": {
-      "movie": "电影",
-      "series": "剧集",
-      "anime": "动漫"
+      "media": "媒体",
+      "torrents": "种子"
     }
   },
   "topics": {
@@ -791,8 +790,9 @@
   },
   "torrents": {
     "title": "种子检索",
-    "subtitle": "高效筛选与详情联动，快速定位高质量资源",
+    "subtitle": "输入关键词，快速定位高质量资源",
     "search": "搜索",
+    "searchHint": "输入关键词开始搜索",
     "contentType": "内容类型",
     "orderBy": "排序字段",
     "direction": "排序方向",

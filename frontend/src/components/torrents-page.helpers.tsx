@@ -18,6 +18,7 @@ export type TorrentRow = {
     filesCount?: number | null;
     singleFile?: boolean | null;
     fileType?: string | null;
+    files?: Array<{ path: string }> | null;
     seeders?: number | null;
     leechers?: number | null;
     magnetUri?: string | null;
@@ -35,11 +36,6 @@ export type SearchResult = {
   totalCount: number;
   hasNextPage?: boolean | null;
   items: TorrentRow[];
-  aggregations: {
-    contentType: Array<{ value?: string | null; label: string; count: number }>;
-    torrentSource: Array<{ value: string; label: string; count: number }>;
-    torrentTag: Array<{ value: string; label: string; count: number }>;
-  };
 };
 
 export type SearchResponse = {
@@ -70,14 +66,6 @@ export function parseTags(input: string): string[] {
         .filter(Boolean)
     )
   );
-}
-
-export function parseListParam(raw: string | null): string[] {
-  if (!raw) return [];
-  return raw
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
 }
 
 export function buildTorrentDetailHref(infoHash: string, sourceHref: string): string {

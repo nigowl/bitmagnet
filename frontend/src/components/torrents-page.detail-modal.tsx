@@ -1,7 +1,7 @@
 "use client";
 
-import { Badge, Button, Group, Loader, Modal, Stack, Table, Text, TextInput } from "@mantine/core";
-import { Copy, ExternalLink, Tags, Trash2, WandSparkles } from "lucide-react";
+import { Badge, Button, Group, Loader, Modal, Stack, Table, Text } from "@mantine/core";
+import { Copy, ExternalLink, Trash2, WandSparkles } from "lucide-react";
 import type { TorrentFilesResponse, TorrentRow } from "./torrents-page.helpers";
 import { formatBytes } from "./torrents-page.helpers";
 
@@ -11,13 +11,10 @@ type TorrentDetailModalProps = {
   t: (key: string) => string;
   opened: boolean;
   activeItem: TorrentRow | null;
-  detailTagInput: string;
   detailFiles: TorrentDetailFile[];
   loadingFiles: boolean;
   renderContentType: (type?: string | null) => string;
   onClose: () => void;
-  onChangeTags: (value: string) => void;
-  onMutateTags: (mode: "set" | "put" | "delete") => void;
   onCopyHash: (hash: string) => void;
   onOpenMagnet: (magnetUri?: string | null) => void;
   onReprocess: () => void;
@@ -28,13 +25,10 @@ export function TorrentDetailModal({
   t,
   opened,
   activeItem,
-  detailTagInput,
   detailFiles,
   loadingFiles,
   renderContentType,
   onClose,
-  onChangeTags,
-  onMutateTags,
   onCopyHash,
   onOpenMagnet,
   onReprocess,
@@ -65,25 +59,13 @@ export function TorrentDetailModal({
             </Group>
             <Text ff="monospace" size="sm">{activeItem.infoHash}</Text>
 
-            <TextInput
-              label={t("torrents.tagsInput")}
-              value={detailTagInput}
-              onChange={(event) => onChangeTags(event.currentTarget.value)}
-              rightSection={<Tags size={16} />}
-            />
-            <Group>
-              <Button size="xs" onClick={() => onMutateTags("set")}>{t("torrents.setTags")}</Button>
-              <Button size="xs" variant="light" onClick={() => onMutateTags("put")}>{t("torrents.putTags")}</Button>
-              <Button size="xs" variant="light" color="orange" onClick={() => onMutateTags("delete")}>{t("torrents.deleteTags")}</Button>
-            </Group>
-
             <Table striped withTableBorder>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>#</Table.Th>
                   <Table.Th>{t("torrents.table.path")}</Table.Th>
                   <Table.Th>{t("torrents.table.type")}</Table.Th>
-                  <Table.Th>{t("torrents.table.size")}</Table.Th>
+                  <Table.Th className="torrent-file-size-column">{t("torrents.table.size")}</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -109,7 +91,7 @@ export function TorrentDetailModal({
                       <Table.Td>{file.index}</Table.Td>
                       <Table.Td>{file.path}</Table.Td>
                       <Table.Td>{file.fileType || "-"}</Table.Td>
-                      <Table.Td>{formatBytes(file.size)}</Table.Td>
+                      <Table.Td className="torrent-file-size-column">{formatBytes(file.size)}</Table.Td>
                     </Table.Tr>
                   ))
                 )}

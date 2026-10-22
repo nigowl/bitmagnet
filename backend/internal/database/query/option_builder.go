@@ -218,14 +218,14 @@ func (b optionBuilder) appendOrderSelects(db *gorm.DB, selectQueryParts *[]strin
 			args := make([]interface{}, 0)
 
 			if b.tsquery != "" {
-				rankFragment = "ts_rank_cd(" + b.tableName + ".tsv, ?::tsquery)"
+				rankFragment = "ts_rank_cd(ARRAY[1.0, 0.4, 0.2, 0.05]::real[], " + b.tableName + ".tsv, ?::tsquery)"
 				args = append(args, b.tsquery)
 			}
 
 			*selectQueryParts = append(*selectQueryParts, rankFragment+" AS "+alias)
 			*selectQueryArgs = append(*selectQueryArgs, args...)
 
-			break
+			continue
 		}
 		if orderBy.Column.Alias == "" {
 			writer := bytes.NewBuffer(nil)
